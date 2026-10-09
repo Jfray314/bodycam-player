@@ -2,8 +2,8 @@
 import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput;
 
 struct Fx {
-    distortion: f32, edge_stretch: f32, ca: f32, vignette: f32,
-    vignette_radius: f32, vignette_oval: f32, edge_blur: f32, edge_blur_start: f32,
+    distortion: f32, distortion_density: f32, ca: f32, vignette: f32,
+    aberration_fade_exponent: f32, edge_blur: f32, blur_fade_exponent: f32,
     sharpen: f32, grain: f32, temporal_noise: f32, banding: f32,
     dirt: f32, dirt_threshold: f32, dirt_gain: f32, exposure_bias: f32,
     rolling_shutter: f32, flash_amount: f32, damage_amount: f32, explosion_shake: f32,
@@ -34,6 +34,13 @@ fn bil(uv: vec2<f32>) -> vec3<f32> {
     let c = textureLoad(tex, clamp(i + vec2<i32>(0, 1), vec2<i32>(0), mx), 0).rgb;
     let d = textureLoad(tex, clamp(i + vec2<i32>(1, 1), vec2<i32>(0), mx), 0).rgb;
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+// Off-frame samples are black (soft 1px edge).
+fn inside(uv: vec2<f32>) -> f32 {
+    let dims = vec2<f32>(textureDimensions(tex));
+    let e = min(min(uv.x, 1.0 - uv.x) * dims.x, min(uv.y, 1.0 - uv.y) * dims.y);
+    return clamp(e + 0.5, 0.0, 1.0);
 }
 
 fn vnoise(p: vec2<f32>) -> f32 {
@@ -77,34 +84,40 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     uv.y -= row * fx.pitch_rate * fx.rolling_shutter / 1.1;
     uv += (pcg3(vec3<u32>(frame, 3u, 1u)).xy - 0.5) * fx.explosion_shake * 0.012;
 
-    // Fisheye: corner-normalised so the output never samples outside the overscanned render.
-    let d = (uv - 0.5) * 2.0;
-    let r2 = dot(d, d) * 0.5;
-    let norm = 1.0 + fx.distortion + fx.edge_stretch;
-    let sd = d * (1.0 + fx.distortion * r2 + fx.edge_stretch * r2 * r2) / norm;
-    let ca = fx.ca * r2 * sqrt(r2);
-    let uv_r = (sd * (1.0 + ca)) * 0.5 + 0.5;
-    let uv_g = sd * 0.5 + 0.5;
-    let uv_b = (sd * (1.0 - ca)) * 0.5 + 0.5;
+    // Lens distortion (M_PP_BodycamMaster): radial scale 1 + Intensity * ExponentialDensity(r^2), expanding
+    // outward so the corners sample past the frame -> black, which forms the rounded dark frame edge.
+    // Material works in raw screen UV: r2 = |uv - 0.5|^2 (0.25 at mid-sides, 0.5 at corners).
+    let dir = uv - 0.5;
+    let r2 = dot(dir, dir);
+    let k = 1.0 + fx.distortion * (1.0 - exp(-fx.distortion_density * r2));
+    // Per-channel CA: Red/Cyan 3.5, Green/Magenta -1.6, Blue/Yellow -0.8, faded by r^AberrationFadeExponent.
+    // Sign chosen so red survives past the frame edge (orange rim, as in-game).
+    let caf = fx.ca * pow(2.0 * r2, fx.aberration_fade_exponent * 0.5);
+    let uv_r = 0.5 + dir * k * (1.0 - 3.5 * caf);
+    let uv_g = 0.5 + dir * k * (1.0 + 1.6 * caf);
+    let uv_b = 0.5 + dir * k * (1.0 + 0.8 * caf);
+    let r2_edge = dot((uv_g - 0.5) * 2.0, (uv_g - 0.5) * 2.0) * 0.5; // for later effects
 
-    // DiskBlur: vogel-disk blur, zero in the centre, plus flash ringing and explosion smear.
-    let edge = smoothstep(fx.edge_blur_start, 1.0, r2);
-    let blur_px = fx.edge_blur * edge + fx.flash_amount * 22.0 + fx.explosion_shake * 10.0;
+    // MI_PP_DiskBlur: blur radius * r^BlurFadeExponent (r = 1 at the frame edge mid-sides).
+    let redge = length((in.uv - 0.5) * 2.0);
+    let blur_px = fx.edge_blur * (dims.y / 1080.0) * min(pow(redge, fx.blur_fade_exponent), 2.0)
+        + fx.flash_amount * 22.0 + fx.explosion_shake * 10.0;
     let boff = blur_px / dims;
     var col = vec3<f32>(0.0);
-    const N = 11;
+    const N = 16;
     for (var i = 0; i < N; i++) {
         let a = f32(i) * 2.39996;
         let o = vec2<f32>(cos(a), sin(a)) * sqrt((f32(i) + 0.5) / f32(N)) * boff;
-        col += vec3<f32>(bil(uv_r + o).r, bil(uv_g + o).g, bil(uv_b + o).b);
+        col += vec3<f32>(inside(uv_r + o) * bil(uv_r + o).r, inside(uv_g + o) * bil(uv_g + o).g, inside(uv_b + o) * bil(uv_b + o).b);
     }
     col /= f32(N);
+    let ca = caf;
 
     // Centre sharpening (unsharp mask), faded toward the soft edges.
     let px = 1.3 / dims;
     let nb = (bil(uv_g + vec2<f32>(px.x, 0.0)) + bil(uv_g - vec2<f32>(px.x, 0.0))
             + bil(uv_g + vec2<f32>(0.0, px.y)) + bil(uv_g - vec2<f32>(0.0, px.y))) * 0.25;
-    let sharp = fx.sharpen * (1.0 - smoothstep(0.0, 0.7, r2)) * (1.0 - clamp(blur_px * 0.3, 0.0, 1.0));
+    let sharp = fx.sharpen * (1.0 - clamp(blur_px * 0.3, 0.0, 1.0));
     col = max(col + (col - nb) * sharp, vec3<f32>(0.0));
 
     // Lens dirt: scatters light above the threshold (sun, lamps, muzzle flash).
@@ -125,17 +138,13 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     // Exposure bias + sensor pumping (EV), then cool tint.
     col *= exp2(fx.exposure_bias + fx.pump) * vec3<f32>(fx.tint_r, fx.tint_g, fx.tint_b);
 
-    // Lens housing: frame-shaped oval falloff to near-black corners, with a warm orange rim
-    // where the image meets the housing (visible against bright areas in-game).
-    let vd = vec2<f32>(d.x * fx.vignette_oval, d.y);
-    let vr = sqrt(dot(vd, vd) * 0.5);
-    let rim = smoothstep(fx.vignette_radius + 0.28, fx.vignette_radius + 0.36, vr) * (1.0 - smoothstep(fx.vignette_radius + 0.36, fx.vignette_radius + 0.44, vr));
-    col *= vec3<f32>(1.0) + rim * vec3<f32>(0.35, 0.0, -0.3);
-    col *= 1.0 - fx.vignette * smoothstep(fx.vignette_radius, 1.0, vr);
+    // UE vignette (VignetteIntensity), natural cos^4-like falloff.
+    let vv = dot((in.uv - 0.5) * vec2<f32>(aspect, 1.0), (in.uv - 0.5) * vec2<f32>(aspect, 1.0));
+    col *= mix(1.0, 1.0 / ((1.0 + vv * 1.1) * (1.0 + vv * 1.1)), fx.vignette);
 
     // Damage: red edge darkening + blood splatter on the lens.
     if (fx.damage_amount > 0.001) {
-        let e = smoothstep(0.15, 1.0, r2);
+        let e = smoothstep(0.15, 1.0, r2_edge);
         let splat = smoothstep(0.45, 0.75, fbm(in.uv * vec2<f32>(aspect, 1.0) * 4.0 + 3.0));
         let m = clamp(fx.damage_amount * (e * (0.6 + 0.8 * splat) + 0.15 * splat), 0.0, 1.0);
         let l = dot(col, vec3<f32>(0.3, 0.59, 0.11));

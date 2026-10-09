@@ -1,7 +1,9 @@
-//! Bodycam camera look (M_PP_BodycamMaster, FishEye, LensDirt, DiskBlur, grain; cooked graphs are not
-//! recoverable, so this is a faithful-by-eye recreation). One fullscreen shader (`postfx.wesl`) driven by
-//! `BodycamPostFx`, plus Bevy's AutoExposure / Bloom / MotionBlur / Tonemapping / ColorGrading.
-//! F2 toggles the whole stack, F3 cycles presets. `BODYCAM_SCREENSHOT=path` saves a frame ~120 and exits.
+//! Bodycam camera look. The player CameraComponent blends M_PP_BodycamMaster (lens distortion driven by
+//! MPC_PostProcessMaterialSettings + per-channel chromatic aberration) then MI_PP_DiskBlur (priority 400).
+//! Parameter values are the cooked ones; the node graphs themselves are compiled away, so the maths is
+//! reconstructed. The dark rounded frame edge is the distortion sampling off-screen, not a vignette node.
+//! Camera PP settings are UE defaults (no overrides): bloom 0.675, vignette 0.4, histogram auto exposure.
+//! F2 toggles the whole stack. `BODYCAM_SCREENSHOT=path` saves a frame ~120 and exits.
 use bevy::asset::{RenderAssetUsages, embedded_asset};
 use bevy::core_pipeline::fullscreen_material::{FullscreenMaterial, FullscreenMaterialPlugin};
 use bevy::core_pipeline::tonemapping::Tonemapping;
@@ -12,7 +14,6 @@ use bevy::prelude::*;
 use bevy::render::extract_component::ExtractComponent;
 use bevy::render::render_resource::{Extent3d, ShaderType, TextureDimension, TextureFormat};
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
-use bevy::render::view::{ColorGrading, ColorGradingGlobal, ColorGradingSection};
 use bevy::render::RenderApp;
 use bevy::shader::ShaderRef;
 
@@ -22,19 +23,18 @@ use crate::player::BodycamCamera;
 #[derive(Component, ExtractComponent, Clone, Copy, ShaderType)]
 #[extract_app(RenderApp)]
 pub struct BodycamPostFx {
-    /// Fisheye barrel strength (0 = rectilinear). Scene is rendered at an overscanned FOV to compensate.
+    /// MPC LensDistortionIntensity / LensDistortionDensity (ExponentialDensity of r^2).
     pub distortion: f32,
-    /// Extra quartic term: stretches/squeezes the very edge.
-    pub edge_stretch: f32,
-    /// Chromatic aberration at the corner (fraction of radius, R out / B in).
+    pub distortion_density: f32,
+    /// UV scale applied to the material's Red/Cyan, Green/Magenta, Blue/Yellow offsets (3.5, -1.6, -0.8).
     pub ca: f32,
-    /// Vignette darkness 0..1, start radius (corner-normalised r^2), horizontal squash (>1 = wider oval).
+    /// UE VignetteIntensity (engine default 0.4).
     pub vignette: f32,
-    pub vignette_radius: f32,
-    pub vignette_oval: f32,
-    /// DiskBlur radius in pixels at the corner, and r^2 where it starts.
+    /// M_PP_BodycamMaster AberrationFadeExponent.
+    pub aberration_fade_exponent: f32,
+    /// MI_PP_DiskBlur BlurRadius (px at 1080p) * BlurRadiusConstant, and BlurFadeExponent.
     pub edge_blur: f32,
-    pub edge_blur_start: f32,
+    pub blur_fade_exponent: f32,
     /// Centre unsharp-mask amount.
     pub sharpen: f32,
     /// Luma grain, chroma temporal noise, and compression banding blend.
@@ -69,29 +69,14 @@ pub struct BodycamPostFx {
 impl Default for BodycamPostFx {
     fn default() -> Self {
         Self {
-            // Tuned against in-game screenshots: round lens housing with near-black corners and a
-            // warm rim, strong edge CA + blur, clean neutral centre, no visible grain.
-            distortion: 0.35, edge_stretch: 0.0, ca: 0.028,
-            vignette: 0.97, vignette_radius: 0.5, vignette_oval: 1.0,
-            edge_blur: 9.0, edge_blur_start: 0.25, sharpen: 0.5,
-            grain: 0.02, temporal_noise: 0.015, banding: 0.0,
-            dirt: 0.25, dirt_threshold: 4.0, dirt_gain: 0.6, exposure_bias: -0.7,
+            distortion: 0.33, distortion_density: 1.0, ca: 0.003, vignette: 0.4, aberration_fade_exponent: 2.0,
+            edge_blur: 25.0 * 0.8, blur_fade_exponent: 10.0, sharpen: 0.0, // UE Sharpen default 0
+            grain: 0.0, temporal_noise: 0.0, banding: 0.0, // FilmGrainIntensity 0
+            dirt: 0.25, dirt_threshold: 4.0, dirt_gain: 0.6, exposure_bias: 0.0,
             rolling_shutter: 0.010,
             flash_amount: 0.0, damage_amount: 0.0, explosion_shake: 0.0, dirt_boost: 0.0,
             time: 0.0, yaw_rate: 0.0, pitch_rate: 0.0, pump: 0.0,
             tint_r: 1.0, tint_g: 1.0, tint_b: 1.0,
-        }
-    }
-}
-
-impl BodycamPostFx {
-    /// F3 presets: game look, heavy cheap-action-cam, clean Axon-ish.
-    fn preset(i: usize) -> Self {
-        let d = Self::default();
-        match i % 3 {
-            1 => Self { distortion: 0.65, edge_stretch: 0.25, ca: 0.022, vignette: 0.8, edge_blur: 7.0, grain: 0.18, temporal_noise: 0.1, banding: 0.5, rolling_shutter: 0.02, ..d },
-            2 => Self { distortion: 0.2, edge_stretch: 0.0, ca: 0.004, vignette: 0.35, edge_blur: 1.5, grain: 0.04, temporal_noise: 0.02, banding: 0.1, dirt: 0.4, rolling_shutter: 0.004, ..d },
-            _ => d,
         }
     }
 }
@@ -108,7 +93,6 @@ impl FullscreenMaterial for BodycamPostFx {
 pub struct PostFxState {
     pub base_fov_deg: f32,
     pub enabled: bool,
-    preset: usize,
     mask: Handle<Image>,
 }
 
@@ -138,29 +122,22 @@ fn setup(mut cmd: Commands, mut images: ResMut<Assets<Image>>) {
         TextureFormat::R8Unorm,
         RenderAssetUsages::RENDER_WORLD,
     ));
-    cmd.insert_resource(PostFxState { base_fov_deg: 120.0, enabled: true, preset: 0, mask });
+    cmd.insert_resource(PostFxState { base_fov_deg: 120.0, enabled: true, mask });
 }
 
 fn stack(st: &PostFxState) -> impl Bundle {
     (
-        BodycamPostFx::preset(st.preset),
+        BodycamPostFx::default(),
         Msaa::Off,
-        // Strong, hazy bloom.
-        Bloom { intensity: 0.28, low_frequency_boost: 0.8, ..Bloom::NATURAL },
+        // ponytail: UE BloomIntensity 0.675 (SOG) mapped by eye; Bevy's bloom units differ.
+        Bloom { intensity: 0.2, ..Bloom::NATURAL },
         Tonemapping::AcesFitted, // UE filmic tonemapper is ACES-based
-        // Crushed blacks, desaturated cool grade.
-        ColorGrading {
-            global: ColorGradingGlobal { post_saturation: 0.92, ..default() },
-            shadows: ColorGradingSection { gamma: 1.0, lift: -0.02, contrast: 1.12, ..default() },
-            ..default()
-        },
-        // Camera-rotation smear.
-        MotionBlur { shutter_angle: 1.0, samples: 4 },
-        // Slow sensor adaptation, centre-weighted.
+        MotionBlur { shutter_angle: 0.5, samples: 4 }, // MotionBlurAmount 0.5
+        // Histogram auto exposure, AutoExposureBias +1 (exposure_bias), metering mask stand-in.
         AutoExposure {
             range: -6.0..=6.0,
-            speed_brighten: 0.6,
-            speed_darken: 1.2,
+            speed_brighten: 3.0, // AutoExposureSpeedUp
+            speed_darken: 1.0,   // AutoExposureSpeedDown
             metering_mask: st.mask.clone(),
             ..default()
         },
@@ -173,25 +150,16 @@ fn attach(mut cmd: Commands, st: Res<PostFxState>, q: Query<Entity, Added<Bodyca
     }
 }
 
-fn toggles(mut cmd: Commands, keys: Res<ButtonInput<KeyCode>>, mut st: ResMut<PostFxState>, mut q: Query<(Entity, &mut BodycamPostFx), With<BodycamCamera>>, cam: Query<Entity, With<BodycamCamera>>) {
+fn toggles(mut cmd: Commands, keys: Res<ButtonInput<KeyCode>>, mut st: ResMut<PostFxState>, cam: Query<Entity, With<BodycamCamera>>) {
     if keys.just_pressed(KeyCode::F2) {
         st.enabled = !st.enabled;
         for e in &cam {
             if st.enabled {
                 cmd.entity(e).insert(stack(&st));
             } else {
-                cmd.entity(e).remove::<(BodycamPostFx, Bloom, ColorGrading, MotionBlur, AutoExposure)>().insert((Tonemapping::TonyMcMapface, Msaa::Sample4));
+                cmd.entity(e).remove::<(BodycamPostFx, Bloom, MotionBlur, AutoExposure)>().insert((Tonemapping::TonyMcMapface, Msaa::Sample4));
             }
         }
-    }
-    if keys.just_pressed(KeyCode::F3) && st.enabled {
-        st.preset += 1;
-        for (_, mut fx) in &mut q {
-            let p = BodycamPostFx::preset(st.preset);
-            // Keep gameplay/runtime state.
-            *fx = BodycamPostFx { flash_amount: fx.flash_amount, damage_amount: fx.damage_amount, explosion_shake: fx.explosion_shake, dirt_boost: fx.dirt_boost, time: fx.time, yaw_rate: fx.yaw_rate, pitch_rate: fx.pitch_rate, pump: fx.pump, ..p };
-        }
-        info!("bodycam postfx preset {}", st.preset % 3);
     }
 }
 
