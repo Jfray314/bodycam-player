@@ -406,6 +406,7 @@ fn place_arms(
     time: Res<Time>,
     p: Single<&Player>,
     inv: Option<Single<&Inventory>>,
+    recoil: Res<crate::recoil::Recoil>,
     mut arms: Query<&mut Transform, With<ArmsRoot>>,
     mut hip: Local<f32>,
 ) {
@@ -413,7 +414,7 @@ fn place_arms(
     let off = inv.map(|i| pose_offset(&i.slots[i.current].anims)).unwrap_or_default();
     let off = Transform { translation: off.translation * *hip, rotation: Quat::IDENTITY.slerp(off.rotation, *hip), ..default() };
     for mut t in &mut arms {
-        *t = p.view_base * off * Transform::from_translation(-FP_CAMERA_SOCKET);
+        *t = p.view_base * recoil.offset * off * Transform::from_translation(-FP_CAMERA_SOCKET);
     }
 }
 
