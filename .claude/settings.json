@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//f/SteamLibrary/steamapps/common/Bodycam/**)",
+      "Bash(cargo:*)"
+    ],
+    "deny": [
+      "Edit(//f/SteamLibrary/steamapps/common/Bodycam/**)",
+      "Write(//f/SteamLibrary/steamapps/common/Bodycam/**)"
+    ]
+  }
+}

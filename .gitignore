@@ -1,0 +1,5 @@
+/target
+# extracted game assets: local only, never commit
+/extracted
+run.log
+player_manifest.txt

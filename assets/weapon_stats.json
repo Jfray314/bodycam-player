@@ -1,0 +1,332 @@
+{
+ "AK47": {
+  "Damage": 40.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.11,
+  "RagdollForce": 3000.0,
+  "Instability": 0.8,
+  "fire_modes": [
+   "FullAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "BC5": {
+  "Damage": 21.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.075,
+  "RagdollForce": 2000.0,
+  "fire_modes": [
+   "FullAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "Benelli": {
+  "Damage": 15.0,
+  "MagAmount": 6.0,
+  "AmmoCapacity": 7.0,
+  "FireRate": 0.18,
+  "PelletCount": 8.0,
+  "RagdollForce": 2666.0,
+  "SpreadAimX": 5.0,
+  "SpreadAimY": 5.0,
+  "SpreadHipX": 5.0,
+  "SpreadHipY": 6.0,
+  "fire_modes": [
+   "SemiAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "CZ-P-09": {
+  "Damage": 35.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.13,
+  "RagdollForce": 4500.0,
+  "SpreadHipX": 1.0,
+  "SpreadHipY": 1.0,
+  "fire_modes": [
+   "SemiAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "Crossbow": {
+  "Damage": 100.0,
+  "MagAmount": 4.0,
+  "AmmoCapacity": 1.0,
+  "FireRate": 0.11,
+  "RagdollForce": 2000.0,
+  "fire_modes": [
+   "SemiAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "Deagle": {
+  "Damage": 100.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.3,
+  "RagdollForce": 13500.0,
+  "fire_modes": [
+   "SemiAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "Default": {
+  "Damage": 30.0,
+  "MagAmount": 4.0,
+  "AmmoCapacity": 30.0,
+  "FireRate": 0.11,
+  "RagdollForce": 2000.0,
+  "fire_modes": [],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "Dragunov": {
+  "Damage": 200.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.5,
+  "RagdollForce": 15500.0,
+  "fire_modes": [
+   "SemiAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "FAL": {
+  "Damage": 55.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.13,
+  "RagdollForce": 6000.0,
+  "fire_modes": [
+   "SemiAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "Glock17": {
+  "Damage": 30.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.13,
+  "RagdollForce": 4500.0,
+  "SpreadHipX": 1.0,
+  "SpreadHipY": 1.0,
+  "fire_modes": [
+   "SemiAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "Kobra": {
+  "Damage": 29.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.13,
+  "RagdollForce": 2000.0,
+  "fire_modes": [
+   "SemiAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "M1911": {
+  "Damage": 32.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.13,
+  "RagdollForce": 2000.0,
+  "fire_modes": [
+   "SemiAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "M4A1": {
+  "Damage": 35.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.09,
+  "RagdollForce": 2100.0,
+  "Instability": 0.75,
+  "fire_modes": [
+   "FullAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "MP9": {
+  "Damage": 24.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.07,
+  "RagdollForce": 2000.0,
+  "fire_modes": [
+   "FullAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "Mossberg": {
+  "Damage": 20.0,
+  "MagAmount": 6.0,
+  "AmmoCapacity": 8.0,
+  "FireRate": 0.8,
+  "PelletCount": 10.0,
+  "RagdollForce": 2666.0,
+  "SpreadAimX": 5.0,
+  "SpreadAimY": 5.0,
+  "SpreadHipX": 5.0,
+  "SpreadHipY": 5.0,
+  "fire_modes": [
+   "SemiAuto"
+  ],
+  "tags": []
+ },
+ "RaiderX": {
+  "Damage": 26.0,
+  "MagAmount": 4.0,
+  "AmmoCapacity": 30.0,
+  "FireRate": 0.11,
+  "RagdollForce": 2000.0,
+  "fire_modes": [
+   "FullAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "Remington700": {
+  "Damage": 110.0,
+  "MagAmount": 8.0,
+  "AmmoCapacity": 8.0,
+  "FireRate": 1.4,
+  "PelletCount": 1.0,
+  "RagdollForce": 15500.0,
+  "Instability": 1.0,
+  "fire_modes": [
+   "SemiAuto"
+  ],
+  "tags": []
+ },
+ "Revolver": {
+  "Damage": 100.0,
+  "MagAmount": 4.0,
+  "AmmoCapacity": 8.0,
+  "FireRate": 0.4,
+  "RagdollForce": 4500.0,
+  "fire_modes": [
+   "SemiAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "SCAR": {
+  "Damage": 45.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.1,
+  "RagdollForce": 2000.0,
+  "fire_modes": [
+   "FullAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "Scorpion": {
+  "Damage": 28.0,
+  "MagAmount": 4.0,
+  "AmmoCapacity": 30.0,
+  "FireRate": 0.11,
+  "RagdollForce": 2000.0,
+  "fire_modes": [
+   "FullAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "Tec9": {
+  "Damage": 26.0,
+  "MagAmount": 4.0,
+  "AmmoCapacity": 30.0,
+  "FireRate": 0.11,
+  "RagdollForce": 2000.0,
+  "fire_modes": [
+   "FullAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "UNT": {
+  "Damage": 40.0,
+  "MagAmount": 4.0,
+  "AmmoCapacity": 30.0,
+  "FireRate": 0.11,
+  "RagdollForce": 2000.0,
+  "fire_modes": [
+   "FullAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "UZI": {
+  "Damage": 32.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.08,
+  "RagdollForce": 2000.0,
+  "Instability": 0.6,
+  "fire_modes": [
+   "FullAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "Vaiga": {
+  "Damage": 20.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.25,
+  "RagdollForce": 2666.0,
+  "PelletCount": 8.0,
+  "SpreadAimX": 5.0,
+  "SpreadAimY": 5.0,
+  "SpreadHipX": 5.0,
+  "SpreadHipY": 5.0,
+  "Instability": 0.8,
+  "fire_modes": [
+   "FullAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ },
+ "Kriss_vector": {
+  "Damage": 30.0,
+  "MagAmount": 4.0,
+  "FireRate": 0.05,
+  "RagdollForce": 2000.0,
+  "Instability": 1.0,
+  "fire_modes": [
+   "FullAuto"
+  ],
+  "tags": [
+   "Gameplay.Weapons.InfiniteMag"
+  ]
+ }
+}
