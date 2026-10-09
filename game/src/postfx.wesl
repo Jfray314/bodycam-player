@@ -129,8 +129,8 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     // where the image meets the housing (visible against bright areas in-game).
     let vd = vec2<f32>(d.x * fx.vignette_oval, d.y);
     let vr = sqrt(dot(vd, vd) * 0.5);
-    let rim = smoothstep(fx.vignette_radius + 0.22, fx.vignette_radius + 0.36, vr) * (1.0 - smoothstep(fx.vignette_radius + 0.36, fx.vignette_radius + 0.48, vr));
-    col *= vec3<f32>(1.0) + rim * vec3<f32>(0.45, 0.02, -0.4);
+    let rim = smoothstep(fx.vignette_radius + 0.28, fx.vignette_radius + 0.36, vr) * (1.0 - smoothstep(fx.vignette_radius + 0.36, fx.vignette_radius + 0.44, vr));
+    col *= vec3<f32>(1.0) + rim * vec3<f32>(0.35, 0.0, -0.3);
     col *= 1.0 - fx.vignette * smoothstep(fx.vignette_radius, 1.0, vr);
 
     // Damage: red edge darkening + blood splatter on the lens.

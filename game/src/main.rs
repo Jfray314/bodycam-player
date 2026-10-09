@@ -7,7 +7,11 @@ use bevy::prelude::*;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(AssetPlugin {
+            // Converted game assets (fonts, audio, models) live outside git; see REWRITE.md.
+            file_path: concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into(),
+            ..default()
+        }))
         .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin))
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
         .add_systems(Startup, test_range)
@@ -54,5 +58,5 @@ fn test_range(mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: Res
         DirectionalLight { illuminance: 25_000.0, shadow_maps_enabled: true, ..default() },
         Transform::from_xyz(2.0, 10.0, -2.0).looking_at(Vec3::new(-1.5, 0.0, -7.0), Vec3::Y),
     ));
-    cmd.insert_resource(GlobalAmbientLight { brightness: 2500.0, ..default() });
+    cmd.insert_resource(GlobalAmbientLight { brightness: 1200.0, ..default() });
 }

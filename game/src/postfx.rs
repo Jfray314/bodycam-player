@@ -147,7 +147,7 @@ fn stack(st: &PostFxState) -> impl Bundle {
         Msaa::Off,
         // Strong, hazy bloom.
         Bloom { intensity: 0.28, low_frequency_boost: 0.8, ..Bloom::NATURAL },
-        Tonemapping::AgX,
+        Tonemapping::AcesFitted, // UE filmic tonemapper is ACES-based
         // Crushed blacks, desaturated cool grade.
         ColorGrading {
             global: ColorGradingGlobal { post_saturation: 0.92, ..default() },
