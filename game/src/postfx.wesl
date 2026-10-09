@@ -36,13 +36,6 @@ fn bil(uv: vec2<f32>) -> vec3<f32> {
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-// Off-frame samples are black (soft 1px edge).
-fn inside(uv: vec2<f32>) -> f32 {
-    let dims = vec2<f32>(textureDimensions(tex));
-    let e = min(min(uv.x, 1.0 - uv.x) * dims.x, min(uv.y, 1.0 - uv.y) * dims.y);
-    return clamp(e + 0.5, 0.0, 1.0);
-}
-
 fn vnoise(p: vec2<f32>) -> f32 {
     let i = vec2<u32>(vec2<i32>(floor(p)) + 4096);
     let f = fract(p);
@@ -84,8 +77,8 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     uv.y -= row * fx.pitch_rate * fx.rolling_shutter / 1.1;
     uv += (pcg3(vec3<u32>(frame, 3u, 1u)).xy - 0.5) * fx.explosion_shake * 0.012;
 
-    // Lens distortion (M_PP_BodycamMaster): radial scale 1 + Intensity * ExponentialDensity(r^2), expanding
-    // outward so the corners sample past the frame -> black, which forms the rounded dark frame edge.
+    // Lens distortion (M_PP_BodycamMaster): radial scale 1 + Intensity * ExponentialDensity(r^2). It also bends
+    // the BodycamBorders lens-housing plane, which is rendered in the scene before this pass.
     // Material works in raw screen UV: r2 = |uv - 0.5|^2 (0.25 at mid-sides, 0.5 at corners).
     let dir = uv - 0.5;
     let r2 = dot(dir, dir);
@@ -108,7 +101,7 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     for (var i = 0; i < N; i++) {
         let a = f32(i) * 2.39996;
         let o = vec2<f32>(cos(a), sin(a)) * sqrt((f32(i) + 0.5) / f32(N)) * boff;
-        col += vec3<f32>(inside(uv_r + o) * bil(uv_r + o).r, inside(uv_g + o) * bil(uv_g + o).g, inside(uv_b + o) * bil(uv_b + o).b);
+        col += vec3<f32>(bil(uv_r + o).r, bil(uv_g + o).g, bil(uv_b + o).b); // UE clamps off-viewport samples
     }
     col /= f32(N);
     let ca = caf;

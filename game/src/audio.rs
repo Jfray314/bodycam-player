@@ -331,7 +331,6 @@ impl Plugin for AudioPlugin {
             }
         }
         app.init_resource::<Live>()
-            .insert_resource(Vitals::default())
             .insert_resource(Tremor(0.0))
             .init_resource::<Loops>()
             .add_systems(PostStartup, preload_player)
@@ -480,19 +479,6 @@ fn aim_sfx(mut cmd: Commands, p: Single<&Player>, mut bank: ResMut<Bank>, mut li
 
 // ---------- AC_BodycamCamera persistent sounds (UpdateWindCameraSounds / UpdateFoleySounds / UpdateBreathingSounds / UpdateTremorSounds) ----------
 
-/// SurvivorStatus inputs of UpdateBreathingSounds (stand-in until status.rs lands; `stamina` is the 0..1 term added to the breath speed).
-#[derive(Resource)]
-pub struct Vitals {
-    pub health: f32,
-    pub stamina: f32,
-    pub stress: f32,
-}
-impl Default for Vitals {
-    fn default() -> Self {
-        Vitals { health: 100.0, stamina: 0.0, stress: 0.0 }
-    }
-}
-
 /// AC_BodycamCamera.Tremor: set by hits / explosions, decays with FInterpTo(.., 0, dt, 3).
 #[derive(Resource)]
 pub struct Tremor(pub f32);
@@ -501,10 +487,7 @@ fn map_clamped(v: f32, a: f32, b: f32, c: f32, d: f32) -> f32 {
     c + (d - c) * ((v - a) / (b - a)).clamp(0.0, 1.0)
 }
 
-fn finterp(cur: f32, target: f32, dt: f32, speed: f32) -> f32 {
-    let d = target - cur;
-    if d * d < 1e-8 { target } else { cur + d * (dt * speed).clamp(0.0, 1.0) }
-}
+use crate::status::{finterp_to as finterp, SurvivorStatus};
 
 /// A cue played as an AudioComponent: re-evaluated every frame with its live parameters and a fixed random seed (so Random
 /// nodes keep their pick), every wave looping; waves whose crossfade weight is 0 stay running at zero volume.
@@ -550,11 +533,10 @@ struct Loops {
     tremor_vol: f32,
     high_rotation: f32,
     last_look: Option<Vec2>,
-    fatigue: f32,
 }
 impl Default for Loops {
     fn default() -> Self {
-        Loops { wind: Cont::default(), foley: Cont::default(), breath: Cont::default(), tremor: Cont::default(), foley_vol: 0.0, wind_vol: 0.0, tremor_vol: 1.0, high_rotation: 0.0, last_look: None, fatigue: 0.0 }
+        Loops { wind: Cont::default(), foley: Cont::default(), breath: Cont::default(), tremor: Cont::default(), foley_vol: 0.0, wind_vol: 0.0, tremor_vol: 1.0, high_rotation: 0.0, last_look: None }
     }
 }
 
@@ -567,7 +549,7 @@ fn loops(
     mut ray: bevy::picking::mesh_picking::ray_cast::MeshRayCast,
     mut bank: ResMut<Bank>,
     mut st: ResMut<Loops>,
-    mut vit: ResMut<Vitals>,
+    vit: Res<SurvivorStatus>,
     mut tremor: ResMut<Tremor>,
     assets: Res<AssetServer>,
     mut sinks: Query<&mut AudioSink>,
@@ -601,9 +583,7 @@ fn loops(
     let foley_vol = st.foley_vol;
     st.foley.update(&mut cmd, &mut bank, &assets, &mut sinks, "/Game/Audio/Player/Foley/Bodycam/Bodycam_Foley_Player_Bodycam_Cloth_loop_test_Cue", &fp, foley_vol);
 
-    // Breathing. ponytail: no SurvivorStatus yet; fatigue builds while sprinting (+0.15/s) and recovers (-0.1/s), feeding the `Stamina` term.
-    st.fatigue = (st.fatigue + if p.sprinting { 0.15 } else { -0.1 } * dt).clamp(0.0, 1.0);
-    vit.stamina = st.fatigue;
+    // Breathing (UpdateBreathingSounds)
     let speed = (vit.stress + map_clamped(vit.health, 25.0, 100.0, 0.8, 0.0) + map_clamped(vit.stamina, 0.0, 1.0, 0.0, 1.0)).clamp(0.0, 1.0);
     let mut bp = Params::default();
     bp.floats.insert("Speed", speed);
