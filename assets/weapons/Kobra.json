@@ -1,0 +1,3039 @@
+{
+ "row": "Kobra",
+ "item_class": "Item.SecondaryWeapon.Pistols.Kobra.Kobra",
+ "stats_effects": [
+  "/Game/BodycamCore/AbilitySystem/GameplayEffects/Weapons/Stats/GE_WeaponStat_Kobra.GE_WeaponStat_Kobra_C"
+ ],
+ "sounds": {
+  "Cosmetic.Weapon.SFX.Fire": "/Game/Audio/Guns/Cue/Pistol/Guns_Pistol_FX-45.Guns_Pistol_FX-45",
+  "Cosmetic.Weapon.SFX.FireSuppressed": "/Game/Audio/Guns/Cue/Pistol/Guns_Pistol_FX-45_Suppressor.Guns_Pistol_FX-45_Suppressor",
+  "Cosmetic.Weapon.SFX.FireDry": "/Game/Audio/Guns/Cue/Pistol/Guns_Pistol_FX-45_DryFire.Guns_Pistol_FX-45_DryFire",
+  "Cosmetic.Weapon.SFX.BulletCrack": "/Game/Audio/Guns/Cue/Bullets/BulletCrack/Bodycam_Guns_Pistol_Bullet_BulletCrack_V1.Bodycam_Guns_Pistol_Bullet_BulletCrack_V1",
+  "Cosmetic.Weapon.SFX.BulletWizz": "/Game/Audio/Guns/Cue/Bullets/BulletWhiz/Bodycam_Guns_Pistol_Bullet_BulletWhiz_V1.Bodycam_Guns_Pistol_Bullet_BulletWhiz_V1"
+ },
+ "default_attachments": [
+  "Kobra Base Receiver",
+  "Kobra Slide",
+  "Kobra Threaded Barrel",
+  "Glock17 Trigger",
+  "Reticle Red Dot",
+  "Magazine CZ-P-09",
+  "Ammo 9mm",
+  "Dot"
+ ],
+ "anim_set": {
+  "IdlePose": {
+   "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Idle_Loop01.A_FP_Glock_Idle_Loop01",
+   "length": 30.033333,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "ViewmodelOffsets": {
+   "PoseOffset": {
+    "Rotation": {
+     "x": 2.554573023541778e-19,
+     "y": -1.951396693329226e-17,
+     "z": 0.013089876427551448,
+     "w": 0.9999143238973585
+    },
+    "Translation": {
+     "x": 9.0,
+     "y": -0.33412426116549077,
+     "z": -2.0
+    }
+   },
+   "ActionPoseOffset": {
+    "Rotation": {
+     "x": -0.056693022803871264,
+     "y": -0.0,
+     "z": 0.0,
+     "w": 0.9983916571993977
+    }
+   }
+  },
+  "AdsSettings": {
+   "AdsSpeed": 3.0,
+   "SprintAdsSpeed": 10.0,
+   "AdsBlend": {
+    "BlendTime": 0.0,
+    "BlendOption": "EAlphaBlendOption::Sinusoidal"
+   },
+   "ScopeChangeSpeed": 0.0,
+   "ScopeChangeBlend": {
+    "BlendTime": 0.25
+   },
+   "AdsAdditiveBlend": 1.0,
+   "AimSightDistance": 28.0
+  },
+  "LookPositionSway": {
+   "SpringStiffness": {
+    "x": 0.6,
+    "y": 0.6,
+    "z": 0.6
+   },
+   "SpringDamping": {
+    "x": 0.4,
+    "y": 0.4,
+    "z": 0.5
+   },
+   "SpringSpeed": {
+    "x": 10.0,
+    "y": 10.0,
+    "z": 10.0
+   },
+   "SmoothDamping": {
+    "x": 7.0,
+    "y": 6.0,
+    "z": 6.0
+   },
+   "Scale": {
+    "x": 1.0,
+    "y": 0.8,
+    "z": 0.4
+   },
+   "AdsScale": {
+    "x": 1.0,
+    "y": 0.8,
+    "z": 0.4
+   },
+   "TargetSpace": "EBoneControlSpace::BCS_ComponentSpace"
+  },
+  "HipLookPositionSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 0.8,
+    "z": 0.7
+   },
+   "SpringDamping": {
+    "x": 0.0,
+    "y": 0.6,
+    "z": 0.4
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 10.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 15.0,
+    "z": 50.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 5.0,
+    "z": 5.0
+   }
+  },
+  "LookRotationSway": {
+   "SpringStiffness": {
+    "x": 0.6,
+    "y": 0.4,
+    "z": 0.9
+   },
+   "SpringDamping": {
+    "x": 0.4,
+    "y": 0.6,
+    "z": 0.4
+   },
+   "SpringSpeed": {
+    "x": 15.0,
+    "y": 15.0,
+    "z": 15.0
+   },
+   "SmoothDamping": {
+    "x": 12.0,
+    "y": 12.0,
+    "z": 12.0
+   },
+   "Scale": {
+    "x": -2.0,
+    "y": 5.0,
+    "z": 4.0
+   },
+   "AdsScale": {
+    "x": -2.0,
+    "y": 5.0,
+    "z": 5.0
+   },
+   "TargetSpace": "EBoneControlSpace::BCS_ComponentSpace"
+  },
+  "HipLookRotationSway": {
+   "SpringStiffness": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 1.0
+   },
+   "SpringDamping": {
+    "x": 0.2,
+    "y": 0.4,
+    "z": 0.4
+   },
+   "SpringSpeed": {
+    "x": 7.0,
+    "y": 7.0,
+    "z": 7.0
+   },
+   "SmoothDamping": {
+    "x": 50.0,
+    "y": 10.0,
+    "z": 10.0
+   },
+   "Scale": {
+    "x": -2.0,
+    "y": 5.0,
+    "z": 5.0
+   }
+  },
+  "MovePositionSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 0.0
+   },
+   "SpringDamping": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 0.0
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 25.0,
+    "z": 0.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 2.0,
+    "z": 0.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 0.0
+   },
+   "AdsScale": {
+    "x": 1.0,
+    "y": 0.0,
+    "z": 0.0
+   }
+  },
+  "LowerSway": {
+   "Scale": 8.0,
+   "AdsScale": 8.0,
+   "InterpSpeed": 10.0,
+   "Curve": {
+    "path": "/BodycamAnimationFramework/Animations/General/Curve_LowerSway.Curve_LowerSway",
+    "curves": {
+     "FloatCurve": [
+      [
+       0.0,
+       3.3369275e-08,
+       2,
+       0.0,
+       0.0
+      ],
+      [
+       3.8662422,
+       -0.530746,
+       2,
+       -0.4768621,
+       -0.4768621
+      ],
+      [
+       6.545557,
+       -1.0,
+       2,
+       0.0,
+       0.0
+      ]
+     ]
+    }
+   }
+  },
+  "SwayPivotOffset": {
+   "x": 0.0,
+   "y": 100.0,
+   "z": 0.0
+  },
+  "WeaponCollision": {
+   "Length": 20.0,
+   "StartOffset": -10.0,
+   "HolsterPose": {
+    "Translation": {
+     "x": 0.0,
+     "y": -45.0,
+     "z": -10.0
+    }
+   },
+   "InterpSpeed": 5.0,
+   "DistanceThreshold": 25.0,
+   "TraceRadius": 6.0
+  },
+  "RecoilData": {
+   "path": "/BodycamAnimationFramework/PRAS/Glock/Glock.Glock",
+   "ControllerRecoil": {
+    "HorizontalRecoilStep": {
+     "x": -0.2,
+     "y": 0.3
+    },
+    "RecoilSmoothing": {
+     "x": 7.0,
+     "y": 8.0
+    },
+    "Damping": 8.0
+   },
+   "FireSway": {
+    "VerticalOffsetStep": 2.5,
+    "DepthOffsetStep": 4.0,
+    "ClampVerticalOffset": 20.0,
+    "ClampDepthOffset": 4.0,
+    "OffsetCurve": {
+     "path": "/BodycamAnimationFramework/PRAS/Deagle/Deagle_RecoilUp.Deagle_RecoilUp",
+     "curves": {
+      "FloatCurve": [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        2.0,
+        2,
+        0.8522727,
+        0.8522727
+       ],
+       [
+        4.4,
+        3.75,
+        2,
+        0.0862069,
+        0.0862069
+       ],
+       [
+        30.0,
+        4.5,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     }
+    },
+    "InterpSpeed": 10.0,
+    "DampSmoothing": 3.0
+   },
+   "SingleRot": {
+    "path": "/BodycamAnimationFramework/PRAS/Glock/Glock17_Semi_Rot.Glock17_Semi_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.02319918,
+        0.56675065,
+        2,
+        28.524498,
+        28.524498
+       ],
+       [
+        0.047486868,
+        1.0028757,
+        2,
+        -0.01839166,
+        -0.01839166
+       ],
+       [
+        0.075956486,
+        0.5865745,
+        2,
+        -25.054085,
+        -25.054085
+       ],
+       [
+        0.09557396,
+        0.2699891,
+        2,
+        -6.9354053,
+        -6.9354053
+       ],
+       [
+        0.15359905,
+        -0.31506363,
+        2,
+        -0.6746784,
+        -0.6746784
+       ],
+       [
+        0.26220703,
+        0.2979077,
+        2,
+        0.48194572,
+        0.48194572
+       ],
+       [
+        0.45497218,
+        -0.1698181,
+        2,
+        -0.6221061,
+        -0.6221061
+       ],
+       [
+        0.62589693,
+        0.07165401,
+        2,
+        0.3815899,
+        0.3815899
+       ],
+       [
+        0.9,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.027952613,
+        0.32233536,
+        2,
+        18.551998,
+        18.551998
+       ],
+       [
+        0.053902548,
+        1.0,
+        2,
+        0.08847135,
+        0.08847135
+       ],
+       [
+        0.083333336,
+        0.36175957,
+        2,
+        -13.754296,
+        -13.754296
+       ],
+       [
+        0.14172626,
+        -0.20795313,
+        2,
+        -0.21116962,
+        -0.21116962
+       ],
+       [
+        0.19778608,
+        0.060705096,
+        2,
+        0.9335905,
+        0.9335905
+       ],
+       [
+        0.28345641,
+        -0.075635195,
+        2,
+        -0.588199,
+        -0.588199
+       ],
+       [
+        0.32051536,
+        -0.011484154,
+        2,
+        2.528369,
+        2.528369
+       ],
+       [
+        0.3624946,
+        0.12420247,
+        2,
+        2.0565314,
+        2.0565314
+       ],
+       [
+        0.39582792,
+        0.14339848,
+        2,
+        -2.071757,
+        -2.071757
+       ],
+       [
+        0.4395191,
+        -0.035373613,
+        2,
+        -0.66573936,
+        -0.66573936
+       ],
+       [
+        0.5666667,
+        0.029664364,
+        2,
+        0.14880024,
+        0.14880024
+       ],
+       [
+        0.70000005,
+        0.0033860104,
+        2,
+        -0.08899311,
+        -0.08899311
+       ],
+       [
+        0.9,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.050307132,
+        0.38059607,
+        2,
+        10.873512,
+        10.873512
+       ],
+       [
+        0.09196661,
+        1.0,
+        2,
+        0.050139528,
+        0.050139528
+       ],
+       [
+        0.116666675,
+        0.49042988,
+        2,
+        -24.830547,
+        -24.830547
+       ],
+       [
+        0.13333334,
+        -0.027158631,
+        2,
+        -17.334639,
+        -17.334639
+       ],
+       [
+        0.16666667,
+        -0.376302,
+        2,
+        1.0249342,
+        1.0249342
+       ],
+       [
+        0.25,
+        0.092417024,
+        2,
+        3.9838688,
+        3.9838688
+       ],
+       [
+        0.3,
+        0.15488054,
+        2,
+        -0.38380435,
+        -0.38380435
+       ],
+       [
+        0.43333337,
+        -0.12518594,
+        2,
+        -1.5036256,
+        -1.5036256
+       ],
+       [
+        0.4666667,
+        -0.095723756,
+        2,
+        1.4443188,
+        1.4443188
+       ],
+       [
+        0.48333335,
+        -0.052970026,
+        2,
+        1.3369071,
+        1.3369071
+       ],
+       [
+        0.5666667,
+        0.037966985,
+        2,
+        0.2783895,
+        0.2783895
+       ],
+       [
+        0.6833334,
+        0.0027078905,
+        2,
+        -0.11390098,
+        -0.11390098
+       ],
+       [
+        0.9,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "SingleLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/Glock/Glock17_Semi_Loc.Glock17_Semi_Loc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        2.3414235e-14,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333268,
+        0.17818905,
+        2,
+        14.999999,
+        14.999999
+       ],
+       [
+        0.06666667,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.12856315,
+        0.21290034,
+        2,
+        -7.885934,
+        -7.885934
+       ],
+       [
+        0.20000002,
+        -0.051458,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.3166667,
+        0.10628,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.076551,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        2.3414235e-14,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        2.3414235e-14,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333268,
+        0.17818905,
+        2,
+        14.999999,
+        14.999999
+       ],
+       [
+        0.06666667,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.12856315,
+        0.21290034,
+        2,
+        -7.885934,
+        -7.885934
+       ],
+       [
+        0.20000002,
+        -0.051458,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.3166667,
+        0.10628,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.076551,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        2.3414235e-14,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        1.36458685e-14,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.038502835,
+        0.45521164,
+        2,
+        14.999999,
+        14.999999
+       ],
+       [
+        0.06666667,
+        1.0,
+        2,
+        0.23557071,
+        0.23557071
+       ],
+       [
+        0.12711993,
+        0.23988257,
+        2,
+        -8.470352,
+        -8.470352
+       ],
+       [
+        0.20000002,
+        -0.12938055,
+        2,
+        -1.1222556,
+        -1.1222556
+       ],
+       [
+        0.33333334,
+        0.00845841,
+        2,
+        0.28507125,
+        0.28507125
+       ],
+       [
+        0.4666667,
+        -0.053361543,
+        2,
+        -0.06624649,
+        -0.06624649
+       ],
+       [
+        0.6166667,
+        -0.010311428,
+        2,
+        0.123142034,
+        0.123142034
+       ],
+       [
+        0.9,
+        1.36458685e-14,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AutoRot": {
+    "path": "/BodycamAnimationFramework/PRAS/Glock/Glock_Auto_Rot.Glock_Auto_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        -0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.032074258,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.065734915,
+        -0.02106752,
+        2,
+        -17.242336,
+        -17.242336
+       ],
+       [
+        0.1080611,
+        -0.31019068,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.33668756,
+        0.21202272,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.50987583,
+        -0.13153346,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.7565664,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        -6.1626155e-18,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.023956515,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.06641596,
+        0.0,
+        2,
+        -15.77517,
+        -15.77517
+       ],
+       [
+        0.11484486,
+        -0.43377915,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.26094437,
+        0.2005621,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.43156517,
+        -0.10987405,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.654287,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.04688419,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.09105789,
+        -0.0011860862,
+        2,
+        -13.74764,
+        -13.74764
+       ],
+       [
+        0.14552727,
+        -0.35610944,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.3430158,
+        0.15632749,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.6517322,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AutoLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/Glock/Glock_Auto_Loc.Glock_Auto_Loc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        -6.817585e-08,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.012622083,
+        1.0,
+        2,
+        1.9868216e-06,
+        1.9868216e-06
+       ],
+       [
+        0.06,
+        0.0,
+        2,
+        -13.573967,
+        -13.573967
+       ],
+       [
+        0.11745476,
+        -0.42299536,
+        2,
+        -0.2960029,
+        -0.2960029
+       ],
+       [
+        0.42111996,
+        -0.04899214,
+        2,
+        1.0388112,
+        1.0388112
+       ],
+       [
+        0.9165177,
+        0.0033845308,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        7.2868995e-13,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        1.2017005e-08,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.029557567,
+        1.0011977,
+        2,
+        -0.07107813,
+        -0.07107813
+       ],
+       [
+        0.03934328,
+        0.88588417,
+        2,
+        -23.499046,
+        -23.499046
+       ],
+       [
+        0.07207741,
+        0.002021971,
+        2,
+        -18.321285,
+        -18.321285
+       ],
+       [
+        0.104780935,
+        -0.31301787,
+        2,
+        -0.26245862,
+        -0.26245862
+       ],
+       [
+        0.33914363,
+        0.06968761,
+        2,
+        0.10887186,
+        0.10887186
+       ],
+       [
+        0.6040494,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimSingleRot": {
+    "path": "/BodycamAnimationFramework/PRAS/Glock/Aim/Glock17_Semi_Aim_Rot.Glock17_Semi_Aim_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.023199,
+        0.566751,
+        2,
+        28.524498,
+        28.524498
+       ],
+       [
+        0.047487,
+        1.002876,
+        2,
+        -0.018392,
+        -0.018392
+       ],
+       [
+        0.075956,
+        0.586574,
+        2,
+        -25.054085,
+        -25.054085
+       ],
+       [
+        0.095574,
+        0.269989,
+        2,
+        -6.935405,
+        -6.935405
+       ],
+       [
+        0.153599,
+        -0.315064,
+        2,
+        -0.674678,
+        -0.674678
+       ],
+       [
+        0.262207,
+        0.297908,
+        2,
+        0.481946,
+        0.481946
+       ],
+       [
+        0.454972,
+        -0.169818,
+        2,
+        -0.622106,
+        -0.622106
+       ],
+       [
+        0.625897,
+        0.071654,
+        2,
+        0.38159,
+        0.38159
+       ],
+       [
+        0.9,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.027953,
+        0.322335,
+        2,
+        18.551998,
+        18.551998
+       ],
+       [
+        0.053903,
+        1.0,
+        2,
+        0.088471,
+        0.088471
+       ],
+       [
+        0.083333,
+        0.36176,
+        2,
+        -18.533058,
+        -18.533058
+       ],
+       [
+        0.11857337,
+        -0.030336192,
+        2,
+        -0.21117,
+        -0.21117
+       ],
+       [
+        0.1583085,
+        0.08980878,
+        2,
+        0.70886284,
+        0.70886284
+       ],
+       [
+        0.2855615,
+        0.036808252,
+        2,
+        -0.11195468,
+        -0.11195468
+       ],
+       [
+        0.40247685,
+        0.020418648,
+        2,
+        -0.088993,
+        -0.088993
+       ],
+       [
+        0.4993355,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.050307132,
+        0.38059607,
+        2,
+        10.873512,
+        10.873512
+       ],
+       [
+        0.09196661,
+        1.0,
+        2,
+        0.050139528,
+        0.050139528
+       ],
+       [
+        0.116666675,
+        0.49042988,
+        2,
+        -24.830547,
+        -24.830547
+       ],
+       [
+        0.13333334,
+        -0.027158631,
+        2,
+        -17.334639,
+        -17.334639
+       ],
+       [
+        0.16666667,
+        -0.376302,
+        2,
+        1.0249342,
+        1.0249342
+       ],
+       [
+        0.25,
+        0.092417024,
+        2,
+        3.9838688,
+        3.9838688
+       ],
+       [
+        0.3,
+        0.15488054,
+        2,
+        -0.38380435,
+        -0.38380435
+       ],
+       [
+        0.43333337,
+        -0.12518594,
+        2,
+        -1.5036256,
+        -1.5036256
+       ],
+       [
+        0.4666667,
+        -0.095723756,
+        2,
+        1.4443188,
+        1.4443188
+       ],
+       [
+        0.48333335,
+        -0.052970026,
+        2,
+        1.3369071,
+        1.3369071
+       ],
+       [
+        0.5666667,
+        0.037966985,
+        2,
+        0.2783895,
+        0.2783895
+       ],
+       [
+        0.6833334,
+        0.0027078905,
+        2,
+        -0.11390098,
+        -0.11390098
+       ],
+       [
+        0.9,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimSingleLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/Glock/Aim/Glock17_Semi_Aim_Loc.Glock17_Semi_Aim_Loc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        2.3414235e-14,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333268,
+        0.17818905,
+        2,
+        14.999999,
+        14.999999
+       ],
+       [
+        0.06666667,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.12856315,
+        0.21290034,
+        2,
+        -7.885934,
+        -7.885934
+       ],
+       [
+        0.20000002,
+        -0.051458,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.3166667,
+        0.10628,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.076551,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        2.3414235e-14,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        2.3414235e-14,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333268,
+        0.17818905,
+        2,
+        14.999999,
+        14.999999
+       ],
+       [
+        0.06666667,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.12856315,
+        0.21290034,
+        2,
+        -7.885934,
+        -7.885934
+       ],
+       [
+        0.20000002,
+        -0.051458,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.3166667,
+        0.10628,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.076551,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        2.3414235e-14,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        1.36458685e-14,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.038502835,
+        0.45521164,
+        2,
+        14.999999,
+        14.999999
+       ],
+       [
+        0.06666667,
+        1.0,
+        2,
+        0.23557071,
+        0.23557071
+       ],
+       [
+        0.12711993,
+        0.23988257,
+        2,
+        -8.470352,
+        -8.470352
+       ],
+       [
+        0.20000002,
+        -0.12938055,
+        2,
+        -1.1222556,
+        -1.1222556
+       ],
+       [
+        0.33333334,
+        0.00845841,
+        2,
+        0.28507125,
+        0.28507125
+       ],
+       [
+        0.4666667,
+        -0.053361543,
+        2,
+        -0.06624649,
+        -0.06624649
+       ],
+       [
+        0.6166667,
+        -0.010311428,
+        2,
+        0.123142034,
+        0.123142034
+       ],
+       [
+        0.9,
+        1.36458685e-14,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimAutoRot": {
+    "path": "/BodycamAnimationFramework/PRAS/Glock/Aim/Glock_Auto_Aim_Rot.Glock_Auto_Aim_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        -0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.032074258,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.065734915,
+        -0.02106752,
+        2,
+        -17.242336,
+        -17.242336
+       ],
+       [
+        0.1080611,
+        -0.31019068,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.33668756,
+        0.21202272,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.50987583,
+        -0.13153346,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.7565664,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        -6.1626155e-18,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.023956515,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.06641596,
+        0.0,
+        2,
+        -15.77517,
+        -15.77517
+       ],
+       [
+        0.11484486,
+        -0.43377915,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.26094437,
+        0.2005621,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.43156517,
+        -0.10987405,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.654287,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.04688419,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.09105789,
+        -0.0011860862,
+        2,
+        -13.74764,
+        -13.74764
+       ],
+       [
+        0.14552727,
+        -0.35610944,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.3430158,
+        0.15632749,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.6517322,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimAutoLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/Glock/Aim/Glock_Auto_Aim_Loc.Glock_Auto_Aim_Loc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        -6.817585e-08,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.012622083,
+        1.0,
+        2,
+        1.9868216e-06,
+        1.9868216e-06
+       ],
+       [
+        0.06,
+        0.0,
+        2,
+        -13.573967,
+        -13.573967
+       ],
+       [
+        0.11745476,
+        -0.42299536,
+        2,
+        -0.2960029,
+        -0.2960029
+       ],
+       [
+        0.42111996,
+        -0.04899214,
+        2,
+        1.0388112,
+        1.0388112
+       ],
+       [
+        0.9165177,
+        0.0033845308,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        7.2868995e-13,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        1.2017005e-08,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.029557567,
+        1.0011977,
+        2,
+        -0.07107813,
+        -0.07107813
+       ],
+       [
+        0.03934328,
+        0.88588417,
+        2,
+        -23.499046,
+        -23.499046
+       ],
+       [
+        0.07207741,
+        0.002021971,
+        2,
+        -18.321285,
+        -18.321285
+       ],
+       [
+        0.104780935,
+        -0.31301787,
+        2,
+        -0.26245862,
+        -0.26245862
+       ],
+       [
+        0.33914363,
+        0.06968761,
+        2,
+        0.10887186,
+        0.10887186
+       ],
+       [
+        0.6040494,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "PitchAim": {
+    "x": -8.0,
+    "y": -9.0
+   },
+   "YawAim": {
+    "x": -2.0,
+    "y": -1.0,
+    "z": 1.0,
+    "w": 2.0
+   },
+   "RollAim": {
+    "x": -3.0,
+    "y": -2.0,
+    "z": 2.0,
+    "w": 3.0
+   },
+   "PitchHip": {
+    "x": -12.0,
+    "y": -12.0
+   },
+   "YawHip": {
+    "x": -2.0,
+    "y": -1.2,
+    "z": 1.0,
+    "w": 2.0
+   },
+   "RollHip": {
+    "x": -3.0,
+    "y": -2.0,
+    "z": 2.0,
+    "w": 3.0
+   },
+   "KickAim": {
+    "x": -1.8,
+    "y": -2.5
+   },
+   "KickAimUp": {
+    "x": -0.8,
+    "y": -1.5
+   },
+   "KickHip": {
+    "x": -1.8,
+    "y": -2.5
+   },
+   "KickHipUp": {
+    "x": 0.4,
+    "y": 0.6
+   },
+   "SmoothRot": {
+    "pitch": 0.0,
+    "yaw": 8.0,
+    "roll": 7.0
+   },
+   "SmoothLoc": {
+    "x": 0.0,
+    "y": 6.0,
+    "z": 6.0
+   },
+   "MultiRot": {
+    "pitch": 1.5,
+    "yaw": 1.1,
+    "roll": 1.3
+   },
+   "MultiLoc": {
+    "x": 1.3,
+    "y": 1.0,
+    "z": 2.0
+   },
+   "bSmoothRoll": true,
+   "Noise2DTarget": {
+    "x": 1.1,
+    "y": 1.1
+   },
+   "Noise2DAccel": {
+    "x": 8.0,
+    "y": 8.0
+   },
+   "Noise2DZero": {
+    "x": 6.0,
+    "y": 6.0
+   },
+   "NoiseAimScalar": 0.7,
+   "Pushback": -3.0,
+   "PushbackZero": 4.0,
+   "PushbackAccel": 9.0,
+   "PitchProgress": {
+    "Accel": 7.0,
+    "Damping": 6.0,
+    "Amount": -0.5
+   },
+   "ZProgress": {
+    "Accel": 9.0,
+    "Damping": 5.0,
+    "Amount": 1.0
+   },
+   "PlayRate": 1.07
+  },
+  "AimIdlePose": {
+   "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Aim_Idle_Loop.A_FP_Glock_Aim_Idle_Loop",
+   "length": 5.1,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "StressedIdleSubtle": {
+   "path": "/BodycamAnimationFramework/Animations/Glock/Character/A_FP_Glock17_Shake_Loop.A_FP_Glock17_Shake_Loop",
+   "length": 1.0666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "StressedIdleStrong": {
+   "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Stressed_Additive.A_FP_Glock_Stressed_Additive",
+   "length": 1.3666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "OverlayAnimBlueprint": "/BodycamAnimationFramework/Blueprints/Animation/Overlays/ABP_Overlay_Pistol.ABP_Overlay_Pistol_C",
+  "GunAnimInstance": "/BodycamAnimationFramework/Animations/Glock/Weapon/ABP_Glock.ABP_Glock_C",
+  "ReGripMotions": [
+   {
+    "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Regrip01_Montage.A_FP_Glock_Regrip01_Montage",
+    "length": 0.9,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Glock/Sounds/BODYCAM_GLOCK_regrip.BODYCAM_GLOCK_regrip"
+      }
+     }
+    ]
+   },
+   {
+    "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Regrip02_Montage.A_FP_Glock_Regrip02_Montage",
+    "length": 0.9,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Glock/Sounds/BODYCAM_GLOCK_regrip.BODYCAM_GLOCK_regrip"
+      }
+     }
+    ]
+   },
+   {
+    "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Regrip03_Montage.A_FP_Glock_Regrip03_Montage",
+    "length": 0.93333334,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Glock/Sounds/BODYCAM_GLOCK_regrip.BODYCAM_GLOCK_regrip"
+      }
+     }
+    ]
+   }
+  ],
+  "Fire": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Fire_Montage.A_FP_Glock_Fire_Montage",
+     "length": 0.9,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_Fire_Montage.A_W_Glock_Fire_Montage",
+     "length": 0.16666667,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    }
+   }
+  ],
+  "FireOut": {
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_Fire_Empty_Montage.A_W_Glock_Fire_Empty_Montage",
+    "length": 0.1,
+    "rate": 1.0,
+    "notifies": []
+   }
+  },
+  "FirstEquip": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Equip_Montage.A_FP_Glock_Equip_Montage",
+    "length": 1.52,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_Equip.G17_Equip",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.Equip"
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_Equip_Montage.A_W_Glock_Equip_Montage",
+    "length": 1.1,
+    "rate": 1.0,
+    "notifies": []
+   }
+  },
+  "Draw": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Draw_Montage.A_FP_Glock_Draw_Montage",
+    "length": 0.45,
+    "rate": 1.0,
+    "notifies": []
+   }
+  },
+  "holster": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Holster_Montage.A_FP_Glock_Holster_Montage",
+    "length": 0.32,
+    "rate": 1.5,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_holster.G17_holster",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.Inspect"
+      }
+     }
+    ]
+   }
+  },
+  "ReloadTacCalm": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadPartial_Calm01_Montage.A_FP_Glock_reloadPartial_Calm01_Montage",
+     "length": 3.6,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadPartial_Calm01.G17_reloadPartial_Calm01",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Calm01_Montage.A_W_Glock_reloadPartial_Calm01_Montage",
+     "length": 3.6,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadPartial_Calm02_Montage.A_FP_Glock_reloadPartial_Calm02_Montage",
+     "length": 3.4,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadPartial_Calm02.G17_reloadPartial_Calm02",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Calm02_Montage.A_W_Glock_reloadPartial_Calm02_Montage",
+     "length": 3.4,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadPartial_Calm03_Montage.A_FP_Glock_reloadPartial_Calm03_Montage",
+     "length": 3.1666667,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadPartial_Calm03.G17_reloadPartial_Calm03",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Calm03_Montage.A_W_Glock_reloadPartial_Calm03_Montage",
+     "length": 3.1666667,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadPartial_Calm04_Montage.A_FP_Glock_reloadPartial_Calm04_Montage",
+     "length": 3.4,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadPartial_Calm04.G17_reloadPartial_Calm04",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Calm04_Montage.A_W_Glock_reloadPartial_Calm04_Montage",
+     "length": 3.4,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   }
+  ],
+  "ReloadTacStressed": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadPartial_Stressed01_Montage.A_FP_Glock_reloadPartial_Stressed01_Montage",
+     "length": 3.7,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadPartial_Stressed01.G17_reloadPartial_Stressed01",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 0.5206,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Stressed01_Montage.A_W_Glock_reloadPartial_Stressed01_Montage",
+     "length": 3.7,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 5.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 5.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadPartial_Stressed02_Montage.A_FP_Glock_reloadPartial_Stressed02_Montage",
+     "length": 4.1,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadPartial_Stressed02.G17_reloadPartial_Stressed02",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 0.5404,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Stressed02_Montage.A_W_Glock_reloadPartial_Stressed02_Montage",
+     "length": 4.1,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadPartial_Stressed03_Montage.A_FP_Glock_reloadPartial_Stressed03_Montage",
+     "length": 4.0333333,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadPartial_Stressed03.G17_reloadPartial_Stressed03",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 0.588,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Stressed03_Montage.A_W_Glock_reloadPartial_Stressed03_Montage",
+     "length": 4.0333333,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadPartial_Stressed04_Montage.A_FP_Glock_reloadPartial_Stressed04_Montage",
+     "length": 3.4,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadPartial_Stressed04.G17_reloadPartial_Stressed04",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 1.3914,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Stressed04_Montage.A_W_Glock_reloadPartial_Stressed04_Montage",
+     "length": 3.4,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   }
+  ],
+  "ReloadEmptyCalm": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadEmpty_Calm01_Montage.A_FP_Glock_reloadEmpty_Calm01_Montage",
+     "length": 4.366667,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadEmpty_Calm01.G17_reloadEmpty_Calm01",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Calm01_Montage.A_W_Glock_reloadEmpty_Calm01_Montage",
+     "length": 4.366667,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadEmpty_Calm02_Montage.A_FP_Glock_reloadEmpty_Calm02_Montage",
+     "length": 3.3,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadEmpty_Calm02.G17_reloadEmpty_Calm02",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Calm02_Montage.A_W_Glock_reloadEmpty_Calm02_Montage",
+     "length": 3.3,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadEmpty_Calm03_Montage.A_FP_Glock_reloadEmpty_Calm03_Montage",
+     "length": 3.7333333,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadEmpty_Calm03.G17_reloadEmpty_Calm03",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Calm03_Montage.A_W_Glock_reloadEmpty_Calm03_Montage",
+     "length": 3.7333333,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadEmpty_Calm04_Montage.A_FP_Glock_reloadEmpty_Calm04_Montage",
+     "length": 3.8666666,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadEmpty_Calm04.G17_reloadEmpty_Calm04",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Calm04_Montage.A_W_Glock_reloadEmpty_Calm04_Montage",
+     "length": 3.8666666,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   }
+  ],
+  "ReloadEmptyStressed": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadEmpty_Stressed01_Montage.A_FP_Glock_reloadEmpty_Stressed01_Montage",
+     "length": 4.4333334,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadEmpty_Stressed01.G17_reloadEmpty_Stressed01",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 0.6407,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Stressed01_Montage.A_W_Glock_reloadEmpty_Stressed01_Montage",
+     "length": 4.4333334,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 5.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 5.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadEmpty_Stressed02_Montage.A_FP_Glock_reloadEmpty_Stressed02_Montage",
+     "length": 4.9,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadEmpty_Stressed02.G17_reloadEmpty_Stressed02",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Equip"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 0.7206,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Stressed02_Montage.A_W_Glock_reloadEmpty_Stressed02_Montage",
+     "length": 4.9,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadEmpty_Stressed03_Montage.A_FP_Glock_reloadEmpty_Stressed03_Montage",
+     "length": 4.233333,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadEmpty_Stressed03.G17_reloadEmpty_Stressed03",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 0.5525,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Stressed03_Montage.A_W_Glock_reloadEmpty_Stressed03_Montage",
+     "length": 4.233333,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_reloadEmpty_Stressed04_Montage.A_FP_Glock_reloadEmpty_Stressed04_Montage",
+     "length": 4.0,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_reloadEmpty_Stressed04.G17_reloadEmpty_Stressed04",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 1.4333,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Stressed04_Montage.A_W_Glock_reloadEmpty_Stressed04_Montage",
+     "length": 4.0,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": -5.0
+     },
+     "Max": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": -2.5
+     }
+    }
+   }
+  ],
+  "Inspect": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Glock/Character/A_FP_Glock17_Inspect_Montage.A_FP_Glock17_Inspect_Montage",
+    "length": 5.5666666,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Glock/Sounds/BODYCAM_GLOCK_inspect.BODYCAM_GLOCK_inspect"
+      }
+     }
+    ]
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": -5.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": -2.5
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 5.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 5.0
+    }
+   }
+  },
+  "MagCheckEmpty": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_magCheck_Empty_Montage.A_FP_Glock_magCheck_Empty_Montage",
+    "length": 9.133333,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_magCheck_Empty.G17_magCheck_Empty",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.MagCheck"
+      }
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 0.5412,
+      "duration": 0.0,
+      "props": {}
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 2.7032,
+      "duration": 0.0,
+      "props": {
+       "Show?": false
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_magCheck_Empty_Montage.A_W_Glock_magCheck_Empty_Montage",
+    "length": 9.133333,
+    "rate": 1.0,
+    "notifies": []
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": -5.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": 0.0,
+     "z": -5.0
+    }
+   }
+  },
+  "MagCheckFull": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_magCheck_Full_Montage.A_FP_Glock_magCheck_Full_Montage",
+    "length": 5.0666666,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/MGlock17/Sounds/G17_magCheck_Full.G17_magCheck_Full",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.MagCheck"
+      }
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 0.6097,
+      "duration": 0.0,
+      "props": {}
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 2.5184,
+      "duration": 0.0,
+      "props": {
+       "Show?": false
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_magCheck_Full_Montage.A_W_Glock_magCheck_Full_Montage",
+    "length": 5.0666666,
+    "rate": 1.0,
+    "notifies": []
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": 0.0,
+     "z": -5.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": 0.0,
+     "z": -5.0
+    }
+   }
+  },
+  "AimIn": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/Glock17/Additive_Glock17_Aim_In.Additive_Glock17_Aim_In",
+  "AimOut": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/Glock17/Additive_Glock17_Aim_Out.Additive_Glock17_Aim_Out",
+  "CurveWalk": {
+   "path": "/BodycamAnimationFramework/Animations/General/Pistol/A_FP_Glock17_Walk_Loop.A_FP_Glock17_Walk_Loop",
+   "length": 2.2666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpStart": {
+   "path": "/BodycamAnimationFramework/Animations/General/Pistol/A_FP_Glock17_Jump_Start.A_FP_Glock17_Jump_Start",
+   "length": 0.9,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpLoop": {
+   "path": "/BodycamAnimationFramework/Animations/General/Pistol/A_FP_Glock17_Jump_Loop.A_FP_Glock17_Jump_Loop",
+   "length": 3.4666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpEnd": {
+   "path": "/BodycamAnimationFramework/Animations/General/Pistol/A_FP_Glock17_Jump_End.A_FP_Glock17_Jump_End",
+   "length": 0.93333334,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "SpineAdditiveActionWeight": 0.6,
+  "ActionPitchAngle": {
+   "x": -65.0,
+   "y": 300.0
+  },
+  "NativeClass": "/BodycamAnimationFramework/Blueprints/Animation/Data/DA_BodycamAnimationSettings.DA_BodycamAnimationSettings_C"
+ }
+}

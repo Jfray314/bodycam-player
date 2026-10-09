@@ -1,0 +1,2615 @@
+{
+ "row": "FAL",
+ "item_class": "Item.PrimaryWeapon.Sniper Rifles.FAL.FAL",
+ "stats_effects": [
+  "/Game/BodycamCore/AbilitySystem/GameplayEffects/Weapons/Stats/GE_WeaponStat_FAL.GE_WeaponStat_FAL_C"
+ ],
+ "sounds": {
+  "Cosmetic.Weapon.SFX.Fire": "/Game/Audio/Guns/Cue/Sniper/Guns_Sniper_LAR_v1.Guns_Sniper_LAR_v1",
+  "Cosmetic.Weapon.SFX.FireSuppressed": "/Game/Audio/Guns/Cue/Sniper/Guns_Sniper_LAR_Suppressor.Guns_Sniper_LAR_Suppressor",
+  "Cosmetic.Weapon.SFX.FireDry": "/Game/Audio/Guns/Cue/Sniper/Guns_Sniper_LAR_DryFire.Guns_Sniper_LAR_DryFire",
+  "Cosmetic.Weapon.SFX.BulletCrack": "/Game/Audio/Guns/Cue/Bullets/BulletCrack/Bodycam_Guns_Sniper_Bullet_BulletCrack_V1.Bodycam_Guns_Sniper_Bullet_BulletCrack_V1",
+  "Cosmetic.Weapon.SFX.BulletWizz": "/Game/Audio/Guns/Cue/Bullets/BulletWhiz/Bodycam_Guns_Sniper_Bullet_BulletWhiz_V1.Bodycam_Guns_Sniper_Bullet_BulletWhiz_V1"
+ },
+ "default_attachments": [
+  "FNFAL Stock",
+  "FNFAL Barrel",
+  "FNFAL Magazine Small",
+  "FNFAL Grip Default",
+  "FNFAL Trigger Tactical",
+  "FNFAL Base Receiver",
+  "Magazine SWORD Mk18 Mjolnir",
+  "Ammo 762x39mm",
+  "Dot",
+  "Magnified Dot MK1 Red",
+  "Canted Dot"
+ ],
+ "anim_set": {
+  "IdlePose": {
+   "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_Cclamp_Pose.A_FP_FAL_Cclamp_Pose",
+   "length": 0.9,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "ViewmodelOffsets": {
+   "PoseOffset": {
+    "Rotation": {
+     "x": 0.0,
+     "y": -4.81482491716995e-35,
+     "z": 0.0,
+     "w": 1.0
+    },
+    "Translation": {
+     "x": 14.465703968235946,
+     "y": -5.0,
+     "z": -3.0
+    }
+   },
+   "ActionPoseOffset": {
+    "Rotation": {
+     "x": 0.13052619222005157,
+     "y": 0.0,
+     "z": 0.0,
+     "w": 0.9914448613738104
+    },
+    "Translation": {
+     "x": 4.0,
+     "y": 4.78212833404541,
+     "z": -9.728141129016876
+    }
+   }
+  },
+  "AdsSettings": {
+   "AdsSpeed": 2.3,
+   "SprintAdsSpeed": 7.0,
+   "AdsBlend": {
+    "BlendTime": 0.0,
+    "BlendOption": "EAlphaBlendOption::Sinusoidal"
+   },
+   "AdsAdditiveBlend": 1.0,
+   "AimSightDistance": 10.0
+  },
+  "LookPositionSway": {
+   "SpringStiffness": {
+    "x": 0.6,
+    "y": 0.6,
+    "z": 1.0
+   },
+   "SpringDamping": {
+    "x": 0.4,
+    "y": 0.8,
+    "z": 1.0
+   },
+   "SpringSpeed": {
+    "x": 10.0,
+    "y": 25.0,
+    "z": 10.0
+   },
+   "SmoothDamping": {
+    "x": 7.0,
+    "y": 6.0,
+    "z": 6.0
+   },
+   "ExtraSmoothing": {
+    "x": 35.0,
+    "y": 15.0,
+    "z": 0.0
+   },
+   "Scale": {
+    "x": 5.0,
+    "y": 5.0,
+    "z": 2.2
+   },
+   "AdsScale": {
+    "x": 0.0,
+    "y": 3.0,
+    "z": 2.0
+   },
+   "TargetSpace": "EBoneControlSpace::BCS_ComponentSpace"
+  },
+  "HipLookPositionSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 0.8,
+    "z": 0.7
+   },
+   "SpringDamping": {
+    "x": 0.0,
+    "y": 0.6,
+    "z": 0.4
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 10.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 5.0,
+    "z": 50.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 5.0,
+    "z": 5.0
+   }
+  },
+  "LookRotationSway": {
+   "SpringStiffness": {
+    "x": 0.6,
+    "y": 0.4,
+    "z": 0.1
+   },
+   "SpringDamping": {
+    "x": 0.4,
+    "y": 0.6,
+    "z": 1.0
+   },
+   "SpringSpeed": {
+    "x": 15.0,
+    "y": 15.0,
+    "z": 15.0
+   },
+   "SmoothDamping": {
+    "x": 12.0,
+    "y": 12.0,
+    "z": 12.0
+   },
+   "ExtraSmoothing": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 15.0
+   },
+   "Scale": {
+    "x": 5.0,
+    "y": 3.0,
+    "z": 3.0
+   },
+   "AdsScale": {
+    "x": -2.0,
+    "y": 3.0,
+    "z": 3.0
+   },
+   "TargetSpace": "EBoneControlSpace::BCS_ComponentSpace"
+  },
+  "HipLookRotationSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 1.0
+   },
+   "SpringDamping": {
+    "x": 0.0,
+    "y": 0.4,
+    "z": 0.4
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 7.0,
+    "z": 7.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 50.0,
+    "z": 50.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 5.0,
+    "z": 5.0
+   }
+  },
+  "MovePositionSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 0.0
+   },
+   "SpringDamping": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 0.0
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 25.0,
+    "z": 0.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 2.0,
+    "z": 0.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 0.0
+   },
+   "AdsScale": {
+    "x": 1.0,
+    "y": 0.0,
+    "z": 0.0
+   }
+  },
+  "LowerSway": {
+   "Scale": 8.0,
+   "AdsScale": 15.0,
+   "InterpSpeed": 5.0,
+   "Curve": {
+    "path": "/BodycamAnimationFramework/Animations/General/Curve_LowerSway1.Curve_LowerSway1",
+    "curves": {
+     "FloatCurve": [
+      [
+       0.0,
+       3.3369275e-08,
+       2,
+       -0.018659236,
+       -0.018659236
+      ],
+      [
+       2.255956,
+       -0.067754544,
+       2,
+       -0.095058486,
+       -0.095058486
+      ],
+      [
+       3.0114605,
+       -0.34971362,
+       2,
+       -0.57246536,
+       -0.57246536
+      ],
+      [
+       4.5643744,
+       -1.0031608,
+       2,
+       -0.018659236,
+       -0.018659236
+      ]
+     ]
+    }
+   }
+  },
+  "SwayPivotOffset": {
+   "x": 0.0,
+   "y": 50.0,
+   "z": 0.0
+  },
+  "WeaponCollision": {
+   "Length": 60.0,
+   "StartOffset": -10.0,
+   "HolsterPose": {
+    "Translation": {
+     "x": 0.0,
+     "y": -45.0,
+     "z": -10.0
+    }
+   },
+   "InterpSpeed": 5.0,
+   "DistanceThreshold": 25.0,
+   "TraceRadius": 6.0
+  },
+  "RecoilData": {
+   "path": "/BodycamAnimationFramework/PRAS/FAL/FAL.FAL",
+   "ControllerRecoil": {
+    "HorizontalRecoilStep": {
+     "x": -0.6,
+     "y": 0.6
+    },
+    "VerticalRecoilStep": {
+     "x": 0.4,
+     "y": 0.6
+    },
+    "RecoilSmoothing": {
+     "x": 15.0,
+     "y": 15.0
+    },
+    "Damping": 15.0
+   },
+   "FireSway": {
+    "VerticalOffsetStep": 3.0,
+    "DepthOffsetStep": 3.0,
+    "ClampVerticalOffset": 8.0,
+    "ClampDepthOffset": 3.0,
+    "OffsetCurve": {
+     "path": "/BodycamAnimationFramework/PRAS/AK/AKM_RecoilUp.AKM_RecoilUp",
+     "curves": {
+      "FloatCurve": [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        3.0,
+        2.0,
+        2,
+        0.17065866,
+        0.17065866
+       ],
+       [
+        16.7,
+        2.85,
+        2,
+        0.09259259,
+        0.09259259
+       ],
+       [
+        30.0,
+        4.5,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     }
+    },
+    "InterpSpeed": 5.0,
+    "DampSmoothing": 2.0
+   },
+   "SingleRot": {
+    "path": "/BodycamAnimationFramework/PRAS/FAL/FAL_Semi_Rot.FAL_Semi_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.085932605,
+        1.00274,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.23689659,
+        -0.39714876,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.41965163,
+        0.32623437,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.6133621,
+        -0.20820844,
+        2,
+        -0.2727703,
+        -0.2727703
+       ],
+       [
+        0.8127583,
+        0.06715354,
+        2,
+        -0.20797414,
+        -0.20797414
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        -0.007936,
+        -0.007936
+       ],
+       [
+        0.034538,
+        0.177146,
+        2,
+        14.002985,
+        14.002985
+       ],
+       [
+        0.071413,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.183532,
+        -0.542423,
+        2,
+        -0.033527,
+        -0.033527
+       ],
+       [
+        0.322247,
+        0.300089,
+        2,
+        -0.186859,
+        -0.186859
+       ],
+       [
+        0.544416,
+        -0.093415,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.827317,
+        0.0,
+        2,
+        -0.00938,
+        -0.00938
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.10820191,
+        0.9999943,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.3003152,
+        -0.40571097,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.6628408,
+        0.18160461,
+        2,
+        -0.23153466,
+        -0.23153466
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "SingleLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/FAL/FAL_Semi_Loc.FAL_Semi_Loc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.02840457,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.08512412,
+        0.40989476,
+        2,
+        -2.2623398,
+        -2.2623398
+       ],
+       [
+        0.8,
+        -0.12499992,
+        2,
+        -0.046803147,
+        -0.046803147
+       ],
+       [
+        1.0,
+        3.573936e-08,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        1.3,
+        3.573936e-08,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        1.7,
+        3.573936e-08,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.03333333,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.11666666,
+        -0.162893,
+        2,
+        -11.250001,
+        -11.250001
+       ],
+       [
+        0.16666666,
+        -0.5,
+        2,
+        1.2985755,
+        1.2985755
+       ],
+       [
+        0.3333333,
+        0.118465,
+        2,
+        1.3903202,
+        1.3903202
+       ],
+       [
+        0.46666664,
+        -0.082904,
+        2,
+        -0.17532857,
+        -0.17532857
+       ],
+       [
+        0.6833333,
+        0.0571,
+        2,
+        0.11839047,
+        0.11839047
+       ],
+       [
+        1.1666666,
+        -3.0682375e-05,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.07194717,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.3011358,
+        -0.345783,
+        2,
+        -0.04889496,
+        -0.04889496
+       ],
+       [
+        0.53151864,
+        0.13121626,
+        2,
+        0.06389026,
+        0.06389026
+       ],
+       [
+        0.8610772,
+        -0.05303762,
+        2,
+        -0.20659164,
+        -0.20659164
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AutoRot": {
+    "path": "/BodycamAnimationFramework/PRAS/FAL/FAL_Auto_Rot.FAL_Auto_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.052432984,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        0.0,
+        2,
+        -15.42968,
+        -15.42968
+       ],
+       [
+        0.14734519,
+        -0.46446493,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.35660863,
+        0.2446231,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.63689786,
+        -0.04391012,
+        2,
+        -0.3019822,
+        -0.3019822
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        -42.47121,
+        0.0
+       ],
+       [
+        0.044702273,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.14999999,
+        -0.43910113,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.27771753,
+        0.20932457,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.49014437,
+        -0.08524821,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.7093386,
+        0.029374376,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.99999994,
+        0.0,
+        2,
+        -0.03583119,
+        -0.03583119
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.03590723,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.099999994,
+        0.04055766,
+        2,
+        -12.377811,
+        -12.377811
+       ],
+       [
+        0.16527335,
+        -0.6012696,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.2987272,
+        0.25451663,
+        2,
+        1.5260636,
+        1.5260636
+       ],
+       [
+        0.48078772,
+        -0.119774535,
+        2,
+        -0.41693553,
+        -0.41693553
+       ],
+       [
+        0.68981767,
+        0.091457136,
+        2,
+        0.28376743,
+        0.28376743
+       ],
+       [
+        0.9166666,
+        0.0039136983,
+        2,
+        -0.19179477,
+        -0.19179477
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AutoLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/FAL/FAL_Auto_Loc.FAL_Auto_Loc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        -46.13813,
+        0.0
+       ],
+       [
+        0.01754702,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        0.01,
+        2,
+        -8.640124,
+        -8.640124
+       ],
+       [
+        0.15712419,
+        -0.20596401,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.39999998,
+        0.088611856,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.67695606,
+        -0.049363628,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        -0.18122597
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.031777665,
+        0.99791497,
+        2,
+        -1.045281,
+        -1.045281
+       ],
+       [
+        0.16075726,
+        -0.16803649,
+        2,
+        -2.8766081,
+        -2.8766081
+       ],
+       [
+        0.34486157,
+        0.09729536,
+        2,
+        0.24080428,
+        0.24080428
+       ],
+       [
+        0.56166226,
+        -0.07149685,
+        2,
+        -0.24007446,
+        -0.24007446
+       ],
+       [
+        0.8493456,
+        -0.023818368,
+        2,
+        0.27411383,
+        0.27411383
+       ],
+       [
+        1.1666666,
+        -3.0682375e-05,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.056195375,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.108,
+        0.034283,
+        2,
+        -11.478978,
+        -11.478978
+       ],
+       [
+        0.19999999,
+        -0.65073,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.5666666,
+        0.165665,
+        2,
+        0.15514158,
+        0.15514158
+       ],
+       [
+        0.8097468,
+        0.09289274,
+        2,
+        -0.62051195,
+        -0.62051195
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimSingleRot": {
+    "path": "/BodycamAnimationFramework/PRAS/FAL/Aim/FAL_Semi_Aim_Rot.FAL_Semi_Aim_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.085932605,
+        1.00274,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.23689659,
+        -0.39714876,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.41965163,
+        0.32623437,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.6133621,
+        -0.20820844,
+        2,
+        -0.2727703,
+        -0.2727703
+       ],
+       [
+        0.8127583,
+        0.06715354,
+        2,
+        -0.20797414,
+        -0.20797414
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        -0.007936,
+        -0.007936
+       ],
+       [
+        0.034538,
+        0.177146,
+        2,
+        14.002985,
+        14.002985
+       ],
+       [
+        0.071413,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.183532,
+        -0.542423,
+        2,
+        -0.033527,
+        -0.033527
+       ],
+       [
+        0.322247,
+        0.300089,
+        2,
+        -0.186859,
+        -0.186859
+       ],
+       [
+        0.544416,
+        -0.093415,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.827317,
+        0.0,
+        2,
+        -0.00938,
+        -0.00938
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.10820191,
+        0.9999943,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.3003152,
+        -0.40571097,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.6628408,
+        0.18160461,
+        2,
+        -0.23153466,
+        -0.23153466
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimSingleLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/FAL/Aim/FAL_Semi_Aim_Loc.FAL_Semi_Aim_Loc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.02840457,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.08512412,
+        0.40989476,
+        2,
+        -2.2623398,
+        -2.2623398
+       ],
+       [
+        0.8,
+        -0.12499992,
+        2,
+        -0.046803147,
+        -0.046803147
+       ],
+       [
+        1.0,
+        3.573936e-08,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        1.3,
+        3.573936e-08,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        1.7,
+        3.573936e-08,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.03333333,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.11666666,
+        -0.162893,
+        2,
+        -11.250001,
+        -11.250001
+       ],
+       [
+        0.16666666,
+        -0.5,
+        2,
+        1.2985755,
+        1.2985755
+       ],
+       [
+        0.3333333,
+        0.118465,
+        2,
+        1.3903202,
+        1.3903202
+       ],
+       [
+        0.46666664,
+        -0.082904,
+        2,
+        -0.17532857,
+        -0.17532857
+       ],
+       [
+        0.6833333,
+        0.0571,
+        2,
+        0.11839047,
+        0.11839047
+       ],
+       [
+        1.1666666,
+        -3.0682375e-05,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.07194717,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.3011358,
+        -0.345783,
+        2,
+        -0.04889496,
+        -0.04889496
+       ],
+       [
+        0.53151864,
+        0.13121626,
+        2,
+        0.06389026,
+        0.06389026
+       ],
+       [
+        0.8610772,
+        -0.05303762,
+        2,
+        -0.20659164,
+        -0.20659164
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimAutoRot": {
+    "path": "/BodycamAnimationFramework/PRAS/FAL/Aim/FAL_Auto_Aim_Rot.FAL_Auto_Aim_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.052432984,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        0.0,
+        2,
+        -15.42968,
+        -15.42968
+       ],
+       [
+        0.14734519,
+        -0.46446493,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.35660863,
+        0.2446231,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.63689786,
+        -0.04391012,
+        2,
+        -0.3019822,
+        -0.3019822
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        -42.47121,
+        0.0
+       ],
+       [
+        0.044702273,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.14999999,
+        -0.43910113,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.27771753,
+        0.20932457,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.49014437,
+        -0.08524821,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.7093386,
+        0.029374376,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.99999994,
+        0.0,
+        2,
+        -0.03583119,
+        -0.03583119
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.03590723,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.099999994,
+        0.04055766,
+        2,
+        -12.377811,
+        -12.377811
+       ],
+       [
+        0.16527335,
+        -0.6012696,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.2987272,
+        0.25451663,
+        2,
+        1.5260636,
+        1.5260636
+       ],
+       [
+        0.48078772,
+        -0.119774535,
+        2,
+        -0.41693553,
+        -0.41693553
+       ],
+       [
+        0.68981767,
+        0.091457136,
+        2,
+        0.28376743,
+        0.28376743
+       ],
+       [
+        0.9166666,
+        0.0039136983,
+        2,
+        -0.19179477,
+        -0.19179477
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimAutoLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/FAL/Aim/FAL_Auto_Aim_Loc.FAL_Auto_Aim_Loc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        -46.13813,
+        0.0
+       ],
+       [
+        0.01754702,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        0.01,
+        2,
+        -8.640124,
+        -8.640124
+       ],
+       [
+        0.15712419,
+        -0.20596401,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.39999998,
+        0.088611856,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.67695606,
+        -0.049363628,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        -0.18122597
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.031777665,
+        0.99791497,
+        2,
+        -1.045281,
+        -1.045281
+       ],
+       [
+        0.16075726,
+        -0.16803649,
+        2,
+        -2.8766081,
+        -2.8766081
+       ],
+       [
+        0.34486157,
+        0.09729536,
+        2,
+        0.24080428,
+        0.24080428
+       ],
+       [
+        0.56166226,
+        -0.07149685,
+        2,
+        -0.24007446,
+        -0.24007446
+       ],
+       [
+        0.8493456,
+        -0.023818368,
+        2,
+        0.27411383,
+        0.27411383
+       ],
+       [
+        1.1666666,
+        -3.0682375e-05,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.056195375,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.108,
+        0.034283,
+        2,
+        -11.478978,
+        -11.478978
+       ],
+       [
+        0.19999999,
+        -0.65073,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.5666666,
+        0.165665,
+        2,
+        0.15514158,
+        0.15514158
+       ],
+       [
+        0.8097468,
+        0.09289274,
+        2,
+        -0.62051195,
+        -0.62051195
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "PitchAim": {
+    "x": -0.5,
+    "y": -1.5
+   },
+   "YawAim": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.4,
+    "w": 0.5
+   },
+   "RollAim": {
+    "x": -5.0,
+    "y": 5.0,
+    "z": 0.4,
+    "w": 1.6
+   },
+   "PitchHip": {
+    "x": -5.0,
+    "y": -10.0
+   },
+   "YawHip": {
+    "x": -1.0,
+    "y": -0.5,
+    "z": 0.5,
+    "w": 1.0
+   },
+   "RollHip": {
+    "x": -3.0,
+    "y": 2.0,
+    "z": 2.0,
+    "w": 3.0
+   },
+   "KickAim": {
+    "x": -6.0,
+    "y": -7.0
+   },
+   "KickAimUp": {
+    "x": -0.5,
+    "y": -0.8
+   },
+   "KickHip": {
+    "x": -4.0,
+    "y": -6.0
+   },
+   "KickHipR": {
+    "x": -0.3,
+    "y": 0.3
+   },
+   "KickHipUp": {
+    "x": 2.0,
+    "y": 5.0
+   },
+   "MaxKickHip": 3.0,
+   "MinCameraShake": 1.65,
+   "SmoothRot": {
+    "pitch": 12.0,
+    "yaw": 7.0,
+    "roll": 12.0
+   },
+   "SmoothLoc": {
+    "x": 15.0,
+    "y": 15.0,
+    "z": 15.0
+   },
+   "MultiRot": {
+    "pitch": 2.2,
+    "yaw": 1.0,
+    "roll": 1.5
+   },
+   "MultiLoc": {
+    "x": 1.2000000476837158,
+    "y": 1.0,
+    "z": 1.0
+   },
+   "bSmoothRoll": true,
+   "Noise2DTarget": {
+    "x": 1.0,
+    "y": 1.0
+   },
+   "Noise2DAccel": {
+    "x": 6.0,
+    "y": 7.0
+   },
+   "Noise2DZero": {
+    "x": 7.0,
+    "y": 8.0
+   },
+   "NoiseAimScalar": 0.3,
+   "Pushback": -4.0,
+   "PushbackZero": 7.0,
+   "PushbackAccel": 8.0,
+   "ZProgress": {
+    "Accel": 5.0,
+    "Damping": 4.0,
+    "Amount": 0.2
+   },
+   "ProgressAimAlpha": 0.2,
+   "RecoilSway": {
+    "PitchSway": {
+     "x": -1.0,
+     "y": -1.5
+    },
+    "YawSway": {
+     "x": -1.0,
+     "y": 1.5
+    },
+    "RollSwayMultiplier": 1.5,
+    "Damping": 10.0,
+    "Acceleration": 12.0,
+    "AdsScale": 0.2,
+    "PivotOffset": {
+     "x": -30.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  },
+  "IdleGripPose": {
+   "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_Cclamp_Pose.A_FP_FAL_Cclamp_Pose",
+   "length": 0.9,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "AimIdlePose": {
+   "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_Aim_Idle_Loop.A_FP_FAL_Aim_Idle_Loop",
+   "length": 5.1,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "StressedIdleSubtle": {
+   "path": "/BodycamAnimationFramework/Animations/General/A_FP_AK_Shake_Loop.A_FP_AK_Shake_Loop",
+   "length": 1.0666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "StressedIdleStrong": {
+   "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Stressed_Additive.A_FP_Mossberg590_Stressed_Additive",
+   "length": 1.3666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "OverlayAnimBlueprint": "/BodycamAnimationFramework/Blueprints/Animation/Overlays/ABP_Overlay_Rifle.ABP_Overlay_Rifle_C",
+  "GunAnimInstance": "/BodycamAnimationFramework/Animations/FAL/ABP_Fal.ABP_Fal_C",
+  "ReGripMotions": [
+   {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_Regrip01_Montage.A_FP_FAL_Regrip01_Montage",
+    "length": 1.0,
+    "rate": 1.0,
+    "notifies": []
+   },
+   {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_Regrip02_Montage.A_FP_FAL_Regrip02_Montage",
+    "length": 1.0,
+    "rate": 1.0,
+    "notifies": []
+   },
+   {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_Regrip03_Montage.A_FP_FAL_Regrip03_Montage",
+    "length": 1.0666667,
+    "rate": 1.0,
+    "notifies": []
+   },
+   {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_Regrip04_Montage.A_FP_FAL_Regrip04_Montage",
+    "length": 0.96666664,
+    "rate": 1.0,
+    "notifies": []
+   }
+  ],
+  "Fire": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_Fire_Montage.A_FP_FAL_Fire_Montage",
+     "length": 0.9,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_Fire_Montage.A_W_FAL_Fire_Montage",
+     "length": 0.56666666,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    }
+   }
+  ],
+  "FireOut": {
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_Fire_Empty_Montage.A_W_FAL_Fire_Empty_Montage",
+    "length": 0.56666666,
+    "rate": 1.0,
+    "notifies": []
+   }
+  },
+  "FirstEquip": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_Equip_Montage.A_FP_FAL_Equip_Montage",
+    "length": 2.4,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_Equip.FAL_Equip",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.Equip"
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_Equip_Montage.A_W_FAL_Equip_Montage",
+    "length": 2.4,
+    "rate": 1.0,
+    "notifies": []
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": -15.0,
+     "z": 13.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -8.0,
+     "z": 20.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": -15.0,
+     "z": 13.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -8.0,
+     "z": 20.0
+    }
+   }
+  },
+  "Draw": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_Draw_Montage.A_FP_FAL_Draw_Montage",
+    "length": 0.35,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_Draw.FAL_Draw",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.Draw"
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_Draw_Montage.A_W_FAL_Draw_Montage",
+    "length": 1.6333333,
+    "rate": 1.0,
+    "notifies": []
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": -15.0,
+     "z": 13.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -8.0,
+     "z": 20.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": -15.0,
+     "z": 13.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -8.0,
+     "z": 20.0
+    }
+   }
+  },
+  "holster": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_Holster_Montage.A_FP_FAL_Holster_Montage",
+    "length": 0.65971667,
+    "rate": 2.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_Holster.FAL_Holster",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.Holster"
+      }
+     }
+    ]
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": -15.0,
+     "z": 13.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -8.0,
+     "z": 20.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": -15.0,
+     "z": 13.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -8.0,
+     "z": 20.0
+    }
+   }
+  },
+  "ReloadTacCalm": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_ReloadPartial_Calm01_SmallMag_Montage.A_FP_FAL_ReloadPartial_Calm01_SmallMag_Montage",
+     "length": 3.1,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_ReloadPartial_Calm01_SmallMag.FAL_ReloadPartial_Calm01_SmallMag",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_ReloadPartial_Calm01_SmallMag_Montage.A_W_FAL_ReloadPartial_Calm01_SmallMag_Montage",
+     "length": 3.5,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_ReloadPartial_Calm02_SmallMag_Montage.A_FP_FAL_ReloadPartial_Calm02_SmallMag_Montage",
+     "length": 3.2,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_ReloadPartial_Calm02_SmallMag.FAL_ReloadPartial_Calm02_SmallMag",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_ReloadPartial_Calm02_SmallMag_Montage.A_W_FAL_ReloadPartial_Calm02_SmallMag_Montage",
+     "length": 3.6666667,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    }
+   }
+  ],
+  "ReloadTacStressed": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_ReloadPartial_Stressed01_SmallMag_Montage.A_FP_FAL_ReloadPartial_Stressed01_SmallMag_Montage",
+     "length": 3.1,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_ReloadPartial_Stressed01_SmallMag.FAL_ReloadPartial_Stressed01_SmallMag",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 0.7153,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_ReloadPartial_Stressed01_SmallMag_Montage.A_W_FAL_ReloadPartial_Stressed01_SmallMag_Montage",
+     "length": 3.3666666,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_ReloadPartial_Stressed02_SmallMag_Montage.A_FP_FAL_ReloadPartial_Stressed02_SmallMag_Montage",
+     "length": 3.1,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_ReloadPartial_Stressed02_SmallMag.FAL_ReloadPartial_Stressed02_SmallMag",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 1.1224,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_ReloadPartial_Stressed02_SmallMag_Montage.A_W_FAL_ReloadPartial_Stressed02_SmallMag_Montage",
+     "length": 3.3,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    }
+   }
+  ],
+  "ReloadEmptyCalm": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_ReloadEmpty_Calm01_SmallMag_Montage.A_FP_FAL_ReloadEmpty_Calm01_SmallMag_Montage",
+     "length": 3.7,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_ReloadEmpty_Calm01_SmallMag.FAL_ReloadEmpty_Calm01_SmallMag",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_ReloadEmpty_Calm01_SmallMag_Montage.A_W_FAL_ReloadEmpty_Calm01_SmallMag_Montage",
+     "length": 4.233333,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_ReloadEmpty_Calm02_SmallMag_Montage.A_FP_FAL_ReloadEmpty_Calm02_SmallMag_Montage",
+     "length": 3.8,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_ReloadEmpty_Calm02_SmallMag.FAL_ReloadEmpty_Calm02_SmallMag",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_ReloadEmpty_Calm02_SmallMag_Montage.A_W_FAL_ReloadEmpty_Calm02_SmallMag_Montage",
+     "length": 4.3333335,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    }
+   }
+  ],
+  "ReloadEmptyStressed": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_ReloadEmpty_Stressed01_SmallMag_Montage.A_FP_FAL_ReloadEmpty_Stressed01_SmallMag_Montage",
+     "length": 3.5,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_ReloadEmpty_Stressed01_SmallMag.FAL_ReloadEmpty_Stressed01_SmallMag",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 0.7482,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_ReloadEmpty_Stressed01_Montage.A_W_FAL_ReloadEmpty_Stressed01_Montage",
+     "length": 3.9,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_ReloadEmpty_Stressed02_SmallMag_Montage.A_FP_FAL_ReloadEmpty_Stressed02_SmallMag_Montage",
+     "length": 3.9,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_ReloadEmpty_Stressed02_SmallMag.FAL_ReloadEmpty_Stressed02_SmallMag",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 1.1133,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_ReloadEmpty_Stressed02_SmallMag_Montage.A_W_FAL_ReloadEmpty_Stressed02_SmallMag_Montage",
+     "length": 4.0333333,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -15.0,
+      "z": 13.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -8.0,
+      "z": 20.0
+     }
+    }
+   }
+  ],
+  "Inspect": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_Inspect_Montage.A_FP_FAL_Inspect_Montage",
+    "length": 5.3,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_Inspect.FAL_Inspect",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.Inspect"
+      }
+     }
+    ]
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -8.0,
+     "z": 20.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -8.0,
+     "z": 20.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": -15.0,
+     "z": 13.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -8.0,
+     "z": 20.0
+    }
+   }
+  },
+  "MagCheckEmpty": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_MagCheck_Empty_SmallMag_Montage.A_FP_FAL_MagCheck_Empty_SmallMag_Montage",
+    "length": 9.5,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_MagCheck_Empty_SmallMag.FAL_MagCheck_Empty_SmallMag"
+      }
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 0.5207,
+      "duration": 0.0,
+      "props": {}
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 2.3646,
+      "duration": 0.0,
+      "props": {
+       "Show?": false
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_MagCheck_Empty_SmallMag_Montage.A_W_FAL_MagCheck_Empty_SmallMag_Montage",
+    "length": 9.933333,
+    "rate": 1.0,
+    "notifies": []
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -10.0,
+     "z": 13.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -8.0,
+     "z": 20.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": -10.0,
+     "z": 13.0
+    },
+    "Max": {
+     "x": -5.0,
+     "y": -8.0,
+     "z": 20.0
+    }
+   }
+  },
+  "MagCheckFull": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Character/A_FP_FAL_MagCheck_Full_SmallMag_Montage.A_FP_FAL_MagCheck_Full_SmallMag_Montage",
+    "length": 4.8,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_MagCheck_Full_SmallMag.FAL_MagCheck_Full_SmallMag"
+      }
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 0.5308,
+      "duration": 0.0,
+      "props": {}
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 2.4969,
+      "duration": 0.0,
+      "props": {
+       "Show?": false
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/FAL/Weapon/A_W_FAL_MagCheck_Full_SmallMag_Montage.A_W_FAL_MagCheck_Full_SmallMag_Montage",
+    "length": 5.0333333,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/FAL/Sounds/FAL_MagCheck_Full_SmallMag.FAL_MagCheck_Full_SmallMag"
+      }
+     }
+    ]
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -10.0,
+     "z": 13.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -8.0,
+     "z": 20.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": -10.0,
+     "z": 13.0
+    },
+    "Max": {
+     "x": -5.0,
+     "y": -8.0,
+     "z": 20.0
+    }
+   }
+  },
+  "AimIn": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/AKM/Additive_Akm_Aim_In.Additive_Akm_Aim_In",
+  "AimOut": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/AKM/Additive_Akm_Aim_Out.Additive_Akm_Aim_Out",
+  "CurveWalk": {
+   "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Walk_Loop.A_FP_AK_Walk_Loop",
+   "length": 3.0666666,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpStart": {
+   "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Jump_Start.A_FP_AK_Jump_Start",
+   "length": 0.9,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpLoop": {
+   "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Jump_Loop.A_FP_AK_Jump_Loop",
+   "length": 3.4666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpEnd": {
+   "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Jump_End.A_FP_AK_Jump_End",
+   "length": 1.0333333,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "SpineAdditiveActionWeight": 0.6,
+  "ActionPitchAngle": {
+   "x": -50.0,
+   "y": 300.0
+  },
+  "SwayAdsScale": 0.0,
+  "NativeClass": "/BodycamAnimationFramework/Blueprints/Animation/Data/DA_BodycamAnimationSettings.DA_BodycamAnimationSettings_C"
+ }
+}

@@ -1,3 +1,4 @@
+mod curve;
 mod hud;
 mod player;
 mod postfx;

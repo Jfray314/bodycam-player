@@ -1,11 +1,15 @@
-//! Port of GA_Fire_Base / GA_Reload_Base / GA_Character_Aim / GA_Character_SwapItem,
-//! driven by WeaponAttributeSet values pulled from GE_WeaponStat_* (assets/weapon_stats.json).
+//! Port of GA_Fire_Base / GA_Reload_Base / GA_MagCheck / GA_Inspect / GA_Character_Aim / GA_Character_SwapItem.
+//! Stats: WeaponAttributeSet from GE_WeaponStat_* (assets/weapon_stats.json). Weapons, action montages and
+//! notify times: DT_WeaponItems rows + BAS_* animation sets (assets/weapons/<Row>.json, tools/weapon_data.py).
+//! Inputs follow IMC_KBM_CharacterOnFoot: R tap (<0.25 s, IA_Reload) reloads, R hold 0.25 s (IA_InspectAmmos)
+//! mag-checks, J inspects, 1-6 / wheel swap, LMB fire, RMB aim.
 use crate::player::{BodycamCamera, Player};
 use bevy::input::mouse::MouseWheel;
 use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
 use bevy::prelude::*;
 use rand::Rng;
 use serde::Deserialize;
+use serde_json::Value;
 use std::collections::HashMap;
 
 const STATS_JSON: &str = include_str!("../../assets/weapon_stats.json");
@@ -54,28 +58,118 @@ pub fn load_stats() -> HashMap<String, Stats> {
     all.into_iter().map(|(k, s)| (k, s.over(&d))).collect()
 }
 
+/// A character montage from a BAS animation set: length and notifies (time, name, props).
+#[derive(Clone, Debug)]
+pub struct Montage {
+    pub path: String,
+    pub length: f32,
+    pub notifies: Vec<(f32, String, Value)>,
+}
+
+impl Montage {
+    fn from(v: &Value) -> Option<Self> {
+        let c = v.get("Character").unwrap_or(v);
+        Some(Montage {
+            path: c.get("path")?.as_str()?.into(),
+            length: c.get("length")?.as_f64()? as f32,
+            notifies: c
+                .get("notifies")?
+                .as_array()?
+                .iter()
+                .map(|n| (n["time"].as_f64().unwrap_or(0.0) as f32, n["name"].as_str().unwrap_or("").into(), n["props"].clone()))
+                .collect(),
+        })
+    }
+
+    /// Mag-check HUD window from the SetMagCheckUIVisibility notifies (shown, then "Show?" = false).
+    pub fn mag_ui_window(&self) -> Option<(f32, f32)> {
+        let vis = |hide: bool| {
+            self.notifies
+                .iter()
+                .find(|n| n.1 == "SetMagCheckUIVisibility_C" && (n.2.get("Show?") == Some(&Value::Bool(false))) == hide)
+                .map(|n| n.0)
+        };
+        Some((vis(false)?, vis(true)?))
+    }
+}
+
 pub struct Weapon {
+    /// DT_WeaponItems row name.
     pub name: String,
     pub stats: Stats,
     pub ammo: u32,
     pub mags: u32,
     pub full_auto: bool,
+    /// BAS_* animation set (baked JSON).
+    pub anims: Value,
+    /// FirstEquip plays only the first time the weapon is drawn.
+    equipped_once: bool,
 }
 
 impl Weapon {
-    pub fn new(name: &str, stats: &HashMap<String, Stats>) -> Self {
-        let s = stats[name].clone();
-        Weapon {
-            name: name.into(),
-            ammo: s.ammo_capacity.unwrap_or(30.0) as u32,
-            mags: s.mag_amount.unwrap_or(4.0) as u32,
-            full_auto: s.fire_modes.iter().any(|m| m == "FullAuto"),
-            stats: s,
-        }
-    }
     fn cap(&self) -> u32 {
         self.stats.ammo_capacity.unwrap_or(30.0) as u32
     }
+    fn one(&self, key: &str) -> Option<Montage> {
+        Montage::from(self.anims.get(key)?)
+    }
+    /// Random entry of a montage list (ReloadTacCalm, ReloadEmptyCalm, ...).
+    fn pick(&self, key: &str) -> Option<Montage> {
+        let list = self.anims.get(key)?.as_array()?;
+        Montage::from(list.get(rand::rng().random_range(0..list.len().max(1)))?)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActionKind {
+    Reload,
+    MagCheck,
+    Inspect,
+    Holster,
+    Draw,
+}
+
+#[derive(Clone, Debug)]
+pub struct Action {
+    pub kind: ActionKind,
+    pub montage: Montage,
+    pub t: f32,
+    /// Slot to draw after a holster.
+    next_slot: usize,
+}
+
+/// PRAS RecoilData.ControllerRecoil: per-shot (min, max) steps in degrees and the RecoilSmoothing interp speed.
+#[derive(Clone, Debug)]
+pub struct ControllerRecoil {
+    pub horizontal: (f32, f32),
+    pub vertical: (f32, f32),
+    pub smoothing: f32,
+}
+
+impl ControllerRecoil {
+    fn from(anims: &Value) -> Self {
+        let c = &anims["RecoilData"]["ControllerRecoil"];
+        let r = |k: &str| (c[k]["x"].as_f64().unwrap_or(0.0) as f32, c[k]["y"].as_f64().unwrap_or(0.0) as f32);
+        let (lo, hi) = r("HorizontalRecoilStep");
+        let (vlo, vhi) = r("VerticalRecoilStep");
+        ControllerRecoil { horizontal: (lo.min(hi), lo.max(hi)), vertical: (vlo.min(vhi), vlo.max(vhi)), smoothing: r("RecoilSmoothing").1.max(1.0) }
+    }
+}
+
+/// One shot fired by the player (camera recoil/shake, audio, viewmodel recoil).
+#[derive(Message, Clone, Debug)]
+pub struct Fired {
+    pub row: String,
+    pub controller: ControllerRecoil,
+    pub aiming: bool,
+}
+
+/// Fired when a weapon action montage starts (audio plays its PlayWepSounds notifies, viewmodel plays the anim).
+#[derive(Message, Clone, Debug)]
+pub struct MontageStarted {
+    pub row: String,
+    pub kind: ActionKind,
+    pub montage: Montage,
 }
 
 #[derive(Component)]
@@ -83,8 +177,20 @@ pub struct Inventory {
     pub slots: Vec<Weapon>,
     pub current: usize,
     pub cooldown: f32,
-    /// Remaining reload time. ponytail: flat 2.2s until montage lengths are pulled from W_FP_*_Reload*.
-    pub reloading: f32,
+    pub action: Option<Action>,
+    /// Seconds R has been held (tap = reload, hold = mag check).
+    r_held: f32,
+}
+
+impl Inventory {
+    pub fn busy(&self) -> bool {
+        self.action.is_some()
+    }
+    fn start(&mut self, kind: ActionKind, montage: Option<Montage>, next_slot: usize, out: &mut MessageWriter<MontageStarted>) {
+        let Some(montage) = montage else { return };
+        out.write(MontageStarted { row: self.slots[self.current].name.clone(), kind, montage: montage.clone() });
+        self.action = Some(Action { kind, montage, t: 0.0, next_slot });
+    }
 }
 
 #[derive(Component)]
@@ -104,25 +210,107 @@ fn setup_fx(mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMu
 pub struct WeaponPlugin;
 impl Plugin for WeaponPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_fx).add_systems(PostStartup, give_loadout).add_systems(Update, (swap, aim, fire, reload, fade));
+        app.add_message::<MontageStarted>()
+            .add_message::<Fired>()
+            .add_systems(Startup, setup_fx)
+            .add_systems(PostStartup, give_loadout)
+            .add_systems(Update, ((actions, swap, aim, fire, fade).chain(), log_montages));
     }
 }
 
-fn give_loadout(mut cmd: Commands, player: Single<Entity, With<Player>>) {
+/// Every DT_WeaponItems row that has an animation set, with stats from its GE_WeaponStat_* effect.
+fn load_weapons() -> Vec<Weapon> {
     let stats = load_stats();
-    // Default loadout: primary + sidearm, then every other gun for testing.
-    let mut names: Vec<String> = vec!["M4A1".into(), "Glock17".into()];
-    let mut rest: Vec<String> = stats.keys().filter(|k| !names.contains(k)).cloned().collect();
-    rest.sort();
-    names.extend(rest);
-    let slots = names.iter().map(|n| Weapon::new(n, &stats)).collect();
-    cmd.entity(*player).insert(Inventory { slots, current: 0, cooldown: 0.0, reloading: 0.0 });
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../assets/weapons");
+    let mut out = vec![];
+    for e in std::fs::read_dir(dir).expect("assets/weapons").flatten() {
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(e.path()).unwrap()).unwrap();
+        let ge = v["stats_effects"].get(0).and_then(Value::as_str).unwrap_or("");
+        let key = ge.rsplit("GE_WeaponStat_").next().unwrap_or("").trim_end_matches("_C").trim_start_matches('_');
+        let Some(s) = stats.get(key) else { continue };
+        out.push(Weapon {
+            name: v["row"].as_str().unwrap_or(key).into(),
+            ammo: s.ammo_capacity.unwrap_or(30.0) as u32,
+            mags: s.mag_amount.unwrap_or(4.0) as u32,
+            full_auto: s.fire_modes.iter().any(|m| m == "FullAuto"),
+            stats: s.clone(),
+            anims: v["anim_set"].clone(),
+            equipped_once: false,
+        });
+    }
+    out
 }
 
-fn swap(keys: Res<ButtonInput<KeyCode>>, mut inv: Single<&mut Inventory>, mut wheel: MessageReader<MouseWheel>) {
+fn give_loadout(mut cmd: Commands, player: Single<Entity, With<Player>>, mut out: MessageWriter<MontageStarted>) {
+    let mut slots = load_weapons();
+    // Default loadout: primary M4A1 + sidearm Glock17, then every other gun for testing.
+    slots.sort_by_key(|w| (w.name != "M4A1", w.name != "Glock17", w.name.clone()));
+    let mut inv = Inventory { slots, current: 0, cooldown: 0.0, action: None, r_held: 0.0 };
+    let first = inv.slots[0].one("FirstEquip");
+    inv.slots[0].equipped_once = true;
+    inv.start(ActionKind::Draw, first, 0, &mut out);
+    cmd.entity(*player).insert(inv);
+}
+
+/// Advances the current action; handles R tap/hold and J.
+fn actions(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut inv: Single<&mut Inventory>, mut out: MessageWriter<MontageStarted>) {
+    let dt = time.delta_secs();
+    if let Some(a) = &mut inv.action {
+        a.t += dt;
+        if a.t >= a.montage.length {
+            let (kind, next) = (a.kind, a.next_slot);
+            inv.action = None;
+            let cur = inv.current;
+            match kind {
+                // GE_AddAmmo on completion. ponytail: no chambered-round bonus on tactical reloads.
+                ActionKind::Reload => {
+                    let w = &mut inv.slots[cur];
+                    w.ammo = w.cap();
+                    w.mags = w.mags.saturating_sub(1);
+                }
+                ActionKind::Holster => {
+                    inv.current = next;
+                    let w = &mut inv.slots[next];
+                    let m = if w.equipped_once { w.one("Draw") } else { w.one("FirstEquip") };
+                    w.equipped_once = true;
+                    inv.start(ActionKind::Draw, m, next, &mut out);
+                }
+                _ => {}
+            }
+        }
+    }
+    // IA_Reload: InputTriggerTap 0.25 s. IA_InspectAmmos: InputTriggerHold 0.25 s, one-shot.
+    const TAP: f32 = 0.25;
+    let cur = inv.current;
+    if keys.pressed(KeyCode::KeyR) {
+        inv.r_held += dt;
+        if inv.r_held >= TAP && inv.r_held - dt < TAP && !inv.busy() {
+            let w = &inv.slots[cur];
+            let m = if w.ammo == 0 { w.one("MagCheckEmpty") } else { w.one("MagCheckFull") };
+            inv.start(ActionKind::MagCheck, m, cur, &mut out);
+        }
+    } else if inv.r_held > 0.0 {
+        let tapped = inv.r_held < TAP;
+        inv.r_held = 0.0;
+        let w = &inv.slots[cur];
+        if tapped && !inv.busy() && w.ammo < w.cap() && w.mags > 0 {
+            let m = if w.ammo == 0 { w.pick("ReloadEmptyCalm") } else { w.pick("ReloadTacCalm") };
+            let m = m.or_else(|| w.pick("ReloadEmptyCalm"));
+            inv.start(ActionKind::Reload, m, cur, &mut out);
+        }
+    }
+    if keys.just_pressed(KeyCode::KeyJ) && !inv.busy() {
+        let m = inv.slots[cur].one("Inspect");
+        inv.start(ActionKind::Inspect, m, cur, &mut out);
+    }
+}
+
+/// GA_Character_SwapItem: holster the current weapon (cancelling reload/inspect), then draw the next.
+fn swap(keys: Res<ButtonInput<KeyCode>>, mut inv: Single<&mut Inventory>, mut wheel: MessageReader<MouseWheel>, mut out: MessageWriter<MontageStarted>) {
     let n = inv.slots.len();
     let mut next = inv.current;
-    for (i, k) in [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5].iter().enumerate() {
+    let digits = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6];
+    for (i, k) in digits.iter().enumerate() {
         if keys.just_pressed(*k) && i < n {
             next = i;
         }
@@ -130,10 +318,15 @@ fn swap(keys: Res<ButtonInput<KeyCode>>, mut inv: Single<&mut Inventory>, mut wh
     for w in wheel.read() {
         next = if w.y < 0.0 { (next + 1) % n } else { (next + n - 1) % n };
     }
-    if next != inv.current {
-        inv.current = next;
-        inv.reloading = 0.0;
-        inv.cooldown = 0.5; // GE_State_Swapping
+    let swapping = matches!(inv.action, Some(Action { kind: ActionKind::Holster | ActionKind::Draw, .. }));
+    if next != inv.current && !swapping {
+        let m = inv.slots[inv.current].one("holster");
+        let cur = inv.current;
+        inv.start(ActionKind::Holster, m, next, &mut out);
+        if inv.action.is_none() {
+            inv.current = next; // no holster montage: switch instantly
+        }
+        let _ = cur;
     }
 }
 
@@ -151,12 +344,13 @@ fn fire(
     mut ray: MeshRayCast,
     mut targets: Query<&mut Health>,
     fx: Res<TracerFx>,
+    mut fired: MessageWriter<Fired>,
 ) {
     let (inv, p) = &mut *q;
     inv.cooldown -= time.delta_secs();
     let w = &inv.slots[inv.current];
     let trigger = if w.full_auto { mouse.pressed(MouseButton::Left) } else { mouse.just_pressed(MouseButton::Left) };
-    if !trigger || inv.cooldown > 0.0 || inv.reloading > 0.0 || p.sprinting || w.ammo == 0 {
+    if !trigger || inv.cooldown > 0.0 || inv.busy() || p.sprinting || w.ammo == 0 {
         return;
     }
     let s = w.stats.clone();
@@ -198,25 +392,13 @@ fn fire(
         Transform::from_translation(origin + gt.forward() * 0.6),
         Fading(0.05),
     ));
-    // Instability -> camera kick. ponytail: linear scale, real curves live in W_FP_*_Fire anims.
-    let kick = s.instability.unwrap_or(0.5) * 0.02;
-    p.recoil += Vec2::new(rng.random_range(-kick..=kick) * 0.3, kick);
+    let w = &inv.slots[cur];
+    fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming });
 }
 
-fn reload(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut inv: Single<&mut Inventory>) {
-    let cur = inv.current;
-    if inv.reloading > 0.0 {
-        inv.reloading -= time.delta_secs();
-        if inv.reloading <= 0.0 {
-            let w = &mut inv.slots[cur];
-            w.ammo = w.cap();
-            w.mags = w.mags.saturating_sub(1);
-        }
-        return;
-    }
-    let w = &inv.slots[cur];
-    if keys.just_pressed(KeyCode::KeyR) && w.ammo < w.cap() && w.mags > 0 {
-        inv.reloading = 2.2;
+fn log_montages(mut ev: MessageReader<MontageStarted>) {
+    for m in ev.read() {
+        info!("{} {:?}: {} ({:.2}s)", m.row, m.kind, m.montage.path, m.montage.length);
     }
 }
 
@@ -231,6 +413,17 @@ fn fade(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Fading)>)
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn weapons_have_anim_data() {
+        let w = super::load_weapons();
+        let m4 = w.iter().find(|w| w.name == "M4A1").expect("M4A1 row");
+        let mc = m4.one("MagCheckFull").unwrap();
+        assert!((mc.length - 4.4).abs() < 0.01);
+        let (show, hide) = mc.mag_ui_window().unwrap();
+        assert!(show > 0.5 && hide > 2.0 && hide < mc.length);
+        assert!(m4.pick("ReloadEmptyCalm").unwrap().length > 3.0);
+    }
+
     #[test]
     fn stats_inherit_default() {
         let s = super::load_stats();

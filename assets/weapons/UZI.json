@@ -1,0 +1,2641 @@
+{
+ "row": "UZI",
+ "item_class": "Item.PrimaryWeapon.Machine pistol.UZI.UZI",
+ "stats_effects": [
+  "/Game/BodycamCore/AbilitySystem/GameplayEffects/Weapons/Stats/GE_WeaponStat_UZI.GE_WeaponStat_UZI_C"
+ ],
+ "sounds": {
+  "Cosmetic.Weapon.SFX.Fire": "/Game/Audio/Guns/Cue/MachinePistol/Guns_MachinePistol_SG5-k_V1.Guns_MachinePistol_SG5-k_V1",
+  "Cosmetic.Weapon.SFX.FireSuppressed": "/Game/Audio/Guns/Cue/MachinePistol/Guns_MachinePistol_SG5-k_Suppressor.Guns_MachinePistol_SG5-k_Suppressor",
+  "Cosmetic.Weapon.SFX.FireDry": "/Game/Audio/Guns/Cue/MachinePistol/Guns_MachinePistol_SG5-k_DryFire.Guns_MachinePistol_SG5-k_DryFire",
+  "Cosmetic.Weapon.SFX.BulletCrack": "/Game/Audio/Guns/Cue/Bullets/BulletCrack/Bodycam_Guns_MachinePistol_Bullet_BulletCrack_V1.Bodycam_Guns_MachinePistol_Bullet_BulletCrack_V1",
+  "Cosmetic.Weapon.SFX.BulletWizz": "/Game/Audio/Guns/Cue/Bullets/BulletWhiz/Bodycam_Guns_MachinePistol_Bullet_BulletWhiz_V1.Bodycam_Guns_MachinePistol_Bullet_BulletWhiz_V1"
+ },
+ "default_attachments": [
+  "Uzi Base Receiver",
+  "UZI Magazine",
+  "UZI Trigger",
+  "Ammo 9mm",
+  "Dot",
+  "Magnified Dot MK1 Red",
+  "Canted Dot"
+ ],
+ "anim_set": {
+  "IdlePose": {
+   "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_Idle_Loop01.A_FP_UZI_Idle_Loop01",
+   "length": 30.033333,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "ViewmodelOffsets": {
+   "PoseOffset": {
+    "Rotation": {
+     "x": -0.0017085350676279208,
+     "y": 0.13051500972450605,
+     "z": 0.012977612266669911,
+     "w": 0.9913599218872983
+    },
+    "Translation": {
+     "x": 9.028190553879286,
+     "y": 0.0,
+     "z": -3.8523110155600393
+    }
+   },
+   "ActionPoseOffset": {
+    "Translation": {
+     "x": 4.0,
+     "y": 1.0177312195301056,
+     "z": -8.192815899848938
+    }
+   },
+   "LeftElbowOffset": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 5.0
+   },
+   "AimingLeftElbowOffset": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 8.0
+   }
+  },
+  "AdsSettings": {
+   "AdsSpeed": 3.0,
+   "SprintAdsSpeed": 20.0,
+   "AdsBlend": {
+    "BlendTime": 0.0,
+    "BlendOption": "EAlphaBlendOption::Sinusoidal"
+   },
+   "AdsAdditiveBlend": 1.0,
+   "AimSightDistance": 15.0
+  },
+  "LookPositionSway": {
+   "SpringStiffness": {
+    "x": 0.6,
+    "y": 0.6,
+    "z": 0.6
+   },
+   "SpringDamping": {
+    "x": 0.4,
+    "y": 0.6,
+    "z": 0.8
+   },
+   "SpringSpeed": {
+    "x": 10.0,
+    "y": 25.0,
+    "z": 10.0
+   },
+   "SmoothDamping": {
+    "x": 7.0,
+    "y": 6.0,
+    "z": 6.0
+   },
+   "ExtraSmoothing": {
+    "x": 35.0,
+    "y": 15.0,
+    "z": 35.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 3.0,
+    "z": 1.0
+   },
+   "AdsScale": {
+    "x": 0.0,
+    "y": 3.0,
+    "z": 2.0
+   },
+   "TargetSpace": "EBoneControlSpace::BCS_ComponentSpace"
+  },
+  "HipLookPositionSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 0.8,
+    "z": 0.7
+   },
+   "SpringDamping": {
+    "x": 0.0,
+    "y": 0.6,
+    "z": 0.4
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 10.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 15.0,
+    "z": 50.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 5.0,
+    "z": 5.0
+   }
+  },
+  "LookRotationSway": {
+   "SpringStiffness": {
+    "x": 0.6,
+    "y": 0.4,
+    "z": 0.1
+   },
+   "SpringDamping": {
+    "x": 0.4,
+    "y": 0.6,
+    "z": 1.0
+   },
+   "SpringSpeed": {
+    "x": 15.0,
+    "y": 15.0,
+    "z": 15.0
+   },
+   "SmoothDamping": {
+    "x": 12.0,
+    "y": 12.0,
+    "z": 12.0
+   },
+   "ExtraSmoothing": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 15.0
+   },
+   "Scale": {
+    "x": 5.0,
+    "y": 5.0,
+    "z": 5.0
+   },
+   "AdsScale": {
+    "x": -2.0,
+    "y": 3.0,
+    "z": 3.0
+   },
+   "TargetSpace": "EBoneControlSpace::BCS_ComponentSpace"
+  },
+  "HipLookRotationSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 1.0
+   },
+   "SpringDamping": {
+    "x": 0.0,
+    "y": 0.4,
+    "z": 0.4
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 7.0,
+    "z": 15.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 50.0,
+    "z": 50.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 5.0,
+    "z": 5.0
+   }
+  },
+  "MovePositionSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 0.0
+   },
+   "SpringDamping": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 0.0
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 25.0,
+    "z": 0.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 2.0,
+    "z": 0.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 0.0
+   },
+   "AdsScale": {
+    "x": 1.0,
+    "y": 0.0,
+    "z": 0.0
+   }
+  },
+  "LowerSway": {
+   "Scale": 8.0,
+   "AdsScale": 25.0,
+   "InterpSpeed": 5.0,
+   "Curve": {
+    "path": "/BodycamAnimationFramework/Animations/General/Curve_LowerSway1.Curve_LowerSway1",
+    "curves": {
+     "FloatCurve": [
+      [
+       0.0,
+       3.3369275e-08,
+       2,
+       -0.018659236,
+       -0.018659236
+      ],
+      [
+       2.255956,
+       -0.067754544,
+       2,
+       -0.095058486,
+       -0.095058486
+      ],
+      [
+       3.0114605,
+       -0.34971362,
+       2,
+       -0.57246536,
+       -0.57246536
+      ],
+      [
+       4.5643744,
+       -1.0031608,
+       2,
+       -0.018659236,
+       -0.018659236
+      ]
+     ]
+    }
+   }
+  },
+  "SwayPivotOffset": {
+   "x": 0.0,
+   "y": 5.0,
+   "z": 0.0
+  },
+  "WeaponCollision": {
+   "Length": 30.0,
+   "StartOffset": -3.0,
+   "HolsterPose": {
+    "Translation": {
+     "x": 0.0,
+     "y": -20.02294151156929,
+     "z": -15.260859932870515
+    }
+   },
+   "InterpSpeed": 5.0,
+   "DistanceThreshold": 25.0,
+   "TraceRadius": 5.0
+  },
+  "RecoilData": {
+   "path": "/BodycamAnimationFramework/PRAS/UZI/UZI.UZI",
+   "ControllerRecoil": {
+    "HorizontalRecoilStep": {
+     "x": -0.3,
+     "y": 0.3
+    },
+    "VerticalRecoilStep": {
+     "x": 0.1,
+     "y": 0.3
+    },
+    "RecoilSmoothing": {
+     "x": 15.0,
+     "y": 15.0
+    },
+    "Damping": 15.0
+   },
+   "FireSway": {
+    "VerticalOffsetStep": 5.0,
+    "DepthOffsetStep": 3.0,
+    "ClampVerticalOffset": 15.0,
+    "ClampDepthOffset": 8.0,
+    "OffsetCurve": {
+     "path": "/BodycamAnimationFramework/PRAS/UZI/UZI_RecoilUp.UZI_RecoilUp",
+     "curves": {
+      "FloatCurve": [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        3.1,
+        3.0,
+        2,
+        0.1107595,
+        0.1107595
+       ],
+       [
+        15.8,
+        1.7500001,
+        2,
+        0.055762086,
+        0.055762086
+       ],
+       [
+        30.0,
+        4.5,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     }
+    },
+    "InterpSpeed": 2.0,
+    "DampSmoothing": 2.0
+   },
+   "SingleRot": {
+    "path": "/BodycamAnimationFramework/PRAS/UZI/UZI_Semi_Rot.UZI_Semi_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.023199,
+        0.566751,
+        2,
+        28.524498,
+        28.524498
+       ],
+       [
+        0.047487,
+        1.002876,
+        2,
+        -0.018392,
+        -0.018392
+       ],
+       [
+        0.075956,
+        0.586574,
+        2,
+        -25.054085,
+        -25.054085
+       ],
+       [
+        0.095574,
+        0.269989,
+        2,
+        -6.935405,
+        -6.935405
+       ],
+       [
+        0.153599,
+        -0.315064,
+        2,
+        -0.674678,
+        -0.674678
+       ],
+       [
+        0.262207,
+        0.297908,
+        2,
+        0.481946,
+        0.481946
+       ],
+       [
+        0.454972,
+        -0.169818,
+        2,
+        -0.622106,
+        -0.622106
+       ],
+       [
+        0.625897,
+        0.071654,
+        2,
+        0.38159,
+        0.38159
+       ],
+       [
+        0.9,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.027953,
+        0.322335,
+        2,
+        18.551998,
+        18.551998
+       ],
+       [
+        0.053903,
+        1.0,
+        2,
+        0.088471,
+        0.088471
+       ],
+       [
+        0.083333,
+        0.36176,
+        2,
+        -18.533058,
+        -18.533058
+       ],
+       [
+        0.133333,
+        -0.472095,
+        2,
+        -0.21117,
+        -0.21117
+       ],
+       [
+        0.194061,
+        -0.065436,
+        2,
+        2.153801,
+        2.153801
+       ],
+       [
+        0.283456,
+        -0.14876,
+        2,
+        0.186372,
+        0.186372
+       ],
+       [
+        0.31679,
+        -0.042562,
+        2,
+        3.453556,
+        3.453556
+       ],
+       [
+        0.362495,
+        0.124202,
+        2,
+        2.352799,
+        2.352799
+       ],
+       [
+        0.395828,
+        0.143398,
+        2,
+        -2.071757,
+        -2.071757
+       ],
+       [
+        0.439519,
+        -0.035374,
+        2,
+        -0.665739,
+        -0.665739
+       ],
+       [
+        0.566667,
+        0.029664,
+        2,
+        0.1488,
+        0.1488
+       ],
+       [
+        0.7,
+        0.003386,
+        2,
+        -0.088993,
+        -0.088993
+       ],
+       [
+        0.9,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.050307,
+        0.380596,
+        2,
+        10.873512,
+        10.873512
+       ],
+       [
+        0.091967,
+        1.0,
+        2,
+        0.05014,
+        0.05014
+       ],
+       [
+        0.116667,
+        0.49043,
+        2,
+        -24.830547,
+        -24.830547
+       ],
+       [
+        0.133333,
+        -0.027159,
+        2,
+        -17.334639,
+        -17.334639
+       ],
+       [
+        0.166667,
+        -0.376302,
+        2,
+        1.024934,
+        1.024934
+       ],
+       [
+        0.25,
+        0.092417,
+        2,
+        3.983869,
+        3.983869
+       ],
+       [
+        0.3,
+        0.154881,
+        2,
+        -0.383804,
+        -0.383804
+       ],
+       [
+        0.433333,
+        -0.125186,
+        2,
+        -1.503626,
+        -1.503626
+       ],
+       [
+        0.466667,
+        -0.095724,
+        2,
+        1.444319,
+        1.444319
+       ],
+       [
+        0.483333,
+        -0.05297,
+        2,
+        1.336907,
+        1.336907
+       ],
+       [
+        0.566667,
+        0.037967,
+        2,
+        0.27839,
+        0.27839
+       ],
+       [
+        0.683333,
+        0.002708,
+        2,
+        -0.113901,
+        -0.113901
+       ],
+       [
+        0.9,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "SingleLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/UZI/UZI_Semi_Loc.UZI_Semi_Loc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        0.178189,
+        2,
+        14.999999,
+        14.999999
+       ],
+       [
+        0.066667,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.128563,
+        0.2129,
+        2,
+        -7.885934,
+        -7.885934
+       ],
+       [
+        0.2,
+        -0.051458,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.316667,
+        0.10628,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.076551,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        0.178189,
+        2,
+        14.999999,
+        14.999999
+       ],
+       [
+        0.066667,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.128563,
+        0.2129,
+        2,
+        -7.885934,
+        -7.885934
+       ],
+       [
+        0.2,
+        -0.051458,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.316667,
+        0.10628,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.076551,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.038503,
+        0.455212,
+        2,
+        14.999999,
+        14.999999
+       ],
+       [
+        0.066667,
+        1.0,
+        2,
+        0.235571,
+        0.235571
+       ],
+       [
+        0.12712,
+        0.239883,
+        2,
+        -8.470352,
+        -8.470352
+       ],
+       [
+        0.2,
+        -0.129381,
+        2,
+        -1.122256,
+        -1.122256
+       ],
+       [
+        0.333333,
+        0.008458,
+        2,
+        0.285071,
+        0.285071
+       ],
+       [
+        0.466667,
+        -0.053362,
+        2,
+        -0.066246,
+        -0.066246
+       ],
+       [
+        0.616667,
+        -0.010311,
+        2,
+        0.123142,
+        0.123142
+       ],
+       [
+        0.9,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AutoRot": {
+    "path": "/BodycamAnimationFramework/PRAS/UZI/UZI_Auto_Rot.UZI_Auto_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.032074,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.065735,
+        -0.021068,
+        2,
+        -17.242336,
+        -17.242336
+       ],
+       [
+        0.108061,
+        -0.310191,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.336688,
+        0.212023,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.509876,
+        -0.131533,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.756566,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        -0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.023957,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.066416,
+        0.0,
+        2,
+        -15.77517,
+        -15.77517
+       ],
+       [
+        0.114845,
+        -0.433779,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.260944,
+        0.200562,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.431565,
+        -0.109874,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.654287,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.046884,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.091058,
+        -0.001186,
+        2,
+        -13.74764,
+        -13.74764
+       ],
+       [
+        0.145527,
+        -0.356109,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.343016,
+        0.156327,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.651732,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AutoLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/UZI/UZI_Auto_Loc.UZI_Auto_Loc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        -0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.012622,
+        1.0,
+        2,
+        2e-06,
+        2e-06
+       ],
+       [
+        0.06,
+        0.0,
+        2,
+        -13.573967,
+        -13.573967
+       ],
+       [
+        0.117455,
+        -0.422995,
+        2,
+        -0.296003,
+        -0.296003
+       ],
+       [
+        0.42112,
+        -0.048992,
+        2,
+        1.038811,
+        1.038811
+       ],
+       [
+        0.916518,
+        0.003385,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.029558,
+        1.001198,
+        2,
+        -0.071078,
+        -0.071078
+       ],
+       [
+        0.039343,
+        0.885884,
+        2,
+        -23.499046,
+        -23.499046
+       ],
+       [
+        0.072077,
+        0.002022,
+        2,
+        -18.321285,
+        -18.321285
+       ],
+       [
+        0.104781,
+        -0.313018,
+        2,
+        -0.262459,
+        -0.262459
+       ],
+       [
+        0.339144,
+        0.069688,
+        2,
+        0.108872,
+        0.108872
+       ],
+       [
+        0.604049,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimSingleRot": {
+    "path": "/BodycamAnimationFramework/PRAS/UZI/Aim/UZI_Semi_Aim_Rot.UZI_Semi_Aim_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.085932605,
+        1.00274,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.23689659,
+        -0.39714876,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.41965163,
+        0.32623437,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.6133621,
+        -0.20820844,
+        2,
+        -0.2727703,
+        -0.2727703
+       ],
+       [
+        0.8127583,
+        0.06715354,
+        2,
+        -0.20797414,
+        -0.20797414
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        -0.007936,
+        -0.007936
+       ],
+       [
+        0.034538,
+        0.177146,
+        2,
+        14.002985,
+        14.002985
+       ],
+       [
+        0.071413,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.183532,
+        -0.542423,
+        2,
+        -0.033527,
+        -0.033527
+       ],
+       [
+        0.322247,
+        0.300089,
+        2,
+        -0.186859,
+        -0.186859
+       ],
+       [
+        0.544416,
+        -0.093415,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.827317,
+        0.0,
+        2,
+        -0.00938,
+        -0.00938
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.10820191,
+        0.9999943,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.3003152,
+        -0.40571097,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.6628408,
+        0.18160461,
+        2,
+        -0.23153466,
+        -0.23153466
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimSingleLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/UZI/Aim/UZI_Semi_Aim_Loc.UZI_Semi_Aim_Loc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.02840457,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.08512412,
+        0.40989476,
+        2,
+        -2.2623398,
+        -2.2623398
+       ],
+       [
+        0.8,
+        -0.12499992,
+        2,
+        -0.046803147,
+        -0.046803147
+       ],
+       [
+        1.0,
+        3.573936e-08,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        1.3,
+        3.573936e-08,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        1.7,
+        3.573936e-08,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.03333333,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.11666666,
+        -0.162893,
+        2,
+        -11.250001,
+        -11.250001
+       ],
+       [
+        0.16666666,
+        -0.5,
+        2,
+        1.2985755,
+        1.2985755
+       ],
+       [
+        0.3333333,
+        0.118465,
+        2,
+        1.3903202,
+        1.3903202
+       ],
+       [
+        0.46666664,
+        -0.082904,
+        2,
+        -0.17532857,
+        -0.17532857
+       ],
+       [
+        0.6833333,
+        0.0571,
+        2,
+        0.11839047,
+        0.11839047
+       ],
+       [
+        1.1666666,
+        -3.0682375e-05,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.07194717,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.3011358,
+        -0.345783,
+        2,
+        -0.04889496,
+        -0.04889496
+       ],
+       [
+        0.53151864,
+        0.13121626,
+        2,
+        0.06389026,
+        0.06389026
+       ],
+       [
+        0.8610772,
+        -0.05303762,
+        2,
+        -0.20659164,
+        -0.20659164
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimAutoRot": {
+    "path": "/BodycamAnimationFramework/PRAS/UZI/Aim/UZI_Auto_Aim_Rot.UZI_Auto_Aim_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.052432984,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        0.0,
+        2,
+        -15.42968,
+        -15.42968
+       ],
+       [
+        0.14734519,
+        -0.46446493,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.35660863,
+        0.2446231,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.63689786,
+        -0.04391012,
+        2,
+        -0.3019822,
+        -0.3019822
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        -42.47121,
+        0.0
+       ],
+       [
+        0.044702273,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.14999999,
+        -0.43910113,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.27771753,
+        0.20932457,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.49014437,
+        -0.08524821,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.7093386,
+        0.029374376,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.99999994,
+        0.0,
+        2,
+        -0.03583119,
+        -0.03583119
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.03590723,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.099999994,
+        0.04055766,
+        2,
+        -12.377811,
+        -12.377811
+       ],
+       [
+        0.16527335,
+        -0.6012696,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.2987272,
+        0.25451663,
+        2,
+        1.5260636,
+        1.5260636
+       ],
+       [
+        0.48078772,
+        -0.119774535,
+        2,
+        -0.41693553,
+        -0.41693553
+       ],
+       [
+        0.68981767,
+        0.091457136,
+        2,
+        0.28376743,
+        0.28376743
+       ],
+       [
+        0.9166666,
+        0.0039136983,
+        2,
+        -0.19179477,
+        -0.19179477
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimAutoLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/UZI/Aim/UZI_Auto_Aim_Loc.UZI_Auto_Aim_Loc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        -46.13813,
+        0.0
+       ],
+       [
+        0.01754702,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        0.01,
+        2,
+        -8.640124,
+        -8.640124
+       ],
+       [
+        0.15712419,
+        -0.20596401,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.39999998,
+        0.088611856,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.67695606,
+        -0.049363628,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        -0.18122597
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.031777665,
+        0.99791497,
+        2,
+        -1.045281,
+        -1.045281
+       ],
+       [
+        0.16075726,
+        -0.16803649,
+        2,
+        -2.8766081,
+        -2.8766081
+       ],
+       [
+        0.34486157,
+        0.09729536,
+        2,
+        0.24080428,
+        0.24080428
+       ],
+       [
+        0.56166226,
+        -0.07149685,
+        2,
+        -0.24007446,
+        -0.24007446
+       ],
+       [
+        0.8493456,
+        -0.023818368,
+        2,
+        0.27411383,
+        0.27411383
+       ],
+       [
+        1.1666666,
+        -3.0682375e-05,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.056195375,
+        1.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.108,
+        0.034283,
+        2,
+        -11.478978,
+        -11.478978
+       ],
+       [
+        0.19999999,
+        -0.65073,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.5666666,
+        0.165665,
+        2,
+        0.15514158,
+        0.15514158
+       ],
+       [
+        0.8097468,
+        0.09289274,
+        2,
+        -0.62051195,
+        -0.62051195
+       ],
+       [
+        1.1666666,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "PitchAim": {
+    "x": -0.5,
+    "y": -1.5
+   },
+   "YawAim": {
+    "x": -0.5,
+    "y": -0.4000000059604645,
+    "z": 0.4,
+    "w": 0.5
+   },
+   "RollAim": {
+    "x": -1.5,
+    "y": 0.30000001192092896,
+    "z": 0.4,
+    "w": 1.6
+   },
+   "PitchHip": {
+    "x": -9.0,
+    "y": -13.0
+   },
+   "YawHip": {
+    "x": -2.0,
+    "y": -1.2,
+    "z": 1.0,
+    "w": 2.0
+   },
+   "RollHip": {
+    "x": -3.0,
+    "y": -2.0,
+    "z": 2.0,
+    "w": 3.0
+   },
+   "KickAim": {
+    "x": -2.0,
+    "y": -3.0
+   },
+   "KickHip": {
+    "x": -2.0,
+    "y": -2.0
+   },
+   "KickHipUp": {
+    "x": 2.0,
+    "y": 5.0
+   },
+   "MaxKickHip": 3.0,
+   "MinCameraShake": 1.0,
+   "MinCameraShakeMagnifier": 0.5,
+   "SmoothRot": {
+    "pitch": 12.0,
+    "yaw": 7.0,
+    "roll": 12.0
+   },
+   "SmoothLoc": {
+    "x": 15.0,
+    "y": 15.0,
+    "z": 15.0
+   },
+   "MultiRot": {
+    "pitch": 2.2,
+    "yaw": 1.0,
+    "roll": 1.5
+   },
+   "MultiLoc": {
+    "x": 1.2000000476837158,
+    "y": 1.0,
+    "z": 1.0
+   },
+   "bSmoothRoll": true,
+   "Noise2DTarget": {
+    "x": 1.0,
+    "y": 1.0
+   },
+   "Noise2DAccel": {
+    "x": 6.0,
+    "y": 7.0
+   },
+   "Noise2DZero": {
+    "x": 7.0,
+    "y": 8.0
+   },
+   "NoiseAimScalar": 0.3,
+   "Pushback": -4.0,
+   "PushbackZero": 7.0,
+   "PushbackAccel": 8.0,
+   "ZProgress": {
+    "Accel": 5.0,
+    "Damping": 4.0,
+    "Amount": 0.2
+   },
+   "ProgressAimAlpha": 0.2,
+   "RecoilSway": {
+    "PitchSway": {
+     "x": -1.0,
+     "y": -1.5
+    },
+    "YawSway": {
+     "x": -1.0,
+     "y": 1.5
+    },
+    "RollSwayMultiplier": 1.5,
+    "Damping": 10.0,
+    "Acceleration": 12.0,
+    "AdsScale": 0.2,
+    "PivotOffset": {
+     "x": -30.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  },
+  "AimIdlePose": {
+   "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_Aim_Idle_Loop.A_FP_UZI_Aim_Idle_Loop",
+   "length": 5.1,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "StressedIdleSubtle": {
+   "path": "/BodycamAnimationFramework/Animations/General/A_FP_AK_Shake_Loop.A_FP_AK_Shake_Loop",
+   "length": 1.0666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "StressedIdleStrong": {
+   "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Stressed_Additive.A_FP_Mossberg590_Stressed_Additive",
+   "length": 1.3666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "OverlayAnimBlueprint": "/BodycamAnimationFramework/Blueprints/Animation/Overlays/ABP_Overlay_Rifle.ABP_Overlay_Rifle_C",
+  "GunAnimInstance": "/BodycamAnimationFramework/Animations/UZI/Weapon/ABP_UZI.ABP_UZI_C",
+  "ReGripMotions": [
+   {
+    "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Regrip01_Montage.A_FP_AK_Regrip01_Montage",
+    "length": 1.0,
+    "rate": 1.0,
+    "notifies": []
+   },
+   {
+    "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Regrip02_Montage.A_FP_AK_Regrip02_Montage",
+    "length": 1.0,
+    "rate": 1.0,
+    "notifies": []
+   },
+   {
+    "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Regrip03_Montage.A_FP_AK_Regrip03_Montage",
+    "length": 1.0666667,
+    "rate": 1.0,
+    "notifies": []
+   },
+   {
+    "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Regrip04_Montage.A_FP_AK_Regrip04_Montage",
+    "length": 0.96666664,
+    "rate": 1.0,
+    "notifies": []
+   }
+  ],
+  "Fire": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_Fire_Montage.A_FP_UZI_Fire_Montage",
+     "length": 0.9,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Weapon/A_W_UZI_Fire_Montage.A_W_UZI_Fire_Montage",
+     "length": 0.56666666,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    }
+   }
+  ],
+  "FireOut": {
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/UZI/Weapon/A_W_UZI_Fire_Empty_Montage.A_W_UZI_Fire_Empty_Montage",
+    "length": 0.56666666,
+    "rate": 1.0,
+    "notifies": []
+   }
+  },
+  "FirstEquip": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_Equip_Montage.A_FP_UZI_Equip_Montage",
+    "length": 2.3,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_Equip.UZI_Equip",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.Equip"
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/UZI/Weapon/A_W_UZI_Equip_Montage.A_W_UZI_Equip_Montage",
+    "length": 2.3,
+    "rate": 1.0,
+    "notifies": []
+   }
+  },
+  "Draw": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_Draw_Montage.A_FP_UZI_Draw_Montage",
+    "length": 0.70591664,
+    "rate": 1.5,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_draw.UZI_draw",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.Draw"
+      }
+     }
+    ]
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": -5.0,
+     "z": 4.0
+    },
+    "Max": {
+     "x": -2.0,
+     "y": -5.0,
+     "z": 8.0
+    }
+   }
+  },
+  "holster": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_Holster_Montage.A_FP_UZI_Holster_Montage",
+    "length": 0.48968333,
+    "rate": 1.5,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_holster.UZI_holster",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.Holster"
+      }
+     }
+    ]
+   }
+  },
+  "ReloadTacCalm": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_ReloadPartial_Calm01_Montage.A_FP_UZI_ReloadPartial_Calm01_Montage",
+     "length": 3.7666667,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "SpawnMag_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {}
+      },
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_ReloadPartial_Calm01.UZI_ReloadPartial_Calm01",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DestroySpareMag_C",
+       "time": 2.6967,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Weapon/A_W_UZI_ReloadPartial_Calm01_Montage.A_W_UZI_ReloadPartial_Calm01_Montage",
+     "length": 3.7666667,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": 0.0,
+      "z": 8.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -5.0,
+      "z": 4.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": -5.0,
+      "z": 8.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_ReloadPartial_Calm02_Montage.A_FP_UZI_ReloadPartial_Calm02_Montage",
+     "length": 3.4333334,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_ReloadPartial_Calm02.UZI_ReloadPartial_Calm02",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Weapon/A_W_UZI_ReloadPartial_Calm02_Montage.A_W_UZI_ReloadPartial_Calm02_Montage",
+     "length": 3.4333334,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": 0.0,
+      "z": 8.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -5.0,
+      "z": 4.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": -5.0,
+      "z": 8.0
+     }
+    }
+   }
+  ],
+  "ReloadTacStressed": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_ReloadPartial_Stressed01_Montage.A_FP_UZI_ReloadPartial_Stressed01_Montage",
+     "length": 3.7,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_ReloadPartial_Stressed01.UZI_ReloadPartial_Stressed01",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 0.6564,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Weapon/A_W_UZI_ReloadPartial_Stressed01_Montage.A_W_UZI_ReloadPartial_Stressed01_Montage",
+     "length": 3.7,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": 0.0,
+      "z": 8.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -5.0,
+      "z": 4.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": -5.0,
+      "z": 8.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_ReloadPartial_Stressed02_Montage.A_FP_UZI_ReloadPartial_Stressed02_Montage",
+     "length": 3.5666666,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_ReloadPartial_Stressed02.UZI_ReloadPartial_Stressed02",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 0.3778,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Weapon/A_W_UZI_ReloadPartial_Stressed02_Montage.A_W_UZI_ReloadPartial_Stressed02_Montage",
+     "length": 3.5666666,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": 0.0,
+      "z": 8.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -5.0,
+      "z": 4.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": -5.0,
+      "z": 8.0
+     }
+    }
+   }
+  ],
+  "ReloadEmptyCalm": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_ReloadEmpty_Calm01_Montage.A_FP_UZI_ReloadEmpty_Calm01_Montage",
+     "length": 4.4333334,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "SpawnMag_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {}
+      },
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_ReloadEmpty_Calm01.UZI_ReloadEmpty_Calm01",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DestroySpareMag_C",
+       "time": 3.2533,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Weapon/A_W_UZI_ReloadEmpty_Calm01_Montage.A_W_UZI_ReloadEmpty_Calm01_Montage",
+     "length": 4.4333334,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": 0.0,
+      "z": 8.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -5.0,
+      "z": 4.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": -5.0,
+      "z": 8.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_ReloadEmpty_Calm02_Montage.A_FP_UZI_ReloadEmpty_Calm02_Montage",
+     "length": 4.133333,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_ReloadEmpty_Calm02.UZI_ReloadEmpty_Calm02",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Weapon/A_W_UZI_ReloadEmpty_Calm02_Montage.A_W_UZI_ReloadEmpty_Calm02_Montage",
+     "length": 4.133333,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": 0.0,
+      "z": 8.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -5.0,
+      "z": 4.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": -5.0,
+      "z": 8.0
+     }
+    }
+   }
+  ],
+  "ReloadEmptyStressed": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_ReloadEmpty_Stressed01_Montage.A_FP_UZI_ReloadEmpty_Stressed01_Montage",
+     "length": 4.4333334,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_ReloadEmpty_Stressed01.UZI_ReloadEmpty_Stressed01",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 0.6598,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Weapon/A_W_UZI_ReloadEmpty_Stressed01_Montage.A_W_UZI_ReloadEmpty_Stressed01_Montage",
+     "length": 4.4333334,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": 0.0,
+      "z": 8.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -5.0,
+      "z": 4.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": -5.0,
+      "z": 8.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_ReloadEmpty_Stressed02_Montage.A_FP_UZI_ReloadEmpty_Stressed02_Montage",
+     "length": 4.366667,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_ReloadEmpty_Stressed02.UZI_ReloadEmpty_Stressed02",
+        "Volume Multiplier": 0.5,
+        "SoundTag": "Sound.Type.Reload"
+       }
+      },
+      {
+       "name": "DropMag_C",
+       "time": 0.3778,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/UZI/Weapon/A_W_UZI_ReloadEmpty_Stressed02_Montage.A_W_UZI_ReloadEmpty_Stressed02_Montage",
+     "length": 4.366667,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": 0.0,
+      "z": 8.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": -5.0,
+      "y": -5.0,
+      "z": 4.0
+     },
+     "Max": {
+      "x": -2.0,
+      "y": -5.0,
+      "z": 8.0
+     }
+    }
+   }
+  ],
+  "Inspect": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_Inspect_Montage.A_FP_UZI_Inspect_Montage",
+    "length": 6.0666666,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_inspect.UZI_inspect",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.Inspect"
+      }
+     }
+    ]
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": -5.0,
+     "z": 5.0
+    },
+    "Max": {
+     "x": -2.0,
+     "y": 0.0,
+     "z": 15.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": -5.0,
+     "z": 4.0
+    },
+    "Max": {
+     "x": -2.0,
+     "y": -5.0,
+     "z": 8.0
+    }
+   }
+  },
+  "MagCheckEmpty": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_MagCheck_Empty_Montage.A_FP_UZI_MagCheck_Empty_Montage",
+    "length": 10.433333,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_magCheck_Empty.UZI_magCheck_Empty",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.MagCheck"
+      }
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 0.5845,
+      "duration": 0.0,
+      "props": {}
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 2.2831,
+      "duration": 0.0,
+      "props": {
+       "Show?": false
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/UZI/Weapon/A_W_UZI_MagCheck_Empty_Montage.A_W_UZI_MagCheck_Empty_Montage",
+    "length": 10.433333,
+    "rate": 1.0,
+    "notifies": []
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": -5.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "Max": {
+     "x": -2.0,
+     "y": 0.0,
+     "z": 8.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": 2.0,
+     "z": 3.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": 8.0,
+     "z": 8.0
+    }
+   }
+  },
+  "MagCheckFull": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_MagCheck_Full_Montage.A_FP_UZI_MagCheck_Full_Montage",
+    "length": 4.8333335,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/UZI/Sounds/UZI_magCheck.UZI_magCheck",
+       "Volume Multiplier": 0.5,
+       "SoundTag": "Sound.Type.MagCheck"
+      }
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 0.6569,
+      "duration": 0.0,
+      "props": {}
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 2.2817,
+      "duration": 0.0,
+      "props": {
+       "Show?": false
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/UZI/Weapon/A_W_UZI_MagCheck_Full_Montage.A_W_UZI_MagCheck_Full_Montage",
+    "length": 4.8333335,
+    "rate": 1.0,
+    "notifies": []
+   },
+   "StandingActionRandomPoseOffset": {
+    "Max": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 8.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": 2.0,
+     "z": 3.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": 8.0,
+     "z": 8.0
+    }
+   }
+  },
+  "AimIn": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/AKM/Additive_Akm_Aim_In.Additive_Akm_Aim_In",
+  "AimOut": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/AKM/Additive_Akm_Aim_Out.Additive_Akm_Aim_Out",
+  "CurveWalk": {
+   "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Walk_Loop.A_FP_AK_Walk_Loop",
+   "length": 3.0666666,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpStart": {
+   "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_Jump_Start.A_FP_UZI_Jump_Start",
+   "length": 0.9,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpLoop": {
+   "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_Jump_Loop.A_FP_UZI_Jump_Loop",
+   "length": 3.4666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpEnd": {
+   "path": "/BodycamAnimationFramework/Animations/UZI/Character/A_FP_UZI_Jump_End.A_FP_UZI_Jump_End",
+   "length": 1.0333333,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "SpineAdditiveActionWeight": 0.6,
+  "ActionPitchAngle": {
+   "x": -50.0,
+   "y": 300.0
+  },
+  "SwayAdsScale": 0.0,
+  "NativeClass": "/BodycamAnimationFramework/Blueprints/Animation/Data/DA_BodycamAnimationSettings.DA_BodycamAnimationSettings_C"
+ }
+}

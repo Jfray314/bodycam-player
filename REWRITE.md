@@ -1,34 +1,44 @@
 # Bodycam player rewrite: tracking
 
-Source: `F:\SteamLibrary\steamapps\common\Bodycam` (UE 5.5, pak v11, Oodle, unversioned cooked properties).
-It is read-only: `.claude/settings.json` denies Edit/Write there, and the extractor only opens files for reading.
+Source: `F:\SteamLibrary\steamapps\common\Bodycam` (UE 5.5.4, pak v11, Oodle, unversioned cooked properties).
+Read-only: `.claude/settings.json` denies Edit/Write there; every tool only opens game files for reading.
+Game data never goes into git: `extracted/` (raw + JSON dumps) and `assets-local/` (decoded audio, fonts, models)
+are ignored. Small derived numeric data that the code needs (`assets/*.json`) is committed.
 
 ## Pipeline
 ```
+# 1. pull assets out of the paks (read-only)
 cargo run --release -p extract -- "F:/SteamLibrary/steamapps/common/Bodycam/Bodycam/Content/Paks" extracted <path substrings...>
+# 2. dump every cooked asset to JSON using the UE4SS mappings (extracted/Bodycam.usmap)
+cargo run --release -p uasset --bin dump -- extracted/Bodycam.usmap extracted/Bodycam extracted/json
+# 3. bake data the game uses
+python -I tools/weapon_data.py extracted/json assets/weapons      # DT_WeaponItems + BAS anim sets + PRAS recoil, fire_shake.json
 python -I tools/ge_stats.py extracted/Bodycam/Content/BodycamCore/AbilitySystem/GameplayEffects/Weapons/Stats
+python -I tools/probe_curves.py <rec1.csv> <rec2.csv> assets/camera_motion.json   # from the UE4SS probe recordings
+# 4. decode audio (BINKA -> wav) into assets-local/audio
+cargo run --release -p binka -- extracted/Bodycam/Content/Audio assets-local/audio
+# fonts: copy extracted/Bodycam/Content/UI/Fonts/ki/Ki-Bold.ufont -> assets-local/fonts/Ki-Bold.otf
 cargo run -p game
 ```
-`extracted/` is git-ignored. Game assets are never committed.
+Live values (C++ defaults, real camera motion) come from `tools/ue4ss_probe` (UE4SS Lua mod: F7 property dump,
+F8/F9 camera recording), run offline in the real game.
 
-## Blockers
-- `Bodycam/Config/*.ini` sits in an AES-encrypted pak. Input bindings come from `IA_*` / `InputConfig_*` assets instead.
-- Cooked assets use unversioned properties. Mappings dumped with UE4SS on 2026-10-09 (engine 5.5.4, includes BP types):
-  `extracted/Bodycam.usmap` (v4, uncompressed). Next: a usmap-driven property reader to replace `tools/ge_stats.py`.
-- Character movement and attribute-set C++ live in `Bodycam-Win64-Shipping.exe`, not in assets.
+## Controls (from IMC_KBM_CharacterOnFoot)
+WASD move, Shift sprint, LeftControl crouch (hold), Space jump, Q/E lean, LMB fire, RMB aim, R tap reload,
+R hold 0.25 s mag check, J inspect, 1-6 / wheel swap. F2 toggles the camera post-process.
 
-## Source → Rust map
-| Original asset(s) | Rust | Status |
+## Source -> Rust map
+| Original | Rust | Status |
 |---|---|---|
-| `Bodycam_Player` (child of `ALS_Base_CharacterBP`), `PawnData_DefaultCharacter` | `game/src/player.rs` | movement placeholder (ALS default speeds) |
-| `AC_BodycamCamera`, `BodycamShake_Walk*/Sprint*/Land*`, `BP_BodycamPlayerCameraManager` | `player.rs::bodycam_shake` | procedural approximation |
-| `GE_WeaponStat_*` (WeaponAttributeSet) | `assets/weapon_stats.json` → `weapon.rs` | **real values** |
-| `GA_Fire_Base`, `GA_Reload_Base`, `GA_Character_Aim`, `GA_Character_SwapItem`, `GA_Character_Sprint` | `weapon.rs`, `player.rs` | logic approximated |
-| `BP_BodycamGameHUD` (in-game part only) | `game/src/hud.rs` | ammo + REC overlay |
-| `Bodycam_Player` leaning (IA_Lean, auto-lean by WallDistance, BlockLeft/RightLean), stamina, health, blood-on-camera, walkie-talkie cues, jump/land camera timelines, dead-view camera | | todo (names found in Bodycam_Player) |
-| `GA_Character_Crouch`, `GA_Character_HandleFall`, `GA_HitReaction`, `GA_PlayerDeath` | | todo |
-| `GA_ThrowGrenade`, `GA_TriggerKnife`, `GA_Character_QuickAttack`, `GA_Flashlight`, attachments (laser/flashlight/optics) | | todo |
-| `DT_WeaponItems`, `DT_CommonItems`, `DT_OperatorItems` | | todo |
-| `DT_Footstep_Player*`, `Audio/Player`, `Audio/Guns` (sound waves) | | todo: decode SoundWave bulk data |
-| `BodycamAnimationFramework` FP montages (equip/fire/reload/inspect), weapon/arm meshes | | todo: needs mesh/anim export |
-| `BallisticsVFX` (impacts, muzzle, tracers), `BodycamPostProcessFramework` (lens/VHS look) | | todo |
+| CharacterMovementComponent (live dump): walk 125, sprint 325, crouch/ADS 100 cm/s, accel 620.9, braking 1000, friction 4, jump 300, air control 0 | `player.rs` | real values |
+| Camera motion (AC_BodycamCamera, BodycamShake_*, ALS camera): idle chest mount, walk/sprint/crouch/ADS stride loops, land event, lean pose | `player.rs` + `assets/camera_motion.json` | measured in-game, played back |
+| CameraComponent FOV 120 (horizontal, constant incl. ADS) | `postfx.rs::apply_fov` | real |
+| M_PP_BodycamMaster (MPC lens distortion 0.33/1.0, CA R/C 3.5 G/M -1.6 B/Y -0.8) + MI_PP_DiskBlur (radius 25 x 0.8, fade exp 10), UE PP defaults (bloom, vignette 0.4, histogram exposure +1, speeds 3/1, motion blur 0.5) | `postfx.rs`, `postfx.wesl` | real params, maths reconstructed (graphs are compiled away) |
+| GE_WeaponStat_* (WeaponAttributeSet) | `assets/weapon_stats.json` -> `weapon.rs` | real |
+| DT_WeaponItems + BAS_* (montage lengths/notifies: reload, mag check, inspect, draw/holster/first equip) | `assets/weapons/*.json` -> `weapon.rs` | real timings |
+| PRAS ControllerRecoil + Shake_Rifle_Standard | `weapon.rs` `Fired`, `player.rs` | real data; Damping recovery not applied |
+| HUD: W_PlayerHUD (voice icon only), HUD_Magazine on mag check (window from SetMagCheckUIVisibility notifies, Ki font) | `hud.rs` | screen-space until the viewmodel exists |
+| SoundCues, footsteps, breathing, bodycam mic filter (Samsung A52 IR convolution + EQ) | `audio.rs` | in progress |
+| Arms/gun meshes + FP animations, BAS viewmodel sway/ADS/offsets, PRAS viewmodel recoil curves | | in progress (mesh export) |
+| Blueprint logic (leaning/auto-lean, stamina, blood on camera, abilities) | | in progress (Kismet decompiler) |
+| BallisticsVFX impacts/muzzle/shells, flashlight/laser, grenades, knife, drop/take, death/hit reactions | | todo |

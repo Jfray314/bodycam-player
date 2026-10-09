@@ -1,0 +1,2348 @@
+{
+ "row": "Mossberg",
+ "item_class": "Item.PrimaryWeapon.Shotguns.Mossberg.Mossberg",
+ "stats_effects": [
+  "/Game/BodycamCore/AbilitySystem/GameplayEffects/Weapons/Stats/GE_WeaponStat_Mossberg.GE_WeaponStat_Mossberg_C"
+ ],
+ "sounds": {
+  "Cosmetic.Weapon.SFX.Fire": "/Game/Audio/Guns/Cue/Shotgun/Guns_Shotgun_BK-101.Guns_Shotgun_BK-101",
+  "Cosmetic.Weapon.SFX.FireSuppressed": "/Game/Audio/Guns/Cue/Shotgun/Guns_Shotgun_BK-101_Suppressor.Guns_Shotgun_BK-101_Suppressor",
+  "Cosmetic.Weapon.SFX.FireDry": "/Game/Audio/Guns/Cue/Shotgun/Guns_Shotgun_BK-101_DryFire.Guns_Shotgun_BK-101_DryFire",
+  "Cosmetic.Weapon.SFX.BulletCrack": "/Game/Audio/Guns/Cue/Bullets/BulletCrack/Bodycam_Guns_Shotgun_Bullet_BulletCrack_V1.Bodycam_Guns_Shotgun_Bullet_BulletCrack_V1",
+  "Cosmetic.Weapon.SFX.BulletWizz": "/Game/Audio/Guns/Cue/Bullets/BulletWhiz/Bodycam_Guns_Shotgun_Bullet_BulletWhiz_V1.Bodycam_Guns_Shotgun_Bullet_BulletWhiz_V1"
+ },
+ "default_attachments": [
+  "Mossberg590 Base Receiver",
+  "Mossberg590 Pump Forearm 1 Plastic",
+  "Mossberg590 Barrel Front Sight Rail",
+  "Mossberg590 Trigger Low",
+  "Mossberg590 Stock 2",
+  "Ammo Gauge",
+  "Dot",
+  "Magnified Dot MK1 Red",
+  "Canted Dot"
+ ],
+ "anim_set": {
+  "IdlePose": {
+   "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Default_Pose.A_FP_Mossberg590_Default_Pose",
+   "length": 1.1333333,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "ViewmodelOffsets": {
+   "PoseOffset": {
+    "Translation": {
+     "x": 10.0,
+     "y": -8.0,
+     "z": -1.520231
+    }
+   },
+   "ActionPoseOffset": {
+    "Rotation": {
+     "x": 0.13052619222005157,
+     "y": 0.0,
+     "z": 0.0,
+     "w": 0.9914448613738102
+    }
+   },
+   "LeftElbowOffset": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": -3.0
+   },
+   "AimingLeftElbowOffset": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": -3.0
+   }
+  },
+  "AdsSettings": {
+   "AdsSpeed": 2.3,
+   "SprintAdsSpeed": 7.0,
+   "AdsBlend": {
+    "BlendTime": 0.0,
+    "BlendOption": "EAlphaBlendOption::Sinusoidal"
+   },
+   "AdsAdditiveBlend": 0.3,
+   "AdsAdditiveMagnifiedSightBlend": 0.08,
+   "AimSightDistance": 15.0,
+   "AimMagnifiedSightDistance": 2.5
+  },
+  "LookPositionSway": {
+   "SpringStiffness": {
+    "x": 0.6,
+    "y": 0.6,
+    "z": 1.0
+   },
+   "SpringDamping": {
+    "x": 0.4,
+    "y": 0.8,
+    "z": 1.0
+   },
+   "SpringSpeed": {
+    "x": 10.0,
+    "y": 25.0,
+    "z": 10.0
+   },
+   "SmoothDamping": {
+    "x": 7.0,
+    "y": 6.0,
+    "z": 6.0
+   },
+   "ExtraSmoothing": {
+    "x": 35.0,
+    "y": 15.0,
+    "z": 0.0
+   },
+   "Scale": {
+    "x": 5.0,
+    "y": 2.0,
+    "z": 1.2
+   },
+   "AdsScale": {
+    "x": 0.0,
+    "y": 3.0,
+    "z": 5.0
+   },
+   "TargetSpace": "EBoneControlSpace::BCS_ComponentSpace"
+  },
+  "HipLookPositionSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 0.8,
+    "z": 0.7
+   },
+   "SpringDamping": {
+    "x": 0.0,
+    "y": 0.6,
+    "z": 0.4
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 10.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 15.0,
+    "z": 50.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 3.0,
+    "z": 3.0
+   }
+  },
+  "LookRotationSway": {
+   "SpringStiffness": {
+    "x": 0.6,
+    "y": 0.4,
+    "z": 0.5
+   },
+   "SpringDamping": {
+    "x": 0.4,
+    "y": 0.6,
+    "z": 0.5
+   },
+   "SpringSpeed": {
+    "x": 15.0,
+    "y": 15.0,
+    "z": 15.0
+   },
+   "SmoothDamping": {
+    "x": 12.0,
+    "y": 12.0,
+    "z": 12.0
+   },
+   "ExtraSmoothing": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 15.0
+   },
+   "Scale": {
+    "x": 5.0,
+    "y": 2.0,
+    "z": 4.0
+   },
+   "AdsScale": {
+    "x": -2.0,
+    "y": 3.0,
+    "z": 3.0
+   },
+   "TargetSpace": "EBoneControlSpace::BCS_ComponentSpace"
+  },
+  "HipLookRotationSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 1.0
+   },
+   "SpringDamping": {
+    "x": 0.0,
+    "y": 0.4,
+    "z": 0.4
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 7.0,
+    "z": 7.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 50.0,
+    "z": 50.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 5.0,
+    "z": 5.0
+   }
+  },
+  "MovePositionSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 0.0
+   },
+   "SpringDamping": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 0.0
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 25.0,
+    "z": 0.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 2.0,
+    "z": 0.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 0.0
+   },
+   "AdsScale": {
+    "x": 1.0,
+    "y": 0.0,
+    "z": 0.0
+   }
+  },
+  "LowerSway": {
+   "Scale": 8.0,
+   "AdsScale": 15.0,
+   "InterpSpeed": 5.0,
+   "Curve": {
+    "path": "/BodycamAnimationFramework/Animations/General/Curve_LowerSway1.Curve_LowerSway1",
+    "curves": {
+     "FloatCurve": [
+      [
+       0.0,
+       3.3369275e-08,
+       2,
+       -0.018659236,
+       -0.018659236
+      ],
+      [
+       2.255956,
+       -0.067754544,
+       2,
+       -0.095058486,
+       -0.095058486
+      ],
+      [
+       3.0114605,
+       -0.34971362,
+       2,
+       -0.57246536,
+       -0.57246536
+      ],
+      [
+       4.5643744,
+       -1.0031608,
+       2,
+       -0.018659236,
+       -0.018659236
+      ]
+     ]
+    }
+   }
+  },
+  "SwayPivotOffset": {
+   "x": 0.0,
+   "y": 25.0,
+   "z": 0.0
+  },
+  "WeaponCollision": {
+   "Length": 60.0,
+   "StartOffset": -10.0,
+   "HolsterPose": {
+    "Translation": {
+     "x": 0.0,
+     "y": -45.0,
+     "z": -10.0
+    }
+   },
+   "InterpSpeed": 5.0,
+   "DistanceThreshold": 25.0,
+   "TraceRadius": 6.0
+  },
+  "RecoilData": {
+   "path": "/BodycamAnimationFramework/PRAS/Mossberg590/Mossberg590.Mossberg590",
+   "ControllerRecoil": {
+    "HorizontalRecoilStep": {
+     "x": -2.0,
+     "y": 2.0
+    },
+    "VerticalRecoilStep": {
+     "x": 1.0,
+     "y": 1.0
+    },
+    "RecoilSmoothing": {
+     "x": 1500.0,
+     "y": 1500.0
+    },
+    "Damping": 8.0
+   },
+   "SingleRot": {
+    "path": "/BodycamAnimationFramework/PRAS/Mossberg590/Mossberg590_Semi_Rot.Mossberg590_Semi_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        -0.002681,
+        2,
+        1.270647,
+        1.270647
+       ],
+       [
+        0.088462,
+        0.112404,
+        2,
+        6.066277,
+        6.066277
+       ],
+       [
+        0.159213,
+        0.760942,
+        2,
+        -1.682591,
+        -1.682591
+       ],
+       [
+        0.208493,
+        -0.089558,
+        2,
+        2.234731,
+        2.234731
+       ],
+       [
+        0.239505,
+        0.940373,
+        2,
+        -4.508051,
+        -4.508051
+       ],
+       [
+        0.414511,
+        -1.0183,
+        2,
+        -4.213668,
+        -4.213668
+       ],
+       [
+        0.7,
+        -1.0,
+        2,
+        2.436963,
+        2.436963
+       ],
+       [
+        0.83105,
+        -0.00321,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.01666996,
+        0.77004415,
+        2,
+        7.812141,
+        7.812141
+       ],
+       [
+        0.057733025,
+        0.45101854,
+        2,
+        -0.0016346093,
+        -0.0016346093
+       ],
+       [
+        0.09042079,
+        0.5538037,
+        2,
+        -8.0147705,
+        -8.0147705
+       ],
+       [
+        0.21382216,
+        -0.8,
+        2,
+        -1.2020825,
+        -1.2020825
+       ],
+       [
+        0.754206,
+        -0.24412097,
+        2,
+        0.6584385,
+        0.6584385
+       ],
+       [
+        1.2176921,
+        -0.13901335,
+        2,
+        0.3529662,
+        0.3529662
+       ],
+       [
+        1.4266211,
+        -0.0067811767,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.086309224,
+        0.3603577,
+        0,
+        -8.555019,
+        8.555021
+       ],
+       [
+        0.12518346,
+        1.0709469,
+        2,
+        6.003108,
+        6.003108
+       ],
+       [
+        0.2590055,
+        -0.13618371,
+        2,
+        -8.822802,
+        -8.822802
+       ],
+       [
+        0.40953955,
+        -0.22548041,
+        2,
+        4.019351,
+        4.019351
+       ],
+       [
+        0.63733065,
+        0.19897814,
+        2,
+        3.749842,
+        3.749842
+       ],
+       [
+        0.7577999,
+        -0.13876134,
+        2,
+        -0.338748,
+        -0.338748
+       ],
+       [
+        1.0148389,
+        0.07151565,
+        2,
+        0.222328,
+        0.222328
+       ],
+       [
+        1.4837587,
+        -0.0076398584,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "SingleLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/Mossberg590/Mossberg590_Semi_Loc1.Mossberg590_Semi_Loc1",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        0.002482,
+        2,
+        1.061776,
+        1.061776
+       ],
+       [
+        0.098156,
+        0.7262895,
+        2,
+        -0.052615,
+        -0.052615
+       ],
+       [
+        0.14472766,
+        0.34305203,
+        2,
+        0.24769267,
+        0.24769267
+       ],
+       [
+        0.20311329,
+        0.4649176,
+        2,
+        0.2489219,
+        0.2489219
+       ],
+       [
+        0.3508321,
+        -0.33121017,
+        2,
+        -0.12929417,
+        -0.12929417
+       ],
+       [
+        0.766667,
+        -0.015294,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        -0.009742,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.833333,
+        -0.005846,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        -0.003179,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        -0.001479,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        -0.000532,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.966667,
+        -0.000115,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        -3e-06,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.033333,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        0.015508,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        0.123633,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.108417,
+        0.341059,
+        2,
+        1.873935,
+        1.873935
+       ],
+       [
+        0.227525,
+        0.000361,
+        2,
+        -5.604019,
+        -5.604019
+       ],
+       [
+        0.350102,
+        -0.187212,
+        2,
+        -0.103325,
+        -0.103325
+       ],
+       [
+        0.537825,
+        0.009772,
+        2,
+        -0.049838,
+        -0.049838
+       ],
+       [
+        0.9,
+        0.000598,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.966667,
+        8.1e-05,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        1e-06,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.033333,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        2.890015,
+        2.890015
+       ],
+       [
+        0.10737313,
+        0.4471907,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.21128556,
+        0.22840388,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.29403064,
+        0.37746742,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.53456867,
+        -0.16348904,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.82513857,
+        -0.0024042507,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimSingleRot": {
+    "path": "/BodycamAnimationFramework/PRAS/Mossberg590/AIm/Mossberg590_Semi_Aim_Rot.Mossberg590_Semi_Aim_Rot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        -0.002681,
+        2,
+        1.270647,
+        1.270647
+       ],
+       [
+        0.088462,
+        0.112404,
+        2,
+        6.066277,
+        6.066277
+       ],
+       [
+        0.159213,
+        0.760942,
+        2,
+        -1.682591,
+        -1.682591
+       ],
+       [
+        0.208493,
+        -0.089558,
+        2,
+        2.234731,
+        2.234731
+       ],
+       [
+        0.239505,
+        0.940373,
+        2,
+        -4.508051,
+        -4.508051
+       ],
+       [
+        0.414511,
+        -1.0183,
+        2,
+        -4.213668,
+        -4.213668
+       ],
+       [
+        0.7,
+        -1.0,
+        2,
+        2.436963,
+        2.436963
+       ],
+       [
+        0.83105,
+        -0.00321,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.046257,
+        0.54952,
+        2,
+        8.081665,
+        8.081665
+       ],
+       [
+        0.127495,
+        0.70922,
+        2,
+        0.207476,
+        0.207476
+       ],
+       [
+        0.2,
+        0.375,
+        2,
+        0.052169878,
+        0.052169878
+       ],
+       [
+        0.307179,
+        0.363302,
+        2,
+        -5.975908,
+        -5.975908
+       ],
+       [
+        0.416772,
+        -0.164806,
+        2,
+        -0.881736,
+        -0.881736
+       ],
+       [
+        0.5450123,
+        0.03801932,
+        2,
+        -0.201893,
+        -0.201893
+       ],
+       [
+        0.73843604,
+        -0.08441111,
+        2,
+        -0.174789,
+        -0.174789
+       ],
+       [
+        0.8648513,
+        -0.035448737,
+        2,
+        0.43653667,
+        0.43653667
+       ],
+       [
+        1.2,
+        0.0,
+        2,
+        -0.070002,
+        -0.070002
+       ],
+       [
+        1.3,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.086309224,
+        0.3603577,
+        0,
+        -8.555019,
+        8.555021
+       ],
+       [
+        0.12518346,
+        1.0709469,
+        2,
+        6.003108,
+        6.003108
+       ],
+       [
+        0.2590055,
+        -0.13618371,
+        2,
+        -8.822802,
+        -8.822802
+       ],
+       [
+        0.40953955,
+        -0.22548041,
+        2,
+        4.019351,
+        4.019351
+       ],
+       [
+        0.63733065,
+        0.19897814,
+        2,
+        3.749842,
+        3.749842
+       ],
+       [
+        0.7577999,
+        -0.13876134,
+        2,
+        -0.338748,
+        -0.338748
+       ],
+       [
+        1.0148389,
+        0.07151565,
+        2,
+        0.222328,
+        0.222328
+       ],
+       [
+        1.4837587,
+        -0.0076398584,
+        2,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "AimSingleLoc": {
+    "path": "/BodycamAnimationFramework/PRAS/Mossberg590/AIm/Mossberg590_Semi_Aim_Loc.Mossberg590_Semi_Aim_Loc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        0.002482,
+        2,
+        1.061776,
+        1.061776
+       ],
+       [
+        0.098156,
+        0.70049,
+        2,
+        -0.052615,
+        -0.052615
+       ],
+       [
+        0.126951,
+        -0.420398,
+        2,
+        -0.870361,
+        -0.870361
+       ],
+       [
+        0.189928,
+        0.240009,
+        2,
+        0.283508,
+        0.283508
+       ],
+       [
+        0.330578,
+        0.029544,
+        2,
+        -0.570831,
+        -0.570831
+       ],
+       [
+        0.766667,
+        -0.015294,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        -0.009742,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.833333,
+        -0.005846,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        -0.003179,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        -0.001479,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        -0.000532,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.966667,
+        -0.000115,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        -3e-06,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.033333,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        0.015508,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        0.123633,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.108417,
+        0.341059,
+        2,
+        1.873935,
+        1.873935
+       ],
+       [
+        0.227525,
+        0.000361,
+        2,
+        -5.604019,
+        -5.604019
+       ],
+       [
+        0.350102,
+        -0.187212,
+        2,
+        -0.103325,
+        -0.103325
+       ],
+       [
+        0.537825,
+        0.009772,
+        2,
+        -0.049838,
+        -0.049838
+       ],
+       [
+        0.9,
+        0.000598,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.966667,
+        8.1e-05,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        1e-06,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.033333,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        2,
+        0.0,
+        0.0
+       ],
+       [
+        0.026275,
+        0.101469,
+        2,
+        -13.520584,
+        -13.520584
+       ],
+       [
+        0.056764,
+        -0.954098,
+        2,
+        -0.844647,
+        -0.844647
+       ],
+       [
+        0.092353016,
+        -0.16128385,
+        2,
+        2.890015,
+        2.890015
+       ],
+       [
+        0.16892132,
+        -0.054562148,
+        2,
+        5.553894,
+        5.553894
+       ],
+       [
+        0.20122106,
+        0.27069682,
+        2,
+        2.02531,
+        2.02531
+       ],
+       [
+        0.24375263,
+        -0.04423395,
+        2,
+        -0.37005952,
+        -0.37005952
+       ],
+       [
+        0.315449,
+        -0.08147096,
+        2,
+        -1.6070557,
+        -1.6070557
+       ],
+       [
+        0.47002253,
+        -0.34689572,
+        2,
+        -0.46944815,
+        -0.46944815
+       ],
+       [
+        0.572605,
+        -0.09499887,
+        2,
+        0.42388916,
+        0.42388916
+       ],
+       [
+        0.71563566,
+        -0.030005578,
+        2,
+        0.4792329,
+        0.4792329
+       ],
+       [
+        1.4725193,
+        0.0,
+        2,
+        0.31365013,
+        0.31365013
+       ]
+      ]
+     ]
+    }
+   },
+   "PitchAim": {
+    "x": -20.0,
+    "y": -25.0
+   },
+   "YawAim": {
+    "x": -4.0,
+    "y": 4.0,
+    "z": 4.0,
+    "w": 4.0
+   },
+   "RollAim": {
+    "x": -8.0,
+    "y": 8.0,
+    "z": 2.0,
+    "w": 5.0
+   },
+   "PitchHip": {
+    "x": -12.0,
+    "y": -12.0
+   },
+   "YawHip": {
+    "x": -2.0,
+    "y": -1.2,
+    "z": -1.0,
+    "w": 2.0
+   },
+   "RollHip": {
+    "x": -3.0,
+    "y": -2.0,
+    "z": -2.0,
+    "w": 3.0
+   },
+   "KickAim": {
+    "x": -15.0,
+    "y": -25.0
+   },
+   "KickAimUp": {
+    "x": 1.0,
+    "y": 3.0
+   },
+   "KickHipUp": {
+    "x": 8.0,
+    "y": 10.0
+   },
+   "MaxKickHip": 3.0,
+   "MinCameraShake": 1.5,
+   "SmoothRot": {
+    "pitch": 0.0,
+    "yaw": 8.0,
+    "roll": 7.0
+   },
+   "SmoothLoc": {
+    "x": 0.0,
+    "y": 6.0,
+    "z": 6.0
+   },
+   "MultiRot": {
+    "pitch": 1.5,
+    "yaw": 1.1,
+    "roll": 1.3
+   },
+   "MultiLoc": {
+    "x": 1.3,
+    "y": 1.0,
+    "z": 2.0
+   },
+   "bSmoothRoll": true,
+   "Noise2DTarget": {
+    "x": 1.1,
+    "y": 1.1
+   },
+   "Noise2DAccel": {
+    "x": 8.0,
+    "y": 8.0
+   },
+   "Noise2DZero": {
+    "x": 6.0,
+    "y": 6.0
+   },
+   "NoiseAimScalar": 0.7,
+   "Pushback": -3.0,
+   "PushbackZero": 4.0,
+   "PushbackAccel": 9.0,
+   "PitchProgress": {
+    "Accel": 7.0,
+    "Damping": 6.0,
+    "Amount": -0.5
+   },
+   "ZProgress": {
+    "Accel": 9.0,
+    "Damping": 5.0,
+    "Amount": 1.0
+   },
+   "PlayRate": 1.07
+  },
+  "IdleGripPose": {
+   "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Default_Pose.A_FP_Mossberg590_Default_Pose",
+   "length": 1.1333333,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "AimIdlePose": {
+   "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Default_Pose.A_FP_Mossberg590_Default_Pose",
+   "length": 1.1333333,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "StressedIdleSubtle": {
+   "path": "/BodycamAnimationFramework/Animations/General/A_FP_AK_Shake_Loop.A_FP_AK_Shake_Loop",
+   "length": 1.0666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "StressedIdleStrong": {
+   "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Stressed_Additive.A_FP_Mossberg590_Stressed_Additive",
+   "length": 1.3666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "OverlayAnimBlueprint": "/BodycamAnimationFramework/Blueprints/Animation/Overlays/ABP_Overlay_Rifle.ABP_Overlay_Rifle_C",
+  "GunAnimInstance": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/ABP_Mossberg590.ABP_Mossberg590_C",
+  "ReGripMotions": [
+   {
+    "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Regrip01_Montage.A_FP_AK_Regrip01_Montage",
+    "length": 1.0,
+    "rate": 1.0,
+    "notifies": []
+   },
+   {
+    "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Regrip02_Montage.A_FP_AK_Regrip02_Montage",
+    "length": 1.0,
+    "rate": 1.0,
+    "notifies": []
+   },
+   {
+    "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Regrip03_Montage.A_FP_AK_Regrip03_Montage",
+    "length": 1.0666667,
+    "rate": 1.0,
+    "notifies": []
+   },
+   {
+    "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Regrip04_Montage.A_FP_AK_Regrip04_Montage",
+    "length": 0.96666664,
+    "rate": 1.0,
+    "notifies": []
+   }
+  ],
+  "Fire": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Fire_Pump01_Montage.A_FP_Mossberg590_Fire_Pump01_Montage",
+     "length": 1.3,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_FIREPUMP_1.MOSSBERG_FIREPUMP_1"
+       }
+      },
+      {
+       "name": "PullSlider_C",
+       "time": 0.5921,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_Fire_Pump_Montage.A_W_Mossberg590_Fire_Pump_Montage",
+     "length": 1.2,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 8.0,
+      "y": -10.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 8.0,
+      "y": -10.0,
+      "z": 0.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    }
+   }
+  ],
+  "FirstEquip": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Equip_Montage.A_FP_Mossberg590_Equip_Montage",
+    "length": 1.6333333,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_EQUIP.MOSSBERG_EQUIP"
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_Equip_Montage.A_W_Mossberg590_Equip_Montage",
+    "length": 1.6333333,
+    "rate": 1.0,
+    "notifies": []
+   }
+  },
+  "Draw": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Draw_Montage.A_FP_Mossberg590_Draw_Montage",
+    "length": 1.0,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_draw.MOSSBERG_draw"
+      }
+     }
+    ]
+   }
+  },
+  "holster": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Holster_Montage.A_FP_Mossberg590_Holster_Montage",
+    "length": 0.43,
+    "rate": 1.5,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_holster.MOSSBERG_holster"
+      }
+     }
+    ]
+   }
+  },
+  "ReloadStartCalm": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_ReloadPartial_Enter_Montage.A_FP_Mossberg590_ReloadPartial_Enter_Montage",
+     "length": 1.1333333,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_reloadPartial_Enter.MOSSBERG_reloadPartial_Enter",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_ReloadPartial_Enter_Montage.A_W_Mossberg590_ReloadPartial_Enter_Montage",
+     "length": 1.1333333,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "BulletVisibility_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    }
+   }
+  ],
+  "ReloadStartCalmEmpty": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_ReloadEmpty_Enter_Calm_Montage.A_FP_Mossberg590_ReloadEmpty_Enter_Calm_Montage",
+     "length": 3.3333333,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_reloadEmpty_Enter.MOSSBERG_reloadEmpty_Enter",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_ReloadEmpty_Enter_Calm_Montage.A_W_Mossberg590_ReloadEmpty_Enter_Calm_Montage",
+     "length": 2.9,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    }
+   }
+  ],
+  "ReloadStartStressed": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_ReloadPartial_Enter_Montage.A_FP_Mossberg590_ReloadPartial_Enter_Montage",
+     "length": 1.1333333,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_reloadPartial_Enter.MOSSBERG_reloadPartial_Enter",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_ReloadPartial_Enter_Montage.A_W_Mossberg590_ReloadPartial_Enter_Montage",
+     "length": 1.1333333,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "BulletVisibility_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {}
+      }
+     ]
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    }
+   }
+  ],
+  "ReloadStartStressedEmpty": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_ReloadEmpty_Enter_Stressed_Montage.A_FP_Mossberg590_ReloadEmpty_Enter_Stressed_Montage",
+     "length": 3.5666666,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_reloadEmpty_Enter_stressed.MOSSBERG_reloadEmpty_Enter_stressed",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_ReloadEmpty_Enter_Stressed_Montage.A_W_Mossberg590_ReloadEmpty_Enter_Stressed_Montage",
+     "length": 3.0666666,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    }
+   }
+  ],
+  "ReloadLoopCalm": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Reload_Loop_Calm01_Montage.A_FP_Mossberg590_Reload_Loop_Calm01_Montage",
+     "length": 1.1333333,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_Reload_Loop_Calm01_V2.MOSSBERG_Reload_Loop_Calm01_V2",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_Reload_Loop_Calm01_Montage.A_W_Mossberg590_Reload_Loop_Calm01_Montage",
+     "length": 1.0333333,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Reload_Loop_Calm02_Montage.A_FP_Mossberg590_Reload_Loop_Calm02_Montage",
+     "length": 1.3,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_Reload_Loop_Calm02_V2.MOSSBERG_Reload_Loop_Calm02_V2",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_Reload_Loop_Calm02_Montage.A_W_Mossberg590_Reload_Loop_Calm02_Montage",
+     "length": 1.2333333,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Reload_Loop_Calm03_Montage.A_FP_Mossberg590_Reload_Loop_Calm03_Montage",
+     "length": 1.8666667,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_Reload_Loop_Calm03_V2.MOSSBERG_Reload_Loop_Calm03_V2",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_Reload_Loop_Calm03_Montage.A_W_Mossberg590_Reload_Loop_Calm03_Montage",
+     "length": 1.6333333,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Reload_Loop_Calm04_Montage.A_FP_Mossberg590_Reload_Loop_Calm04_Montage",
+     "length": 1.5333333,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_Reload_Loop_Calm04_V2.MOSSBERG_Reload_Loop_Calm04_V2",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_Reload_Loop_Calm04_Montage.A_W_Mossberg590_Reload_Loop_Calm04_Montage",
+     "length": 1.3666667,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    }
+   }
+  ],
+  "ReloadLoopStressed": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Reload_Loop_Stressed01_Montage.A_FP_Mossberg590_Reload_Loop_Stressed01_Montage",
+     "length": 1.4333333,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_Reload_Loop_Stressed01_V2.MOSSBERG_Reload_Loop_Stressed01_V2",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_Reload_Loop_Stressed01_Montage.A_W_Mossberg590_Reload_Loop_Stressed01_Montage",
+     "length": 1.2666667,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Reload_Loop_Stressed02_Montage.A_FP_Mossberg590_Reload_Loop_Stressed02_Montage",
+     "length": 1.7,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_Reload_Loop_Stressed02_V2.MOSSBERG_Reload_Loop_Stressed02_V2",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_Reload_Loop_Stressed02_Montage.A_W_Mossberg590_Reload_Loop_Stressed02_Montage",
+     "length": 1.5333333,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Reload_Loop_Stressed03_Montage.A_FP_Mossberg590_Reload_Loop_Stressed03_Montage",
+     "length": 1.7666667,
+     "rate": 1.0,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_Reload_Loop_Stressed03_V2.MOSSBERG_Reload_Loop_Stressed03_V2",
+        "SoundTag": "Sound.Type.Reload"
+       }
+      }
+     ]
+    },
+    "Weapon": {
+     "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_Reload_Loop_Stressed03_Montage.A_W_Mossberg590_Reload_Loop_Stressed03_Montage",
+     "length": 1.6,
+     "rate": 1.0,
+     "notifies": []
+    },
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": -5.0,
+      "z": 3.0
+     }
+    }
+   }
+  ],
+  "ReloadEndCalm": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Reload_LastShell_Exit_Calm_Montage.A_FP_Mossberg590_Reload_LastShell_Exit_Calm_Montage",
+    "length": 1.7333333,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_Reload_LastShell_Exit_Calm_V2.MOSSBERG_Reload_LastShell_Exit_Calm_V2",
+       "SoundTag": "Sound.Type.Reload"
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_Reload_LastShell_Exit_Calm01_Montage.A_W_Mossberg590_Reload_LastShell_Exit_Calm01_Montage",
+    "length": 1.0666667,
+    "rate": 1.0,
+    "notifies": []
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    }
+   }
+  },
+  "ReloadEndStressed": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Reload_LastShell_Exit_Calm_Montage.A_FP_Mossberg590_Reload_LastShell_Exit_Calm_Montage",
+    "length": 1.7333333,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_Reload_LastShell_Exit_Calm_V2.MOSSBERG_Reload_LastShell_Exit_Calm_V2",
+       "SoundTag": "Sound.Type.Reload"
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_Reload_LastShell_Exit_Calm01_Montage.A_W_Mossberg590_Reload_LastShell_Exit_Calm01_Montage",
+    "length": 1.0666667,
+    "rate": 1.0,
+    "notifies": []
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    }
+   }
+  },
+  "CancelLoop": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_CancelLoop_Montage.A_FP_Mossberg590_CancelLoop_Montage",
+    "length": 1.0666667,
+    "rate": 1.0,
+    "notifies": []
+   }
+  },
+  "Inspect": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Inspect_Montage.A_FP_Mossberg590_Inspect_Montage",
+    "length": 5.0666666,
+    "rate": 1.0,
+    "notifies": []
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": 5.0,
+     "y": -8.0,
+     "z": 0.0
+    },
+    "Max": {
+     "x": 5.0,
+     "y": -5.0,
+     "z": 5.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    }
+   }
+  },
+  "MagCheckEmpty": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_MagCheck_Empty_Montage.A_FP_Mossberg590_MagCheck_Empty_Montage",
+    "length": 5.1666665,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_MAGCHECK_EMPTY.MOSSBERG_MAGCHECK_EMPTY"
+      }
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 1.1155,
+      "duration": 0.0,
+      "props": {}
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 1.85,
+      "duration": 0.0,
+      "props": {
+       "Show?": false
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_MagCheck_Empty_Montage.A_W_Mossberg590_MagCheck_Empty_Montage",
+    "length": 5.1666665,
+    "rate": 1.0,
+    "notifies": []
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    }
+   }
+  },
+  "MagCheckFull": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_MagCheck_Full_Montage.A_FP_Mossberg590_MagCheck_Full_Montage",
+    "length": 3.0,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Mossberg590/Sounds/MOSSBERG_MAGCHECK.MOSSBERG_MAGCHECK"
+      }
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 0.842,
+      "duration": 0.0,
+      "props": {}
+     },
+     {
+      "name": "SetMagCheckUIVisibility_C",
+      "time": 1.6733,
+      "duration": 0.0,
+      "props": {
+       "Show?": false
+      }
+     }
+    ]
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/Mossberg590/Weapon/A_W_Mossberg590_MagCheck_Full_Montage.A_W_Mossberg590_MagCheck_Full_Montage",
+    "length": 3.0666666,
+    "rate": 1.0,
+    "notifies": []
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -15.0,
+     "z": 3.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    }
+   },
+   "CrouchedActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    },
+    "Max": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 3.0
+    }
+   }
+  },
+  "AimIn": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/Mossberg590/Additive_Mossberg590_Aim_In.Additive_Mossberg590_Aim_In",
+  "AimOut": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/Mossberg590/Additive_Mossberg590_Aim_Out.Additive_Mossberg590_Aim_Out",
+  "CurveWalk": {
+   "path": "/BodycamAnimationFramework/Animations/AKM/Character/A_FP_AK_Walk_Loop.A_FP_AK_Walk_Loop",
+   "length": 3.0666666,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpStart": {
+   "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Jump_Start.A_FP_Mossberg590_Jump_Start",
+   "length": 0.9,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpLoop": {
+   "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Jump_Loop.A_FP_Mossberg590_Jump_Loop",
+   "length": 3.4666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpEnd": {
+   "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Jump_End.A_FP_Mossberg590_Jump_End",
+   "length": 1.0333333,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "SpineAdditiveActionWeight": 0.6,
+  "ActionPitchAngle": {
+   "x": -50.0,
+   "y": 300.0
+  },
+  "SwayAdsScale": 0.0,
+  "RelaxedIdleTP": {
+   "path": "/BodycamAnimationFramework/Animations/Mossberg590/Character/A_FP_Mossberg590_Draw.A_FP_Mossberg590_Draw",
+   "length": 1.2666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "bUsePullSliderNotify": true,
+  "NativeClass": "/BodycamAnimationFramework/Blueprints/Animation/Data/DA_BodycamAnimationSettings.DA_BodycamAnimationSettings_C"
+ }
+}
