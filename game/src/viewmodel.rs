@@ -1,4 +1,4 @@
-//! First-person viewmodel: Bodycam_Player's `Arms` (SKM_HumanArmsLongSleeves_Morphers, AnimClass Viewmodel_C)
+﻿//! First-person viewmodel: Bodycam_Player's `Arms` (SKM_HumanArmsLongSleeves_Morphers, AnimClass Viewmodel_C)
 //! with the equipped gun attached at `ik_hand_gun` (BP_EquippableItem.ItemAttachBone = VB ik_hand_gun, identity).
 //! Models/clips come from tools/build_models.py (assets-local/models). The arms hang off the body-driven view
 //! pose (`Player::view_base`) so the head's FP_Camera socket - where UE attaches the camera - sits on the camera,
@@ -6,7 +6,7 @@
 //! Animation: base loop (Idle_Loop01 / Walk_Loop / AimIdlePose) plus the BAS montages from `MontageStarted`
 //! and `Fired`, crossfaded; the gun plays the matching A_W_* clip.
 use crate::player::Player;
-use crate::weapon::{Fired, Inventory, MontageStarted};
+use crate::weapon::{ActionKind, Fired, Inventory, MontageStarted};
 use bevy::animation::AnimationTargetId;
 use bevy::gltf::Gltf;
 use bevy::prelude::*;
@@ -18,6 +18,18 @@ use std::time::Duration;
 /// in head-bone axes (bone X = up, bone -Y = forward). Matches the live-measured camera mount within 5 cm.
 const FP_CAMERA_SOCKET: Vec3 = Vec3::new(-0.008, 1.670, -0.217);
 const BLEND: Duration = Duration::from_millis(150);
+
+/// Stand-in for the FP_Action_Weight anim curve: UE pitches the camera by BAS ActionPitchAngle.x * SpineAdditiveActionWeight
+/// (-50 * 0.6 = -30 deg) * FP_Action_Weight(t). Mag check needs the full -30 to keep the hands where idle has them;
+/// reload measured in-game plateaus at -13 deg (camera_motion.json sequences.reload) -> ~0.43.
+// ponytail: flat per-action weight, sample the real curve once curves.json exists.
+fn action_weight(kind: ActionKind) -> f32 {
+    match kind {
+        ActionKind::MagCheck | ActionKind::Inspect => 1.0,
+        ActionKind::Reload => 0.43,
+        ActionKind::Holster | ActionKind::Draw => 0.0,
+    }
+}
 
 pub struct ViewmodelPlugin;
 impl Plugin for ViewmodelPlugin {
@@ -82,6 +94,8 @@ struct Anim {
     current: Option<String>,
     /// A montage plays until this time (seconds since startup); afterwards the base loop resumes.
     montage_until: f32,
+    /// Camera pitch (deg) the running montage asks for; 0 for fire.
+    action_pitch: f32,
 }
 
 fn clip_graph(g: &Gltf, graphs: &mut Assets<AnimationGraph>) -> (Handle<AnimationGraph>, HashMap<String, AnimationNodeIndex>) {
@@ -109,7 +123,7 @@ fn spawn_arms(
             ArmsRoot,
             WorldAssetRoot(g.scenes[0].clone()),
             AnimationGraphHandle(graph),
-            Anim { nodes, current: None, montage_until: 0.0 },
+            Anim { nodes, current: None, montage_until: 0.0, action_pitch: 0.0 },
             Transform::default(),
             crate::player::IgnoreTraces,
         ))
@@ -188,7 +202,7 @@ fn attach_gun(
     }
     let (graph, nodes) = clip_graph(g, &mut graphs);
     let gun = cmd
-        .spawn((GunRoot(want), WorldAssetRoot(g.scenes[0].clone()), AnimationGraphHandle(graph), Anim { nodes, current: None, montage_until: 0.0 }, Transform::default()))
+        .spawn((GunRoot(want), WorldAssetRoot(g.scenes[0].clone()), AnimationGraphHandle(graph), Anim { nodes, current: None, montage_until: 0.0, action_pitch: 0.0 }, Transform::default()))
         .id();
     cmd.entity(hand).add_child(gun);
 }
@@ -216,20 +230,29 @@ fn play_events(
     mut roots: Query<(&mut Anim, Has<ArmsRoot>)>,
     mut players: Query<(&mut AnimationPlayer, &mut AnimationTransitions, &AnimLink)>,
 ) {
-    let mut starts: Vec<(String, f32)> = montages.read().map(|m| (clip_of(&m.montage.path), m.montage.length)).collect();
+    let mut starts: Vec<(String, f32, f32)> = montages
+        .read()
+        .map(|m| {
+            let a = inv.as_ref().map(|i| &i.slots[i.current].anims);
+            let bas = |k: &str| a.and_then(|a| a[k].as_f64()).unwrap_or(0.0) as f32;
+            let max = a.and_then(|a| a["ActionPitchAngle"]["x"].as_f64()).unwrap_or(0.0) as f32 * bas("SpineAdditiveActionWeight");
+            (clip_of(&m.montage.path), m.montage.length, max * action_weight(m.kind))
+        })
+        .collect();
     if fired.read().count() > 0
         && let Some(inv) = &inv
         && let Some(path) = inv.slots[inv.current].anims["Fire"][0]["Character"]["path"].as_str()
     {
-        starts.push((clip_of(path), 0.0)); // fire is additive-ish: play, but let the base loop resume right away
+        starts.push((clip_of(path), 0.0, 0.0)); // fire is additive-ish: play, but let the base loop resume right away
     }
     let now = time.elapsed_secs();
-    for (clip, len) in starts {
+    for (clip, len, pitch) in starts {
         for (mut player, mut tr, link) in &mut players {
             let Ok((mut anim, is_arms)) = roots.get_mut(link.0) else { continue };
             let name = if is_arms { clip.clone() } else { clip.replacen("A_FP_", "A_W_", 1) };
             if play(&mut anim, &mut player, &mut tr, &name, false) {
                 anim.montage_until = now + if len > 0.0 { len } else { 0.25 };
+                anim.action_pitch = pitch;
             }
         }
     }
@@ -306,8 +329,15 @@ fn follow_head(
     let d = Transform { translation: d.translation * *weight, rotation: Quat::IDENTITY.slerp(d.rotation, *weight), ..default() };
     let to_socket = Transform::from_translation(FP_CAMERA_SOCKET);
     let residual = Transform::from_matrix(p.view_base.to_matrix().inverse() * cam.to_matrix());
+    // Camera-only pitch-down during actions so the gun the montage brings to the chest stays in frame (arms stay on view_base).
+    let action_pitch = Transform::from_rotation(Quat::from_rotation_x(anim.action_pitch.to_radians() * *weight));
     **cam = Transform::from_matrix(
-        p.view_base.to_matrix() * to_socket.to_matrix().inverse() * d.to_matrix() * to_socket.to_matrix() * residual.to_matrix(),
+        p.view_base.to_matrix()
+            * to_socket.to_matrix().inverse()
+            * d.to_matrix()
+            * to_socket.to_matrix()
+            * residual.to_matrix()
+            * action_pitch.to_matrix(),
     );
 }
 
@@ -332,6 +362,7 @@ fn place_arms(p: Single<&Player>, mut arms: Query<&mut Transform, With<ArmsRoot>
 pub fn debug_bones(
     time: Res<Time>,
     arms: Query<&GlobalTransform, With<ArmsRoot>>,
+    cam: Single<&GlobalTransform, With<crate::player::BodycamCamera>>,
     joints: Query<(&Name, &GlobalTransform)>,
     morphs: Query<(Option<&Name>, &bevy::mesh::morph::MorphWeights)>,
     meshes: Query<(Option<&Name>, &ViewVisibility, &InheritedVisibility, &GlobalTransform), With<Mesh3d>>,
@@ -343,15 +374,12 @@ pub fn debug_bones(
     *last = time.elapsed_secs();
     let Ok(r) = arms.single() else { return };
     info!("t={:.1} arms root world {:?}", *last, r.translation());
-    let mut worst = (0.0f32, String::new());
-    for (n, gt) in &joints {
-        let (sc, _, t) = (r.affine().inverse() * gt.affine()).to_scale_rotation_translation();
-        let m = t.length().max(sc.max_element()) * if t.is_nan() || sc.is_nan() { 1e9 } else { 1.0 };
-        if m > worst.0 {
-            worst = (m, format!("{} pos {:?} scale {:?}", n.as_str(), t, sc));
-        }
+    let cam = cam.affine().inverse();
+    for (n, gt) in joints.iter().filter(|(n, _)| ["ik_hand_gun", "hand_r", "hand_l"].contains(&n.as_str())) {
+        let t = cam.transform_point3(gt.translation());
+        // Camera looks down -Z: elevation of the bone relative to view forward (negative = below centre).
+        info!("t={:.1} {} cam {:?} elev {:.1} deg", *last, n.as_str(), t, t.y.atan2(-t.z).to_degrees());
     }
-    info!("t={:.1} farthest joint: {}", *last, worst.1);
     for (n, vv, iv, gt) in &meshes {
         info!("t={:.1} mesh {} view_visible={} inherited={} world={:?}", *last, n.map(|n| n.as_str()).unwrap_or("?"), vv.get(), iv.get(), gt.translation());
     }
