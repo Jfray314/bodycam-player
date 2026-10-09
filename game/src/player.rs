@@ -88,10 +88,26 @@ fn add(a: &mut [f32; 6], b: [f32; 6], w: f32) {
     }
 }
 
+/// Gait step / landing, replaces the animation footstep notifies. `kind as i32` is the cues' `FootstepType` switch value.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum StepKind {
+    Crouch = 1,
+    Walk = 2,
+    Run = 3,
+    Land = 4,
+}
+
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Footstep {
+    pub kind: StepKind,
+    pub stride_start: bool,
+}
+
 pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(CameraMotion::load())
+            .add_message::<Footstep>()
             .add_systems(Startup, spawn)
             .add_systems(Update, (grab_cursor, on_fire, look, movement, bodycam_camera).chain());
     }
@@ -219,7 +235,7 @@ fn fire_shake(p: &mut Player, dt: f32) -> Vec3 {
 }
 
 /// UCharacterMovementComponent::CalcVelocity (walking) with Bodycam's values, plus jump/fall.
-fn movement(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut q: Single<(&mut Player, &mut Transform)>) {
+fn movement(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut q: Single<(&mut Player, &mut Transform)>, mut steps: MessageWriter<Footstep>) {
     let (p, tf) = &mut *q;
     let dt = time.delta_secs();
     let input = Vec2::new(
@@ -261,6 +277,7 @@ fn movement(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut q: Single<(&mu
     if tf.translation.y <= 0.0 {
         if !p.grounded {
             p.since_land = 0.0;
+            steps.write(Footstep { kind: StepKind::Land, stride_start: false });
         }
         tf.translation.y = 0.0;
         p.vel.y = 0.0;
@@ -271,7 +288,7 @@ fn movement(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut q: Single<(&mu
 }
 
 /// AC_BodycamCamera replacement: measured idle pose + gait loops + land event + lean, on the chest mount.
-fn bodycam_camera(time: Res<Time>, cm: Res<CameraMotion>, mut player: Single<&mut Player>, mut cam: Single<&mut Transform, With<BodycamCamera>>) {
+fn bodycam_camera(time: Res<Time>, cm: Res<CameraMotion>, mut player: Single<&mut Player>, mut cam: Single<&mut Transform, With<BodycamCamera>>, mut steps: MessageWriter<Footstep>) {
     let p = &mut **player;
     let dt = time.delta_secs();
     let target_center = if p.crouched { CROUCH_HALF_HEIGHT } else { HALF_HEIGHT };
@@ -288,7 +305,13 @@ fn bodycam_camera(time: Res<Time>, cm: Res<CameraMotion>, mut player: Single<&mu
         (&cm.loops.walk, WALK)
     };
     let w = if p.grounded { (speed / ref_speed).min(1.0) } else { 0.0 };
+    let before = p.phase;
     p.phase += dt / gait.period_s * w;
+    // One measured loop = one stride = two steps (phase crosses 0.0 and 0.5); stands in for the animation notifies.
+    if w > 0.3 && (p.phase * 2.0).floor() > (before * 2.0).floor() {
+        let kind = if p.crouched { StepKind::Crouch } else if p.sprinting { StepKind::Run } else { StepKind::Walk };
+        steps.write(Footstep { kind, stride_start: p.phase.floor() > before.floor() });
+    }
 
     let crouch_a = ((HALF_HEIGHT - p.center) / (HALF_HEIGHT - CROUCH_HALF_HEIGHT)).clamp(0.0, 1.0);
     let mut c: [f32; 6] = std::array::from_fn(|k| cm.idle[k] + (cm.crouch_idle[k] - cm.idle[k]) * crouch_a);

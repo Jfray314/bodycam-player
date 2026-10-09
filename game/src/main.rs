@@ -1,3 +1,4 @@
+mod audio;
 mod curve;
 mod hud;
 mod player;
@@ -10,10 +11,11 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(AssetPlugin {
             // Converted game assets (fonts, audio, models) live outside git; see REWRITE.md.
-            file_path: concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into(),
+            // BODYCAM_ASSETS overrides the root (for a checkout that has no assets-local next to it).
+            file_path: std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into()),
             ..default()
         }))
-        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin))
+        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, audio::AudioPlugin))
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
         .add_systems(Startup, test_range)
         .run();

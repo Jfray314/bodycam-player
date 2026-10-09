@@ -7,9 +7,10 @@
 //! entry bypassed in the cooked asset, so it is an identity and nothing is applied. The gun chain SE_Compressor_Guns
 //! (distortion + dynamics) is not implemented (see `GUN_CHAIN_GAP`).
 use crate::player::{Footstep, Player, StepKind};
-use bevy::audio::{PlaybackMode, Volume};
+use crate::weapon::{DryFire, Fired, MontageStarted};
+use bevy::audio::{AudioSinkPlayback, Volume};
 use bevy::prelude::*;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -289,30 +290,12 @@ fn warn_once_unknown(c: &str) {
 
 /// `/Game/Audio/X` -> `audio/X.wav`, `/Game/Y` -> `audio/Y.wav`, `/Plugin/Z` -> `audio/Plugin/Z.wav` (matches tools/audio-bake).
 pub fn wav_path(pkg: &str) -> String {
+    let pkg = pkg.split('.').next().unwrap();
     let p = pkg.strip_prefix("/Game/").map(|r| r.strip_prefix("Audio/").unwrap_or(r)).unwrap_or(&pkg[1..]);
     format!("audio/{p}.wav")
 }
 
 // ---------- events ----------
-
-/// Weapon fired / dry-fired (sent from weapon.rs); `weapon` is the stats name (e.g. "M4A1").
-#[derive(Message)]
-pub enum WeaponSfx {
-    Fire(String),
-    Dry(String),
-}
-
-/// Play a montage `PlayWepSounds` notify sound (cue or wave package path) after `delay` seconds.
-#[derive(Message)]
-pub struct PlayWeaponSound {
-    pub sound: String,
-    pub delay: f32,
-}
-
-/// All `PlayWepSounds_C` notifies of a baked montage `{path, length, notifies:[{name,time,props}]}` as (time, sound).
-pub fn montage_sounds(montage: &Value) -> Vec<(f32, String)> {
-    montage["notifies"].as_array().into_iter().flatten().filter(|n| n["name"] == "PlayWepSounds_C").filter_map(|n| Some((n["time"].as_f64()? as f32, n["props"]["Sound"].as_str()?.split('.').next()?.to_string()))).collect()
-}
 
 // ---------- playback ----------
 
@@ -324,27 +307,14 @@ struct Pending {
     pitch: f32,
 }
 
-#[derive(Component)]
-struct Breath(u8);
-
 #[derive(Resource, Default)]
 struct Live {
     groups: HashMap<String, VecDeque<Vec<Entity>>>,
     handles: HashMap<String, Handle<AudioSource>>,
     preloaded: HashSet<String>,
     aiming: bool,
-    breath: BreathState,
-    sprint_time: f32,
-    breath_since: f32,
-}
-
-#[derive(Default, PartialEq, Clone, Copy, Debug)]
-enum BreathState {
-    #[default]
-    None,
-    Normal,
-    Run,
-    Out,
+    /// Notify sounds waiting for their time: (seconds to go, package path).
+    queue: Vec<(f32, String)>,
 }
 
 pub struct AudioPlugin;
@@ -361,10 +331,28 @@ impl Plugin for AudioPlugin {
             }
         }
         app.init_resource::<Live>()
-            .add_message::<WeaponSfx>()
-            .add_message::<PlayWeaponSound>()
+            .insert_resource(Vitals::default())
+            .insert_resource(Tremor(0.0))
+            .init_resource::<Loops>()
             .add_systems(PostStartup, preload_player)
-            .add_systems(Update, (footsteps, weapon_sfx, montage_sfx, aim_sfx, breathing, start_pending, preload_weapons));
+            .add_systems(Update, (footsteps, weapon_sfx, montage_sfx, run_queue, aim_sfx, start_pending, preload_weapons, loops, selftest).chain());
+    }
+}
+
+/// BODYCAM_AUDIO_SELFTEST=1: emit steps and dry-fires without input so a headless run exercises the cues.
+fn selftest(time: Res<Time>, mut steps: MessageWriter<Footstep>, mut dry: MessageWriter<DryFire>, mut n: Local<u32>) {
+    if std::env::var_os("BODYCAM_AUDIO_SELFTEST").is_none() {
+        return;
+    }
+    let k = (time.elapsed_secs() * 2.0) as u32;
+    if k > *n && k > 4 {
+        *n = k;
+        match k % 4 {
+            0 => { dry.write(DryFire { row: "M4A1".into() }); }
+            1 => { steps.write(Footstep { kind: StepKind::Walk, stride_start: true }); }
+            2 => { steps.write(Footstep { kind: StepKind::Run, stride_start: false }); }
+            _ => { steps.write(Footstep { kind: StepKind::Land, stride_start: false }); }
+        }
     }
 }
 
@@ -445,27 +433,39 @@ fn footsteps(mut cmd: Commands, mut ev: MessageReader<Footstep>, mut bank: ResMu
     }
 }
 
-fn weapon_sfx(mut cmd: Commands, mut ev: MessageReader<WeaponSfx>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>) {
-    for e in ev.read() {
-        let (w, kind) = match e {
-            WeaponSfx::Fire(w) => (w, "Fire"),
-            WeaponSfx::Dry(w) => (w, "FireDry"),
-        };
-        if let Some(c) = bank.weapon_cue(w, kind).map(str::to_string) {
+fn weapon_sfx(mut cmd: Commands, mut fired: MessageReader<Fired>, mut dry: MessageReader<DryFire>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>) {
+    let shots = fired.read().map(|f| (f.row.clone(), "Fire")).chain(dry.read().map(|d| (d.row.clone(), "FireDry")));
+    for (row, kind) in shots.collect::<Vec<_>>() {
+        if let Some(c) = bank.weapon_cue(&row, kind).map(str::to_string) {
             trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &c, &Params::default(), MUZZLE_DIST_CM);
         }
     }
 }
 
-/// Montage notify sound: a cue is evaluated, a bare SoundWave plays as is.
-fn montage_sfx(mut cmd: Commands, mut ev: MessageReader<PlayWeaponSound>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>) {
-    for e in ev.read() {
-        if bank.has(&e.sound) {
-            trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &e.sound, &Params::default(), MUZZLE_DIST_CM);
+/// Montage `PlayWepSounds_C` notifies: a cue is evaluated, a bare SoundWave plays as is, both at the notify time.
+fn montage_sfx(mut ev: MessageReader<MontageStarted>, mut live: ResMut<Live>) {
+    for m in ev.read() {
+        for (t, name, props) in &m.montage.notifies {
+            if name == "PlayWepSounds_C" && let Some(s) = props["Sound"].as_str() {
+                live.queue.push((*t, s.split('.').next().unwrap().to_string()));
+            }
+        }
+    }
+}
+
+/// Fires queued notify sounds once their time has come (the queue holds time-to-go).
+fn run_queue(mut cmd: Commands, time: Res<Time>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>) {
+    let dt = time.delta_secs();
+    let q = std::mem::take(&mut live.queue);
+    for (t, s) in q {
+        if t > dt {
+            live.queue.push((t - dt, s));
+        } else if bank.has(&s) {
+            trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &s, &Params::default(), MUZZLE_DIST_CM);
         } else {
-            let handle = load_wave(&mut live, &assets, &e.sound);
-            cmd.spawn(Pending { wait: e.delay, handle, volume: 1.0, pitch: 1.0 });
-            info!("audio: wave {}", e.sound);
+            let handle = load_wave(&mut live, &assets, &s);
+            cmd.spawn(Pending { wait: 0.0, handle, volume: 1.0, pitch: 1.0 });
+            info!("audio: wave {s}");
         }
     }
 }
@@ -478,42 +478,143 @@ fn aim_sfx(mut cmd: Commands, p: Single<&Player>, mut bank: ResMut<Bank>, mut li
     }
 }
 
-/// Idle breathing; run breathing while sprinting; out-of-breath loop after a long sprint until it has settled.
-// ponytail: thresholds eyeballed (3 s sprint -> 6 s out of breath); the real stamina attribute isn't ported yet.
-fn breathing(mut cmd: Commands, time: Res<Time>, p: Single<&Player>, mut live: ResMut<Live>, assets: Res<AssetServer>, old: Query<Entity, With<Breath>>) {
-    let dt = time.delta_secs();
-    if p.sprinting {
-        live.sprint_time += dt;
+// ---------- AC_BodycamCamera persistent sounds (UpdateWindCameraSounds / UpdateFoleySounds / UpdateBreathingSounds / UpdateTremorSounds) ----------
+
+/// SurvivorStatus inputs of UpdateBreathingSounds (stand-in until status.rs lands; `stamina` is the 0..1 term added to the breath speed).
+#[derive(Resource)]
+pub struct Vitals {
+    pub health: f32,
+    pub stamina: f32,
+    pub stress: f32,
+}
+impl Default for Vitals {
+    fn default() -> Self {
+        Vitals { health: 100.0, stamina: 0.0, stress: 0.0 }
     }
-    let want = if p.sprinting {
-        BreathState::Run
-    } else if live.sprint_time > 3.0 && live.breath_since < 6.0 {
-        BreathState::Out
-    } else {
-        BreathState::Normal
-    };
-    if want == BreathState::Out || live.breath != BreathState::Out {
-        live.breath_since = if want == BreathState::Out { live.breath_since + dt } else { 0.0 };
-    }
-    if want == BreathState::Normal {
-        live.sprint_time = 0.0;
-    }
-    if want != live.breath {
-        live.breath = want;
-        for e in &old {
-            cmd.entity(e).despawn();
+}
+
+/// AC_BodycamCamera.Tremor: set by hits / explosions, decays with FInterpTo(.., 0, dt, 3).
+#[derive(Resource)]
+pub struct Tremor(pub f32);
+
+fn map_clamped(v: f32, a: f32, b: f32, c: f32, d: f32) -> f32 {
+    c + (d - c) * ((v - a) / (b - a)).clamp(0.0, 1.0)
+}
+
+fn finterp(cur: f32, target: f32, dt: f32, speed: f32) -> f32 {
+    let d = target - cur;
+    if d * d < 1e-8 { target } else { cur + d * (dt * speed).clamp(0.0, 1.0) }
+}
+
+/// A cue played as an AudioComponent: re-evaluated every frame with its live parameters and a fixed random seed (so Random
+/// nodes keep their pick), every wave looping; waves whose crossfade weight is 0 stay running at zero volume.
+#[derive(Default)]
+struct Cont {
+    ents: HashMap<String, Entity>,
+}
+
+impl Cont {
+    fn update(&mut self, cmd: &mut Commands, bank: &mut Bank, assets: &AssetServer, sinks: &mut Query<&mut AudioSink>, cue: &str, params: &Params, mult: f32) {
+        let mut want: HashMap<String, (f32, f32)> = HashMap::new();
+        for v in bank.evaluate(cue, params, 0.0, &mut rand::rngs::StdRng::seed_from_u64(7)) {
+            let e = want.entry(v.wave).or_insert((0.0, v.pitch));
+            e.0 += v.volume * mult;
         }
-        let kind = match want {
-            BreathState::Run => "Run",
-            BreathState::Out => "OutOfBreath",
-            _ => "Normal",
-        };
-        let n = rand::rng().random_range(1..=2);
-        let wave = format!("/Game/Audio/Player/Breathing/Bodycam_Foley_Player_Breathing_{kind}_0{n}_V3");
-        let h = load_wave(&mut live, &assets, &wave);
-        cmd.spawn((Breath(n), AudioPlayer::<AudioSource>(h), PlaybackSettings { mode: PlaybackMode::Loop, ..PlaybackSettings::ONCE }));
-        info!("audio: breathing {kind}_0{n}");
+        for (wave, (vol, pitch)) in &want {
+            match self.ents.get(wave).and_then(|e| sinks.get_mut(*e).ok()) {
+                Some(mut sink) => sink.set_volume(Volume::Linear(*vol)),
+                None if self.ents.contains_key(wave) => {} // sink not created yet
+                None => {
+                    // Mute-start waves that are not audible yet but may become so.
+                    let id = cmd.spawn((AudioPlayer::<AudioSource>(assets.load(wav_path(wave))), PlaybackSettings::LOOP.with_volume(Volume::Linear(*vol)).with_speed(*pitch))).id();
+                    self.ents.insert(wave.clone(), id);
+                }
+            }
+        }
+        for (wave, e) in &self.ents {
+            if !want.contains_key(wave) && let Ok(mut sink) = sinks.get_mut(*e) {
+                sink.set_volume(Volume::Linear(0.0));
+            }
+        }
     }
+}
+
+#[derive(Resource)]
+struct Loops {
+    wind: Cont,
+    foley: Cont,
+    breath: Cont,
+    tremor: Cont,
+    foley_vol: f32,
+    wind_vol: f32,
+    tremor_vol: f32,
+    high_rotation: f32,
+    last_look: Option<Vec2>,
+    fatigue: f32,
+}
+impl Default for Loops {
+    fn default() -> Self {
+        Loops { wind: Cont::default(), foley: Cont::default(), breath: Cont::default(), tremor: Cont::default(), foley_vol: 0.0, wind_vol: 0.0, tremor_vol: 1.0, high_rotation: 0.0, last_look: None, fatigue: 0.0 }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn loops(
+    mut cmd: Commands,
+    time: Res<Time>,
+    p: Single<&Player>,
+    cam: Single<&GlobalTransform, With<crate::player::BodycamCamera>>,
+    mut ray: bevy::picking::mesh_picking::ray_cast::MeshRayCast,
+    mut bank: ResMut<Bank>,
+    mut st: ResMut<Loops>,
+    mut vit: ResMut<Vitals>,
+    mut tremor: ResMut<Tremor>,
+    assets: Res<AssetServer>,
+    mut sinks: Query<&mut AudioSink>,
+) {
+    let dt = time.delta_secs();
+    // Yaw/Pitch(DeltaTime): per-frame control-rotation change in degrees.
+    let look = Vec2::new(p.yaw, p.pitch);
+    let d = st.last_look.map_or(Vec2::ZERO, |l| (look - l).abs() * (180.0 / std::f32::consts::PI));
+    st.last_look = Some(look);
+    let (dy, dp) = (d.x, d.y);
+    let speed_cm = Vec2::new(p.vel.x, p.vel.z).length() * 100.0;
+
+    // UpdateHighRotation
+    st.high_rotation = finterp(st.high_rotation, dy + dp, dt, 5.0);
+
+    // Wind: 5 m trace up decides the interior factor (WindInteriorMultiply 0.5).
+    let up = ray.cast_ray(Ray3d::new(cam.translation(), Dir3::Y), &default()).first().map(|(_, h)| h.distance * 100.0).filter(|d| *d <= 500.0);
+    let interior = map_clamped(up.unwrap_or(500.0), 200.0, 500.0, 0.5, 1.0);
+    let wind_target = map_clamped(dy + dp + map_clamped(speed_cm, 150.0, 300.0, 0.1, 3.0), 0.0, 3.0, 0.0, interior);
+    st.wind_vol = finterp(st.wind_vol, wind_target, dt, 10.0);
+    let mut wp = Params::default();
+    wp.bools.insert("highSpeed", speed_cm > 150.0);
+    wp.floats.insert("highRotation", st.high_rotation);
+    let wind_vol = st.wind_vol;
+    st.wind.update(&mut cmd, &mut bank, &assets, &mut sinks, "/Game/Audio/Player/Foley/Bodycam/Wind_Bodycam", &wp, wind_vol);
+
+    // Foley (Bodycam cloth loop)
+    st.foley_vol = finterp(st.foley_vol, map_clamped(dy + dp, 0.0, 3.0, 0.0, 1.0), dt, 10.0);
+    let mut fp = Params::default();
+    fp.floats.insert("highRotation", st.high_rotation);
+    let foley_vol = st.foley_vol;
+    st.foley.update(&mut cmd, &mut bank, &assets, &mut sinks, "/Game/Audio/Player/Foley/Bodycam/Bodycam_Foley_Player_Bodycam_Cloth_loop_test_Cue", &fp, foley_vol);
+
+    // Breathing. ponytail: no SurvivorStatus yet; fatigue builds while sprinting (+0.15/s) and recovers (-0.1/s), feeding the `Stamina` term.
+    st.fatigue = (st.fatigue + if p.sprinting { 0.15 } else { -0.1 } * dt).clamp(0.0, 1.0);
+    vit.stamina = st.fatigue;
+    let speed = (vit.stress + map_clamped(vit.health, 25.0, 100.0, 0.8, 0.0) + map_clamped(vit.stamina, 0.0, 1.0, 0.0, 1.0)).clamp(0.0, 1.0);
+    let mut bp = Params::default();
+    bp.floats.insert("Speed", speed);
+    bp.bools.insert("Running?", speed_cm > 150.0);
+    st.breath.update(&mut cmd, &mut bank, &assets, &mut sinks, "/Game/Ultimate_SFX/Repiration/Breathing_cue", &bp, 1.0);
+
+    // Mic tremor
+    st.tremor_vol = finterp(st.tremor_vol, tremor.0, dt, 10.0);
+    tremor.0 = finterp(tremor.0, 0.0, dt, 3.0);
+    let tv = st.tremor_vol;
+    st.tremor.update(&mut cmd, &mut bank, &assets, &mut sinks, "/Game/Audio/Player/Foley/Bodycam/MicTremor_Bodycam", &Params::default(), tv);
 }
 
 /// Preload what the first seconds need: default-surface footsteps, foley, aim, breathing.
@@ -527,11 +628,6 @@ fn preload_player(bank: Res<Bank>, mut live: ResMut<Live>, assets: Res<AssetServ
     for c in &cues {
         for w in bank.waves_of(c) {
             load_wave(&mut live, &assets, &w);
-        }
-    }
-    for k in ["Normal", "Run", "OutOfBreath"] {
-        for n in 1..=2 {
-            load_wave(&mut live, &assets, &format!("/Game/Audio/Player/Breathing/Bodycam_Foley_Player_Breathing_{k}_0{n}_V3"));
         }
     }
 }

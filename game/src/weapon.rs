@@ -164,6 +164,12 @@ pub struct Fired {
     pub aiming: bool,
 }
 
+/// Trigger pulled on an empty weapon (audio plays FireDry).
+#[derive(Message, Clone, Debug)]
+pub struct DryFire {
+    pub row: String,
+}
+
 /// Fired when a weapon action montage starts (audio plays its PlayWepSounds notifies, viewmodel plays the anim).
 #[derive(Message, Clone, Debug)]
 pub struct MontageStarted {
@@ -212,6 +218,7 @@ impl Plugin for WeaponPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<MontageStarted>()
             .add_message::<Fired>()
+            .add_message::<DryFire>()
             .add_systems(Startup, setup_fx)
             .add_systems(PostStartup, give_loadout)
             .add_systems(Update, ((actions, swap, aim, fire, fade).chain(), log_montages));
@@ -345,11 +352,15 @@ fn fire(
     mut targets: Query<&mut Health>,
     fx: Res<TracerFx>,
     mut fired: MessageWriter<Fired>,
+    mut dry: MessageWriter<DryFire>,
 ) {
     let (inv, p) = &mut *q;
     inv.cooldown -= time.delta_secs();
     let w = &inv.slots[inv.current];
     let trigger = if w.full_auto { mouse.pressed(MouseButton::Left) } else { mouse.just_pressed(MouseButton::Left) };
+    if trigger && w.ammo == 0 && mouse.just_pressed(MouseButton::Left) && inv.cooldown <= 0.0 && !inv.busy() && !p.sprinting {
+        dry.write(DryFire { row: w.name.clone() });
+    }
     if !trigger || inv.cooldown > 0.0 || inv.busy() || p.sprinting || w.ammo == 0 {
         return;
     }
