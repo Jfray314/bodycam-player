@@ -1,4 +1,4 @@
-//! Bodycam camera look. Bodycam_Player's BodycamBorders: an Engine Plane with FishEye_Inst (LENS_VEIW_05, a
+﻿//! Bodycam camera look. Bodycam_Player's BodycamBorders: an Engine Plane with FishEye_Inst (LENS_VEIW_05, a
 //! photographed round lens housing, alpha = clear centre) on SpringArmBodycamBorders (arm 23 cm, lag speed 50,
 //! rotation lag 65), scaled 1.70 x 0.806 -> at 120 deg only its centre fills the view: black rounded corners
 //! that trail the camera slightly. Then the player CameraComponent blends M_PP_BodycamMaster (lens distortion driven by
@@ -169,7 +169,7 @@ fn attach(
             BodycamBorders,
             Mesh3d(meshes.add(Rectangle::new(1.699687, 0.805974))),
             MeshMaterial3d(mats.add(mat)),
-            Transform::default(),
+            Transform::from_scale(Vec3::new(BORDERS_FIT, BORDERS_FIT, 1.0)),
             bevy::light::NotShadowCaster,
             crate::player::IgnoreTraces,
         ));
@@ -178,6 +178,10 @@ fn attach(
 
 #[derive(Component)]
 struct BodycamBorders;
+
+/// Calibration: the cooked FishEye material graph is compiled away, so its UV mapping is unknown. Fitted to in-game
+/// captures, where the housing only shades the screen corners (the raw plane at 23 cm puts them deep in the black).
+const BORDERS_FIT: f32 = 1.08;
 
 /// SpringArmBodycamBorders: TargetArmLength 23 cm forward, CameraLagSpeed 50, CameraRotationLagSpeed 65
 /// (UE spring-arm lag = exponential interp toward the target each frame).

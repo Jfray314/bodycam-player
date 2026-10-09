@@ -380,8 +380,6 @@ fn bodycam_camera(time: Res<Time>, cm: Res<CameraMotion>, mut player: Single<&mu
 
     let crouch_a = ((HALF_HEIGHT - p.center) / (HALF_HEIGHT - CROUCH_HALF_HEIGHT)).clamp(0.0, 1.0);
     let mut c: [f32; 6] = std::array::from_fn(|k| cm.idle[k] + (cm.crouch_idle[k] - cm.idle[k]) * crouch_a);
-    // Body-driven view pose (idle + crouch + lean) without camera-only bob/shakes: the arms follow this.
-    let mut base = c;
     add(&mut c, sample_loop(gait, p.phase), w);
     let land = &cm.events.land;
     let i = ((p.since_land + land.pre_s) * cm.hz) as usize;
@@ -392,9 +390,10 @@ fn bodycam_camera(time: Res<Time>, cm: Res<CameraMotion>, mut player: Single<&mu
     let lp = cm.lean_pose();
     let side = if lp[5] < 0.0 { 1.0 } else { -1.0 }; // positive lean = right = negative (cw) roll
     add(&mut c, lp.map(|v| v * side), p.lean);
-    add(&mut base, lp.map(|v| v * side), p.lean);
-    p.view_base = Transform::from_xyz(base[0], p.center + base[1], base[2])
-        .with_rotation(Quat::from_euler(EulerRot::YXZ, base[4].to_radians(), p.pitch + base[3].to_radians(), base[5].to_radians()));
+    // UE hangs the camera off the arms' FP_Camera socket, so bob/land/lean move arms and camera together;
+    // only camera shakes (fire) are camera-only. The arms follow this pose.
+    p.view_base = Transform::from_xyz(c[0], p.center + c[1], c[2])
+        .with_rotation(Quat::from_euler(EulerRot::YXZ, c[4].to_radians(), p.pitch + c[3].to_radians(), c[5].to_radians()));
 
     // Fire shake is in UE convention: pitch up+, yaw right+ (-> Bevy left+), roll cw+ (-> Bevy ccw+).
     let fs = fire_shake(p, dt);

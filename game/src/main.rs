@@ -10,21 +10,40 @@ mod weapon;
 use bevy::prelude::*;
 
 /// Dev hook for headless checks: BODYCAM_AUTO="R@6:0.5,J@12" holds keys at those times (seconds), default 0.1 s.
-fn autotest(time: Res<Time>, mut keys: ResMut<ButtonInput<KeyCode>>, mut plan: Local<Option<Vec<(KeyCode, f32, f32)>>>) {
+/// "RMB" holds the right mouse button (aim).
+fn autotest(
+    time: Res<Time>,
+    mut keys: ResMut<ButtonInput<KeyCode>>,
+    mut mouse: ResMut<ButtonInput<MouseButton>>,
+    mut plan: Local<Option<Vec<(Option<KeyCode>, f32, f32)>>>,
+) {
     let plan = plan.get_or_insert_with(|| {
         std::env::var("BODYCAM_AUTO").unwrap_or_default().split(',').filter_map(|s| {
             let (k, t) = s.split_once('@')?;
             let (t, hold) = t.split_once(':').unwrap_or((t, "0.1"));
-            let key = match k { "R" => KeyCode::KeyR, "J" => KeyCode::KeyJ, "2" => KeyCode::Digit2, "1" => KeyCode::Digit1, "W" => KeyCode::KeyW, _ => return None };
+            let key = match k {
+                "RMB" => None,
+                "R" => Some(KeyCode::KeyR),
+                "J" => Some(KeyCode::KeyJ),
+                "2" => Some(KeyCode::Digit2),
+                "1" => Some(KeyCode::Digit1),
+                "W" => Some(KeyCode::KeyW),
+                "Q" => Some(KeyCode::KeyQ),
+                "E" => Some(KeyCode::KeyE),
+                _ => return None,
+            };
             Some((key, t.parse().ok()?, hold.parse().ok()?))
         }).collect()
     });
     let t = time.elapsed_secs();
     for (k, at, hold) in plan.iter() {
-        if t >= *at && t < at + hold {
-            keys.press(*k);
-        } else if t >= at + hold && keys.pressed(*k) {
-            keys.release(*k);
+        let on = t >= *at && t < at + hold;
+        match k {
+            Some(k) if on => keys.press(*k),
+            Some(k) if t >= at + hold && keys.pressed(*k) => keys.release(*k),
+            None if on => mouse.press(MouseButton::Right),
+            None if t >= at + hold && mouse.pressed(MouseButton::Right) => mouse.release(MouseButton::Right),
+            _ => {}
         }
     }
 }
