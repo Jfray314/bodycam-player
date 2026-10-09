@@ -386,10 +386,34 @@ fn root_of_entity(mut e: Entity, root: Entity, parents: &Query<&ChildOf>) -> boo
     false
 }
 
-/// Arms root = body view pose * inverse(FP_Camera socket): the socket lands on the un-shaken camera point.
-fn place_arms(p: Single<&Player>, mut arms: Query<&mut Transform, With<ArmsRoot>>) {
+/// Grip point (ik_hand_gun at hip idle, camera space) that BAS PoseOffset rotates about.
+const GRIP: Vec3 = Vec3::new(0.09, -0.22, -0.13);
+
+/// BAS ViewmodelOffsets.PoseOffset (UE cm, camera space) as a Bevy camera-space transform pivoting on the grip.
+fn pose_offset(anims: &serde_json::Value) -> Transform {
+    let o = &anims["ViewmodelOffsets"]["PoseOffset"];
+    let f = |v: &serde_json::Value, k: &str| v[k].as_f64().unwrap_or(0.0) as f32;
+    let (t, r) = (&o["Translation"], &o["Rotation"]);
+    // UE (X fwd, Y right, Z up, left-handed) -> Bevy (-Z fwd, X right, Y up): p = (y, z, -x), q = (-y, -z, x, w).
+    let tr = Vec3::new(f(t, "y"), f(t, "z"), -f(t, "x")) * 0.01;
+    let rot = if r.is_object() { Quat::from_xyzw(-f(r, "y"), -f(r, "z"), f(r, "x"), f(r, "w")).normalize() } else { Quat::IDENTITY };
+    Transform::from_translation(tr + GRIP) * Transform::from_rotation(rot) * Transform::from_translation(-GRIP)
+}
+
+/// Arms root = body view pose * hip PoseOffset * inverse(FP_Camera socket): the socket lands on the un-shaken camera
+/// point; the offset fades out while aiming (AimIdlePose already lines the sights up).
+fn place_arms(
+    time: Res<Time>,
+    p: Single<&Player>,
+    inv: Option<Single<&Inventory>>,
+    mut arms: Query<&mut Transform, With<ArmsRoot>>,
+    mut hip: Local<f32>,
+) {
+    *hip = crate::status::finterp_to(*hip, if p.aiming { 0.0 } else { 1.0 }, time.delta_secs(), 1.0 / BLEND.as_secs_f32());
+    let off = inv.map(|i| pose_offset(&i.slots[i.current].anims)).unwrap_or_default();
+    let off = Transform { translation: off.translation * *hip, rotation: Quat::IDENTITY.slerp(off.rotation, *hip), ..default() };
     for mut t in &mut arms {
-        *t = p.view_base * Transform::from_translation(-FP_CAMERA_SOCKET);
+        *t = p.view_base * off * Transform::from_translation(-FP_CAMERA_SOCKET);
     }
 }
 
@@ -414,8 +438,9 @@ pub fn debug_bones(
     let cam = cam.affine().inverse();
     for (n, gt) in joints.iter().filter(|(n, _)| ["ik_hand_gun", "hand_r", "hand_l"].contains(&n.as_str())) {
         let t = cam.transform_point3(gt.translation());
+        let r = cam.to_scale_rotation_translation().1 * gt.rotation();
         // Camera looks down -Z: elevation of the bone relative to view forward (negative = below centre).
-        info!("t={:.1} {} cam {:?} elev {:.1} deg", *last, n.as_str(), t, t.y.atan2(-t.z).to_degrees());
+        info!("t={:.1} {} cam {:?} elev {:.1} deg rot {:?}", *last, n.as_str(), t, t.y.atan2(-t.z).to_degrees(), r.to_euler(EulerRot::YXZ));
     }
     for (n, vv, iv, gt) in &meshes {
         info!("t={:.1} mesh {} view_visible={} inherited={} world={:?}", *last, n.map(|n| n.as_str()).unwrap_or("?"), vv.get(), iv.get(), gt.translation());
