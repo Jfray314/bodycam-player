@@ -40,6 +40,16 @@ switch (cmd)
     case "find":
         foreach (var k in provider.Files.Keys.Where(k => k.Contains(args[4], StringComparison.OrdinalIgnoreCase) && k.EndsWith(".uasset")).Take(5000)) Console.WriteLine(k);
         break;
+    case "scene": SceneExport.Run(provider, outDir, args[4], args.Length > 5 ? double.Parse(args[5]) : 1e12); break;
+    case "reflect": Refl.Run(args.Skip(4).ToArray()); break;
+    case "maps":
+        foreach (var k in provider.Files.Keys.Where(k => k.EndsWith(".umap") && (args.Length < 5 || k.Contains(args[4], StringComparison.OrdinalIgnoreCase)))) Console.WriteLine(k);
+        break;
+    case "mapinfo": // mapinfo <umap asset>: export type histogram, streaming sublevels
+        { var ex = provider.LoadPackage(args[4]).GetExports().ToList();
+          foreach (var g in ex.GroupBy(e => e.ExportType).OrderByDescending(g => g.Count()).Take(30)) Console.WriteLine($"{g.Count()}	{g.Key}");
+          foreach (var e in ex.Where(e => e.ExportType.Contains("LevelStreaming"))) Console.WriteLine("sub " + e.Name + " " + string.Join(";", e.Properties.Select(q => q.Name + "=" + q.Tag?.GenericValue)));
+          break; }
     case "dump": // full JSON of every export (properties resolved)
         foreach (var e in provider.LoadPackage(args[4]).GetExports()) Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(e, Newtonsoft.Json.Formatting.Indented));
         break;

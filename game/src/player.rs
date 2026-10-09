@@ -241,8 +241,19 @@ fn fire_shake(p: &mut Player, dt: f32) -> Vec3 {
 }
 
 /// UCharacterMovementComponent::CalcVelocity (walking) with Bodycam's values, plus jump/fall.
-fn movement(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut q: Single<(&mut Player, &mut Transform)>, mut steps: MessageWriter<Footstep>) {
+fn movement(
+    time: Res<Time>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut q: Single<(&mut Player, &mut Transform)>,
+    mut steps: MessageWriter<Footstep>,
+    map: Option<Res<crate::map::MapState>>,
+    geo: Query<(), With<crate::map::MapGeometry>>,
+    mut ray: bevy::picking::mesh_picking::ray_cast::MeshRayCast,
+) {
     let (p, tf) = &mut *q;
+    if map.as_ref().is_some_and(|m| !m.ready()) {
+        return; // level still spawning: hold the player so they do not fall through unloaded geometry
+    }
     let dt = time.delta_secs();
     let input = Vec2::new(
         keys.pressed(KeyCode::KeyD) as i8 as f32 - keys.pressed(KeyCode::KeyA) as i8 as f32,
@@ -279,16 +290,30 @@ fn movement(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut q: Single<(&mu
     p.vel.x = v.x;
     p.vel.z = v.z;
     p.vel.y -= GRAVITY * dt;
+    let before = tf.translation;
     tf.translation += p.vel * dt;
-    // ponytail: flat ground at y=0 only; add a collision crate when real geometry exists.
-    if tf.translation.y <= 0.0 {
+    // Map level: ray-cast collision. Grey-box fallback: flat ground at y=0.
+    let on_ground = if map.is_some() {
+        let mut pos = tf.translation;
+        let was = p.grounded;
+        let hit = crate::map::collide(&mut ray, &geo, before, &mut pos, &mut p.vel, was);
+        tf.translation = pos;
+        hit
+    } else {
+        tf.translation.y <= 0.0
+    };
+    if on_ground {
         if !p.grounded {
             p.since_land = 0.0;
             steps.write(Footstep { kind: StepKind::Land, stride_start: false });
         }
-        tf.translation.y = 0.0;
+        if map.is_none() {
+            tf.translation.y = 0.0;
+        }
         p.vel.y = 0.0;
         p.grounded = true;
+    } else {
+        p.grounded = false;
     }
     p.since_land += dt;
     tf.rotation = rot;
