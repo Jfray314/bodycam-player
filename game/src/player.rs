@@ -20,8 +20,8 @@ const GRAVITY: f32 = 9.8; // GravityScale 1
 const HALF_HEIGHT: f32 = 0.90; // capsule; crouch-segment z drop (35 cm) + CrouchedHalfHeight
 const CROUCH_HALF_HEIGHT: f32 = 0.55; // CrouchedHalfHeight 55
 const SENS: f32 = 0.0022;
-// ponytail: lean blend speed eyeballed; measure rise time from the lean sequence if it feels off.
-const LEAN_SPEED: f32 = 6.0;
+/// Bodycam_Player "Update Leaning Values": Leaning Alpha = FInterpTo(Alpha, Target, dt, 12).
+const LEAN_SPEED: f32 = 12.0;
 
 #[derive(Deserialize)]
 struct Loop {
@@ -229,10 +229,13 @@ fn movement(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut q: Single<(&mu
     .normalize_or_zero();
     p.crouched = keys.pressed(KeyCode::ControlLeft); // IA_Crouch: LeftControl, InputTriggerDown (hold)
     // GA_Character_Sprint: forward only, blocked by aim/crouch (GE_BlockSprint).
-    p.sprinting = keys.pressed(KeyCode::ShiftLeft) && input.y > 0.0 && !p.crouched && !p.aiming;
+    // ALS CanSprint (LookingDirection mode): input amount > 0.5 and move direction within 100 deg of the view;
+    // not while aiming (Aiming rotation mode) or crouched (AllowedGait). GA_Character_Sprint needs acceleration.
+    let within_100 = input.length() > 0.5 && input.x.atan2(input.y).to_degrees().abs() < 100.0;
+    p.sprinting = keys.pressed(KeyCode::ShiftLeft) && within_100 && !p.crouched && !p.aiming;
     let max = if p.crouched { CROUCH } else if p.sprinting { SPRINT } else if p.aiming { ADS } else { WALK };
     let lean_target = keys.pressed(KeyCode::KeyE) as i8 as f32 - keys.pressed(KeyCode::KeyQ) as i8 as f32;
-    p.lean += (lean_target - p.lean) * (LEAN_SPEED * dt).min(1.0);
+    p.lean = crate::status::finterp_to(p.lean, lean_target, dt, LEAN_SPEED);
 
     let rot = Quat::from_rotation_y(p.yaw);
     let mut v = Vec3::new(p.vel.x, 0.0, p.vel.z);

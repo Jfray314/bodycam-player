@@ -2,6 +2,7 @@ mod curve;
 mod hud;
 mod player;
 mod postfx;
+mod status;
 mod weapon;
 
 use bevy::prelude::*;
@@ -13,7 +14,7 @@ fn main() {
             file_path: concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into(),
             ..default()
         }))
-        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin))
+        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin))
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
         .add_systems(Startup, test_range)
         .run();
