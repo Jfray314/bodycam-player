@@ -1,0 +1,13 @@
+{
+  "M4a1": { "name": "M4A1", "skm": "Bodycam/Content/BodycamWeapons/Guns/M4A1/M4A1" },
+  "MGlock17": { "name": "Glock17", "extraDirs": ["Glock"] },
+  "Glock": { "skip": true },
+  "AKM": { "name": "Akm" },
+  "Mp9": { "name": "MP9" },
+  "Remington700": {},
+  "Mossberg590": { "skm": "Bodycam/Content/BodycamWeapons/Guns/Mossberg590/Mossberg" },
+  "SG5-k": { "name": "MP5" },
+  "Karambit": { "skip": true }, "Knife": { "skip": true }, "Grenade": { "skip": true }, "Tablet": { "skip": true },
+  "Drone": { "skip": true }, "Bomb": { "skip": true }, "Camera": { "skip": true }, "Gopro": { "skip": true },
+  "General": { "skip": true }, "Attenuation": { "skip": true }
+}

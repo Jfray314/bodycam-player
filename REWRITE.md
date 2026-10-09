@@ -27,6 +27,24 @@ F8/F9 camera recording), run offline in the real game.
 WASD move, Shift sprint, LeftControl crouch (hold), Space jump, Q/E lean, LMB fire, RMB aim, R tap reload,
 R hold 0.25 s mag check, J inspect, 1-6 / wheel swap. F2 toggles the camera post-process.
 
+## Model/animation export (arms, guns, FP clips -> .glb)
+One command (reads the paks read-only, writes only `assets-local/models`, git-ignored):
+```
+# one-time: .NET 10 SDK in ~/.dotnet-sdk (dotnet-install.ps1 -Channel 10.0), Blender extension, ACL natives
+powershell -File tools/ue-export/build-natives.ps1                      # CUE4Parse-Natives.dll (ACL anim decompression), needs VS2022 C++
+blender --background --online-mode --command extension install --enable io_scene_psk_psa
+python -I tools/build_models.py [--only M4A1,Glock17] [--skip-export]   # ue-export -> PSK/PSA/PNG -> Blender -> glb + manifest.json
+blender --background --python tools/blender/verify_glb.py -- assets-local/models/arms.glb   # bones/clips/textures
+blender --background --python tools/blender/preview.py -- assets-local/models/_work M4A1 A_FP_M4A1_Idle_Loop01 shots/viewmodel_preview.png
+```
+Outputs: `arms.glb` (arms mesh + M4A1/Glock17 + common clips), `guns/<Gun>.glb` (gun mesh + `A_W_*` clips),
+`arms_anims/<Gun>.glb` (skeleton + FP clips of the other guns; same joint names, load next to arms.glb), `manifest.json`.
+Units metres. `arms.glb` is Y-up with forward -Z. Gun glbs are in raw UE-bone-local axes (no Y-up conversion): spawn the gun scene
+as a child of the arms joint `ik_hand_gun` (UE `ItemAttachBone` = virtual bone `VB ik_hand_gun`, i.e. the bone itself) with an identity transform.
+Clip names equal the UE asset names. Normals are flipped DX->GL; ORM textures are used as-is (R=AO, G=roughness, B=metallic). Textures capped at 2048.
+Not exported yet: modular attachment meshes (`BodycamWeapons/Attachement`: barrel/stock/grip/mag/optics; the gun SKM is the receiver only), montages, Mp-FP camera anims.
+
+
 ## Source -> Rust map
 | Original | Rust | Status |
 |---|---|---|
