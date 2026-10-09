@@ -71,16 +71,26 @@ end
 
 local rec, marker, start = nil, 0, 0
 
+-- Property reads only: calling UFunctions (GetCameraLocation etc.) from here crashed the game.
+-- Objects are resolved once when recording starts, not every sample.
+local pc, cm, pawn, root, mv
+
+local function resolve()
+    pc = UEHelpers.GetPlayerController()
+    if not pc or not pc:IsValid() then return false end
+    cm, pawn = pc.PlayerCameraManager, pc.Pawn
+    if not cm or not cm:IsValid() or not pawn or not pawn:IsValid() then return false end
+    root, mv = pawn.RootComponent, pawn.CharacterMovement
+    return root ~= nil and root:IsValid() and mv ~= nil and mv:IsValid()
+end
+
 local function sample()
-    local pc = UEHelpers.GetPlayerController()
-    if not pc or not pc:IsValid() then return end
-    local cm, pawn = pc.PlayerCameraManager, pc.Pawn
-    if not cm or not cm:IsValid() or not pawn or not pawn:IsValid() then return end
-    local cl, cr, fov = cm:GetCameraLocation(), cm:GetCameraRotation(), cm:GetFOVAngle()
-    local pl, pv, ctl = pawn:K2_GetActorLocation(), pawn:GetVelocity(), pc:GetControlRotation()
-    local mv = pawn.CharacterMovement
+    if not (pc:IsValid() and cm:IsValid() and pawn:IsValid() and root:IsValid() and mv:IsValid()) then return end
+    local pov = cm.CameraCachePrivate.POV
+    local cl, cr, fov = pov.Location, pov.Rotation, pov.FOV
+    local pl, pv, ctl = root.RelativeLocation, mv.Velocity, pc.ControlRotation
     local crouched = pawn.bIsCrouched and 1 or 0
-    local falling = (mv and mv:IsValid() and mv:IsFalling()) and 1 or 0
+    local falling = (mv.MovementMode == 3) and 1 or 0
     rec:write(string.format("%.4f,%d,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.3f,%d,%d\n",
         os.clock() - start, marker, cl.X, cl.Y, cl.Z, cr.Pitch, cr.Yaw, cr.Roll, fov,
         pl.X, pl.Y, pl.Z, pv.X, pv.Y, pv.Z, ctl.Pitch, ctl.Yaw, ctl.Roll, crouched, falling))
@@ -94,12 +104,13 @@ local function toggle_record()
         print("[BodycamProbe] recording stopped")
         return
     end
+    if not resolve() then print("[BodycamProbe] player not found, spawn in first") return end
     rec = io.open(OUT .. "camera_" .. os.time() .. ".csv", "w")
     if not rec then print("[BodycamProbe] cannot open output dir " .. OUT) return end
     rec:write("t,marker,cam_x,cam_y,cam_z,cam_pitch,cam_yaw,cam_roll,fov,pawn_x,pawn_y,pawn_z,vel_x,vel_y,vel_z,ctl_pitch,ctl_yaw,ctl_roll,crouched,falling\n")
     marker, start = 0, os.clock()
     print("[BodycamProbe] recording started")
-    LoopAsync(8, function()
+    LoopAsync(16, function()
         if not rec then return true end
         ExecuteInGameThread(function() if rec then pcall(sample) end end)
         return false
