@@ -49,6 +49,7 @@ def blender(script, args, env=None):
 
 if not a.skip_export:
     exe = os.path.join(HERE, "ue-export", "bin", "Release", "net10.0", "ue-export.dll")
+    run([sys.executable, "-I", os.path.join(HERE, "attachments.py"), work])
     run([DOTNET, "build", "-c", "Release", os.path.join(HERE, "ue-export")])
     run([DOTNET, exe, PAKS, USMAP, work, "all"] + ([",".join(["arms"] + only)] if only else []), cwd=os.path.dirname(exe))
 
@@ -59,7 +60,8 @@ os.makedirs(os.path.join(out, "guns"), exist_ok=True)
 os.makedirs(os.path.join(out, "arms_anims"), exist_ok=True)
 
 arms_json = os.path.join(work, "arms", "arms.json")
-arms_psas = psas("common") + [p for g in arms_guns if g in guns for p in psas(f"fp/{g}")]
+arms_psas = ([p for p in psas("common") if not os.path.basename(p).startswith("A_C_")]  # A_C_* are camera-skeleton clips: tracks go to curves.json
+             + [p for g in arms_guns if g in guns for p in psas(f"fp/{g}")])
 blender("build_glb.py", [arms_json, os.path.join(out, "arms.glb")] + arms_psas)
 for g in guns:
     blender("build_glb.py", [os.path.join(work, "guns", g, g + ".json"), os.path.join(out, "guns", g + ".glb")] + psas(f"guns/{g}/anims"), {"FRAME": "attach"})
@@ -67,6 +69,10 @@ for g in guns:
         blender("build_glb.py", [arms_json, os.path.join(out, "arms_anims", g + ".glb")] + psas(f"fp/{g}"), {"NO_MESH": "1"})
 
 # manifest
+import shutil
+for f in ("curves.json", "camera_tracks.json"):
+    if os.path.exists(os.path.join(work, f)):
+        shutil.copy(os.path.join(work, f), os.path.join(out, f))
 man = {"units": "metres", "attach_bone": ATTACH_BONE, "files": {}}
 def entry(path, kind, **extra):
     i = inspect_glb.info(path)

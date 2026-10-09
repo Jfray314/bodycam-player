@@ -3,6 +3,8 @@ import os, json
 import bpy
 import numpy as np
 
+BUILT = {}
+FACTORS = {}  # material name -> {roughnessFactor, metallicFactor}; applied to the glb JSON after export (Blender drops factors when a texture is linked)
 MAX_TEX = int(os.environ.get("MAX_TEX", 2048))
 
 
@@ -84,10 +86,18 @@ def pick(tex, keys):
 
 def build_materials(meta, d, meshes):
     for mdef in meta["materials"]:
-        old = [m for m in bpy.data.materials if m.name.split(".")[0] in (mdef["slot"], mdef.get("material"))]
+        old = [m for m in bpy.data.materials if m.name.split(".")[0] in (mdef["slot"], mdef.get("material")) and m not in BUILT.values() and not m.name.startswith("_old_")]
         for o in old:
             o.name = "_old_" + o.name
-        mat = bpy.data.materials.new(mdef.get("material") or mdef["slot"])
+        key = mdef.get("material") or mdef["slot"]
+        if key in BUILT:  # same MI used by several parts: reuse the finished material
+            for m in meshes:
+                for sl in m.material_slots:
+                    if sl.material in old:
+                        sl.material = BUILT[key]
+            continue
+        mat = bpy.data.materials.new(key)
+        BUILT[key] = mat
         mat.use_nodes = True
         nt = mat.node_tree
         nt.nodes.clear()
@@ -98,6 +108,9 @@ def build_materials(meta, d, meshes):
         dif = pick(tex, ["PM_Diffuse", "Texture"])
         nrm = pick(tex, ["PM_Normals", "Normals"])
         orm = pick(tex, ["PM_SpecularMasks", "ORM"])
+        if dif and "specular" in dif.lower():  # e.g. M16A4 Stanag: the only "Texture" param is a specular map, not albedo
+            dif = None
+            bsdf.inputs["Base Color"].default_value = (0.04, 0.04, 0.04, 1)
         col = mdef.get("colors", {}).get("Albedo Tint")
         if dif:
             t = nt.nodes.new("ShaderNodeTexImage"); t.image = load_img(d, dif, "sRGB")
@@ -111,6 +124,7 @@ def build_materials(meta, d, meshes):
         if nrm:
             t = nt.nodes.new("ShaderNodeTexImage"); t.image = load_img(d, nrm, "Non-Color", flip_green=True)
             n = nt.nodes.new("ShaderNodeNormalMap")
+            n.inputs["Strength"].default_value = mdef.get("scalars", {}).get("Normal Strength", 1.0)
             nt.links.new(t.outputs["Color"], n.inputs["Color"]); nt.links.new(n.outputs[0], bsdf.inputs["Normal"])
         if orm:  # UE ORM: R=AO, G=roughness, B=metallic == glTF occlusion / metallicRoughness layout
             t = nt.nodes.new("ShaderNodeTexImage"); t.image = load_img(d, orm, "Non-Color")
@@ -118,6 +132,15 @@ def build_materials(meta, d, meshes):
             nt.links.new(t.outputs["Color"], sep.inputs[0])
             nt.links.new(sep.outputs[1], bsdf.inputs["Roughness"])
             nt.links.new(sep.outputs[2], bsdf.inputs["Metallic"])
+            # MI params: out = clamp(tex * Mult + Add, 0, Max); glTF only has a multiplicative factor (<=1), so use mean-based ratio
+            px = np.empty(len(t.image.pixels), dtype=np.float32); t.image.pixels.foreach_get(px)
+            sc = mdef.get("scalars", {})
+            for ch, key, sock in ((1, "Roughness", "Roughness"), (2, "Metallic", "Metallic")):
+                mean = float(px[ch::4].mean())
+                tgt = mean * sc.get("Mult " + key, 1.0) + sc.get("Add " + key, 0.0)
+                tgt = min(max(tgt, 0.0), sc.get("Max " + key, 1.0))
+                if mean > 1e-4 and abs(tgt - mean) > 1e-3:
+                    FACTORS.setdefault(mat.name, {})[key.lower() + "Factor"] = round(min(tgt / mean, 1.0), 4)
             g = bpy.data.node_groups.get("glTF Material Output") or bpy.data.node_groups.new("glTF Material Output", "ShaderNodeTree")
             if "Occlusion" not in [i.name for i in g.interface.items_tree]:
                 g.interface.new_socket("Occlusion", in_out="INPUT", socket_type="NodeSocketFloat")
@@ -127,3 +150,43 @@ def build_materials(meta, d, meshes):
             for s in m.material_slots:
                 if s.material in old:
                     s.material = mat
+
+
+def attach_parts(arm, gun_dir):
+    """Import <gun_dir>/parts/* (default attachments, see tools/attachments.py) and parent each to its socket's bone with the
+    socket offset, so they follow bone animation (e.g. the magazine during reloads). Gun json supplies the sockets."""
+    import mathutils
+    work = os.path.dirname(os.path.dirname(gun_dir))
+    att = json.load(open(os.path.join(work, "attachments.json"))).get(os.path.basename(gun_dir), {"parts": []})
+    gun = json.load(open(os.path.join(gun_dir, os.path.basename(gun_dir) + ".json")))
+    sockets = {s["name"].lower(): s for s in gun["sockets"]}
+    bones = {b.name.lower(): b for b in arm.data.bones}
+    global MAX_TEX
+    MAX_TEX = min(MAX_TEX, 1024)  # attachment parts: smaller textures (file size)
+    for part in att["parts"]:
+        key = part["row"].replace(" ", "_")
+        pj = os.path.join(gun_dir, "parts", key, key + ".json")
+        if not os.path.exists(pj):
+            print("PART MISSING", key)
+            continue
+        parm, meshes = import_item(pj, name="_part_" + key)
+        s = sockets.get(part["socket"].lower())
+        bone = bones.get((s["bone"] if s else "root").lower()) or bones["root"]
+        loc = mathutils.Vector((s["loc"][0], -s["loc"][1], s["loc"][2])) / 100 if s else mathutils.Vector()  # UE cm, Y mirrored like the PSK import
+        if s and any(abs(v) > 1e-3 for v in s["rot"]):
+            print("WARN socket rotation ignored", s["name"], s["rot"])
+        S = mathutils.Matrix.Translation(loc)
+        for m in meshes:
+            mw = m.matrix_world.copy()
+            for mod in [x for x in m.modifiers if x.type == "ARMATURE"]:
+                m.modifiers.remove(mod)
+            m.vertex_groups.clear()
+            m.parent = None
+            m.matrix_world = mw
+            m.parent = arm
+            m.parent_type = "BONE"
+            m.parent_bone = bone.name
+            m.matrix_world = arm.matrix_world @ bone.matrix_local @ S @ mw
+            m.name = key
+        bpy.data.objects.remove(parm)
+        print("ATTACHED", key, "->", bone.name, [round(v, 3) for v in loc])

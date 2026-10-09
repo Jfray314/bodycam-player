@@ -30,6 +30,8 @@ var opts = new ExportOptions(EMeshFormat.ActorX, ENaniteMeshFormat.NoNanite, EMe
 Directory.CreateDirectory(outDir);
 var raw = Path.Combine(outDir, "_raw");
 List<string> Run(UObject o) { var ses = new ExportSession((a, c) => { }); ses.Add(o); var r = ses.RunAsync(raw, opts, null!, default).GetAwaiter().GetResult(); foreach (var x in r) if (!x.Success) Console.WriteLine("export fail " + x.ObjectPath + " " + x.GetType().GetProperties().Select(p => p.GetValue(x)).OfType<Exception>().FirstOrDefault()); return r.Where(x => x.Success).SelectMany(x => x.DiskFilePaths).ToList(); }
+var curvesAll = new SortedDictionary<string, SortedDictionary<string, double[][]>>();
+var camTracks = new SortedDictionary<string, object>();
 var jopt = new JsonSerializerOptions { WriteIndented = true };
 
 Console.Error.WriteLine("files: " + provider.Files.Count);
@@ -69,28 +71,32 @@ switch (cmd)
     case "anim": foreach (var a in args.Skip(4)) ExportAnim(a); break;
 }
 
-void ExportMesh(string asset, string name, string sub = "")
+void ExportMesh(string asset, string name, string sub = "", string[]? matOverride = null)
 {
-    var m = provider.LoadPackageObject<USkeletalMesh>(asset);
+    var obj = provider.LoadPackageObject(asset);
+    var sm0 = obj as USkeletalMesh; var st0 = obj as CUE4Parse.UE4.Assets.Exports.StaticMesh.UStaticMesh;
     var dir = Path.Combine(outDir, sub, name); Directory.CreateDirectory(dir);
-    foreach (var f in Run(m)) { File.Copy(f, Path.Combine(dir, Path.GetFileName(f)), true); Console.WriteLine("wrote " + f); }
-    var skel = m.Skeleton?.Load<USkeleton>();
-    var bones = m.ReferenceSkeleton.FinalRefBoneInfo.Select((b, i) => new { name = b.Name.Text, parent = b.ParentIndex }).ToList();
-    var sockets = m.Sockets.Select(s => s.Load<USkeletalMeshSocket>()).Where(s => s != null)
-        .Concat(skel?.Sockets.Select(s => s.Load<USkeletalMeshSocket>()).Where(s => s != null) ?? [])
+    foreach (var f in Run(obj)) { File.Copy(f, Path.Combine(dir, Path.GetFileName(f)), true); Console.WriteLine("wrote " + f); }
+    var skel = sm0?.Skeleton?.Load<USkeleton>();
+    var bones = sm0?.ReferenceSkeleton.FinalRefBoneInfo.Select((b, i) => new { name = b.Name.Text, parent = b.ParentIndex }).ToList();
+    var sockets = (sm0 == null ? [] : sm0.Sockets.Select(s => s.Load<USkeletalMeshSocket>()).Where(s => s != null)
+        .Concat(skel?.Sockets.Select(s => s.Load<USkeletalMeshSocket>()).Where(s => s != null) ?? []))
         .Select(s => new { name = s!.SocketName.Text, bone = s.BoneName.Text, loc = new[] { s.RelativeLocation.X, s.RelativeLocation.Y, s.RelativeLocation.Z }, rot = new[] { s.RelativeRotation.Pitch, s.RelativeRotation.Yaw, s.RelativeRotation.Roll }, scale = new[] { s.RelativeScale.X, s.RelativeScale.Y, s.RelativeScale.Z } }).ToList();
+    var slots = sm0 != null ? sm0.SkeletalMaterials.Select(x => (x.MaterialSlotName.Text, x.MaterialInterface)).ToList()
+                            : (st0?.StaticMaterials ?? []).Select(x => (x.MaterialSlotName.Text, x.MaterialInterface)).ToList();
     var mats = new List<object>();
-    foreach (var sm in m.SkeletalMaterials)
+    for (int i = 0; i < slots.Count; i++)
     {
-        var mi = sm?.MaterialInterface?.Load<UMaterialInterface>();
-        if (mi == null) { mats.Add(new { slot = sm?.MaterialSlotName.Text }); continue; }
+        var (slot, mref) = slots[i];
+        var mi = (matOverride != null && i < matOverride.Length ? provider.LoadPackageObject<UMaterialInterface>(matOverride[i]) : null) ?? mref?.Load<UMaterialInterface>();
+        if (mi == null) { mats.Add(new { slot }); continue; }
         var p = new CMaterialParams2(); mi.GetParams(p, EMaterialDepth.TopLayerOnly);
         var tex = new Dictionary<string, string>();
         foreach (var (k, v) in p.Textures)
         {
             if (v.Load<UTexture>() is UTexture2D t) { SaveTexture(t, dir); tex[k] = t.Name + ".png"; }
         }
-        mats.Add(new { slot = sm!.MaterialSlotName.Text, material = mi.Name, textures = tex, scalars = p.Scalars, colors = p.Colors.ToDictionary(kv => kv.Key, kv => new[] { kv.Value.R, kv.Value.G, kv.Value.B, kv.Value.A }) });
+        mats.Add(new { slot, material = mi.Name, textures = tex, scalars = p.Scalars, colors = p.Colors.ToDictionary(kv => kv.Key, kv => new[] { kv.Value.R, kv.Value.G, kv.Value.B, kv.Value.A }) });
     }
     File.WriteAllText(Path.Combine(dir, name + ".json"), JsonSerializer.Serialize(new { asset, skeleton = skel?.Name, bones, sockets, materials = mats }, jopt));
 }
@@ -110,6 +116,37 @@ void ExportAnim(string asset, string sub = "anims")
     var saved = string.Join(",", Run(a).Select(f => { var d = Path.Combine(dir, Path.GetFileName(f)); File.Copy(f, d, true); return d; }));
     File.WriteAllText(Path.Combine(dir, a.Name + ".json"), JsonSerializer.Serialize(new { asset, duration = a.SequenceLength, frames = a.NumFrames, skeleton = a.Skeleton?.Name, additive = a.AdditiveAnimType.ToString(), rateScale = a.RateScale }, jopt));
     Console.WriteLine("wrote " + saved);
+    CollectCurves(a);
+}
+
+// float curves (FP_Action_Weight, ...) sampled at 30 Hz, and bone tracks of camera-skeleton clips (A_C_*) as raw keys
+void CollectCurves(UAnimSequence a)
+{
+    var fc = a.CompressedCurveData?.FloatCurves;
+    if (fc is { Length: > 0 })
+    {
+        var d = new SortedDictionary<string, double[][]>();
+        int n = (int)Math.Floor(a.SequenceLength * 30) + 1;
+        foreach (var c in fc)
+            d[c.CurveName.Text] = Enumerable.Range(0, n).Select(i => { var t = Math.Min(i / 30.0, a.SequenceLength); return new[] { Math.Round(t, 4), Math.Round(c.FloatCurve.Eval((float)t, 0), 5) }; }).ToArray();
+        curvesAll[a.Name] = d;
+    }
+    if (a.Name.StartsWith("A_C_") || a.Skeleton?.Name == "SK_Camera")
+    {
+        var set = CUE4Parse_Conversion.Animations.AnimConverter.ConvertAnims(a);
+        var seq = set.Sequences[0]; var rs = set.Skeleton.ReferenceSkeleton.FinalRefBoneInfo;
+        camTracks[a.Name] = new { skeleton = set.Skeleton.Name, duration = a.SequenceLength, fps = seq.FramesPerSecond,
+            bones = seq.Tracks.Select((t, i) => new { bone = i < rs.Length ? rs[i].Name.Text : "?", posTimes = t.KeyPosTime, pos = t.KeyPos.Select(v => new[] { v.X, v.Y, v.Z }), quatTimes = t.KeyQuatTime, quat = t.KeyQuat.Select(q => new[] { q.X, q.Y, q.Z, q.W }) }).Where(b => b.pos.Any() || b.quat.Any()).ToList() };
+    }
+}
+void WriteCurves()
+{
+    var cp = Path.Combine(outDir, "curves.json");
+    if (File.Exists(cp)) foreach (var kv in JsonSerializer.Deserialize<Dictionary<string, SortedDictionary<string, double[][]>>>(File.ReadAllText(cp))!) curvesAll.TryAdd(kv.Key, kv.Value);  // --only runs keep earlier clips
+    File.WriteAllText(Path.Combine(outDir, "curves.json"), JsonSerializer.Serialize(curvesAll));
+    File.WriteAllText(Path.Combine(outDir, "camera_tracks.json"), JsonSerializer.Serialize(camTracks));
+    var names = curvesAll.Values.SelectMany(v => v.Keys).Distinct().OrderBy(x => x);
+    Console.WriteLine($"curves: {curvesAll.Count} clips; names: " + string.Join(", ", names));
 }
 
 // Discover every gun (anim folder with Character/A_FP_* and Weapon/A_W_*), match its mesh by skeleton name, export all.
@@ -120,6 +157,8 @@ void ExportAll(string[]? only)
     var cfg = JsonSerializer.Deserialize<Dictionary<string, GunCfg>>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "guns.json")))!;
     var keys = provider.Files.Keys.Where(k => k.StartsWith(AnimRoot, StringComparison.OrdinalIgnoreCase) && k.EndsWith(".uasset") && !k.Contains("_Montage")).ToList();
     var skms = ScanSkms();
+    var attPath = Path.Combine(outDir, "attachments.json");
+    var attachments = File.Exists(attPath) ? JsonSerializer.Deserialize<Dictionary<string, AttCfg>>(File.ReadAllText(attPath)) : null;
     // arms + shared
     if (only == null || only.Contains("arms"))
     {
@@ -137,13 +176,19 @@ void ExportAll(string[]? only)
         var wp = keys.Where(k => dirs.Any(d => k.StartsWith(Under(d, "Weapon"), StringComparison.OrdinalIgnoreCase))).Where(IsSeq).ToList();
         if (fp.Count == 0 || wp.Count == 0) { Console.WriteLine($"skip {dirName}: fp={fp.Count} weapon={wp.Count}"); continue; }
         var skel = provider.LoadPackageObject<UAnimSequence>(Strip(wp[0])).Skeleton?.Name;
-        var skm = g.skm ?? skms.FirstOrDefault(m => m.skel == skel).path;
+        var att = attachments?.GetValueOrDefault(name);
+        var skm = g.skm ?? att?.receiver ?? skms.FirstOrDefault(m => m.skel == skel).path;
         if (skm == null) { Console.WriteLine($"NO MESH for {dirName} (skeleton {skel}); add to guns.json"); continue; }
         Console.WriteLine($"== {name}: mesh {skm}, {fp.Count} FP + {wp.Count} weapon clips");
-        ExportMesh(skm, name, "guns");
+        ExportMesh(skm, name, "guns", g.materials);
+        foreach (var part in att?.parts ?? [])
+        {
+            try { ExportMesh(part.mesh, part.row.Replace(' ', '_'), $"guns/{name}/parts"); } catch (Exception ex) { Console.WriteLine($"part fail {name}/{part.row}: {ex.Message}"); }
+        }
         foreach (var k in wp) ExportAnim(Strip(k), $"guns/{name}/anims");
         foreach (var k in fp) ExportAnim(Strip(k), $"fp/{name}");
     }
+    WriteCurves();
 }
 string Strip(string k) => k[..^".uasset".Length];
 bool IsSeq(string k) { try { return provider.LoadPackage(Strip(k)) is CUE4Parse.UE4.Assets.Package p && p.ExportMap.Any(e => e.ClassName == "AnimSequence"); } catch { return false; } }
@@ -159,6 +204,8 @@ List<(string path, string? skel)> ScanSkms()
     File.WriteAllLines(cache, res.Select(r => r.Item1 + "	" + r.Item2));
     return res;
 }
-class GunCfg { public string? name { get; set; } public string? skm { get; set; } public string[]? extraDirs { get; set; } public bool? skip { get; set; } }
+class AttPart { public string row { get; set; } = ""; public string cls { get; set; } = ""; public string? socket { get; set; } public string mesh { get; set; } = ""; }
+class AttCfg { public string? receiver { get; set; } public List<AttPart> parts { get; set; } = new(); }
+class GunCfg { public string[]? materials { get; set; } public string? name { get; set; } public string? skm { get; set; } public string[]? extraDirs { get; set; } public bool? skip { get; set; } }
 
 class ConSink : Serilog.Core.ILogEventSink { public void Emit(Serilog.Events.LogEvent e) => Console.Error.WriteLine($"[{e.Level}] {e.RenderMessage()} {e.Exception}"); }

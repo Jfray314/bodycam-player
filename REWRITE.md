@@ -42,7 +42,8 @@ Outputs: `arms.glb` (arms mesh + M4A1/Glock17 + common clips), `guns/<Gun>.glb` 
 Units metres. `arms.glb` is Y-up with forward -Z. Gun glbs are in raw UE-bone-local axes (no Y-up conversion): spawn the gun scene
 as a child of the arms joint `ik_hand_gun` (UE `ItemAttachBone` = virtual bone `VB ik_hand_gun`, i.e. the bone itself) with an identity transform.
 Clip names equal the UE asset names. Normals are flipped DX->GL; ORM textures are used as-is (R=AO, G=roughness, B=metallic). Textures capped at 2048.
-Not exported yet: modular attachment meshes (`BodycamWeapons/Attachement`: barrel/stock/grip/mag/optics; the gun SKM is the receiver only), montages, Mp-FP camera anims.
+Default attachments (tools/attachments.py: assets/weapons/<Row>.json -> DT_NewShopItem -> DT_WeaponSkins -> static mesh; socket from ItemClassID) are baked into each gun glb as child nodes of the socket's bone (they follow reload clips). Reticles/ammo skipped. `curves.json` = float anim curves (30 Hz) per clip, `camera_tracks.json` = GoPro A_C_* camera bone keys.
+Not exported: montages.
 
 
 ## Source -> Rust map

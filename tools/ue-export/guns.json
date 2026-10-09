@@ -1,6 +1,6 @@
 {
-  "M4a1": { "name": "M4A1", "skm": "Bodycam/Content/BodycamWeapons/Guns/M4A1/M4A1" },
-  "MGlock17": { "name": "Glock17", "extraDirs": ["Glock"] },
+  "M4a1": { "name": "M4A1" },
+  "MGlock17": { "name": "Glock17", "extraDirs": ["Glock"], "materials": ["Bodycam/Content/BodycamWeapons/Guns/Glock17/M_Glock17"] },
   "Glock": { "skip": true },
   "AKM": { "name": "Akm" },
   "Mp9": { "name": "MP9" },

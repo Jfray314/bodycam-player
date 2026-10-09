@@ -11,7 +11,8 @@ bone = rest[0] if rest else "ik_hand_gun"
 ueblender.reset()
 arms, _ = ueblender.import_item(f"{out}/arms/arms.json", [f"{out}/fp/{gun}/{clip}.psa"], "arms")
 g, _ = ueblender.import_item(f"{out}/guns/{gun}/{gun}.json", [], "gun")
-arms.animation_data.action = bpy.data.actions[clip]
+ueblender.attach_parts(g, os.path.abspath(f"{out}/guns/{gun}"))
+arms.animation_data.action = None if os.environ.get("REST") else bpy.data.actions[clip]
 bpy.context.scene.frame_set(0)
 bpy.context.view_layer.update()
 pb = arms.pose.bones[bone]
