@@ -1,4 +1,7 @@
-//! Bodycam camera look. The player CameraComponent blends M_PP_BodycamMaster (lens distortion driven by
+//! Bodycam camera look. Bodycam_Player's BodycamBorders: an Engine Plane with FishEye_Inst (LENS_VEIW_05, a
+//! photographed round lens housing, alpha = clear centre) on SpringArmBodycamBorders (arm 23 cm, lag speed 50,
+//! rotation lag 65), scaled 1.70 x 0.806 -> at 120 deg only its centre fills the view: black rounded corners
+//! that trail the camera slightly. Then the player CameraComponent blends M_PP_BodycamMaster (lens distortion driven by
 //! MPC_PostProcessMaterialSettings + per-channel chromatic aberration) then MI_PP_DiskBlur (priority 400).
 //! Parameter values are the cooked ones; the node graphs themselves are compiled away, so the maths is
 //! reconstructed. The dark rounded frame edge is the distortion sampling off-screen, not a vignette node.
@@ -102,7 +105,8 @@ impl Plugin for PostFxPlugin {
         embedded_asset!(app, "postfx.wesl");
         app.add_plugins((FullscreenMaterialPlugin::<BodycamPostFx>::default(), AutoExposurePlugin))
             .add_systems(Startup, setup)
-            .add_systems(Update, (attach, toggles, motion_state, apply_fov, screenshot).chain());
+            .add_systems(Update, (attach, toggles, motion_state, apply_fov, screenshot).chain())
+            .add_systems(PostUpdate, borders_follow.after(bevy::transform::TransformSystems::Propagate));
     }
 }
 
@@ -144,10 +148,51 @@ fn stack(st: &PostFxState) -> impl Bundle {
     )
 }
 
-fn attach(mut cmd: Commands, st: Res<PostFxState>, q: Query<Entity, Added<BodycamCamera>>) {
+fn attach(
+    mut cmd: Commands,
+    st: Res<PostFxState>,
+    q: Query<Entity, Added<BodycamCamera>>,
+    assets: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut mats: ResMut<Assets<StandardMaterial>>,
+) {
     for e in &q {
         cmd.entity(e).insert(stack(&st));
+        // UE Plane is 100x100 uu; RelativeScale3D 1.699687 x 0.805974 (BordersBaseScale) -> metres.
+        let mat = StandardMaterial {
+            base_color_texture: Some(assets.load("textures/LENS_VEIW_05.png")),
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            ..default()
+        };
+        cmd.spawn((
+            BodycamBorders,
+            Mesh3d(meshes.add(Rectangle::new(1.699687, 0.805974))),
+            MeshMaterial3d(mats.add(mat)),
+            Transform::default(),
+            bevy::light::NotShadowCaster,
+        ));
     }
+}
+
+#[derive(Component)]
+struct BodycamBorders;
+
+/// SpringArmBodycamBorders: TargetArmLength 23 cm forward, CameraLagSpeed 50, CameraRotationLagSpeed 65
+/// (UE spring-arm lag = exponential interp toward the target each frame).
+fn borders_follow(
+    time: Res<Time>,
+    cam: Single<&GlobalTransform, With<BodycamCamera>>,
+    mut b: Single<&mut Transform, With<BodycamBorders>>,
+    mut lagged: Local<Option<(Vec3, Quat)>>,
+) {
+    let dt = time.delta_secs();
+    let (pos, rot) = (cam.translation(), cam.rotation());
+    let (lp, lr) = lagged.get_or_insert((pos, rot));
+    *lp = lp.lerp(pos, (50.0 * dt).min(1.0));
+    *lr = lr.slerp(rot, (65.0 * dt).min(1.0));
+    b.translation = *lp + *lr * Vec3::new(0.0, 0.0, -0.23);
+    b.rotation = *lr;
 }
 
 fn toggles(mut cmd: Commands, keys: Res<ButtonInput<KeyCode>>, mut st: ResMut<PostFxState>, cam: Query<Entity, With<BodycamCamera>>) {
