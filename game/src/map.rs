@@ -66,10 +66,10 @@ fn setup(mut cmd: Commands, assets: Res<AssetServer>, mut ambient: ResMut<Global
         });
     // The map's lights are not exported: a dim sun (shadowed, so interiors stay shaded) plus a strong ambient fill.
     cmd.spawn((
-        DirectionalLight { illuminance: 1_000.0, shadow_maps_enabled: true, ..default() },
+        DirectionalLight { illuminance: 10_000.0, shadow_maps_enabled: true, ..default() },
         Transform::from_xyz(30.0, 60.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
-    ambient.brightness = 100.0;
+    ambient.brightness = 1200.0; // ponytail: interior lights not exported; grey-box levels keep auto exposure (and the unlit lens housing) sane
 }
 
 fn settle(mut st: ResMut<MapState>) {
