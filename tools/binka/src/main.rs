@@ -25,6 +25,7 @@ fn main() {
         if !ue.windows(4).any(|w| w == b"ABEU") {
             if codec != "none" && ua.windows(9).any(|w| w == b"SoundWave") {
                 *codecs.lock().unwrap().entry(codec.into()).or_default() += 1;
+                eprintln!("UNSUPPORTED {codec}: {}", p.display());
                 skip.fetch_add(1, Relaxed);
             }
             continue;
