@@ -69,7 +69,7 @@ local function dump_all()
     print("[BodycamProbe] dump written")
 end
 
-local rec, marker, start = nil, 0, 0
+local rec, marker, start, hooked = nil, 0, 0, false
 
 -- Property reads only: calling UFunctions (GetCameraLocation etc.) from here crashed the game.
 -- Objects are resolved once when recording starts, not every sample.
@@ -110,11 +110,14 @@ local function toggle_record()
     rec:write("t,marker,cam_x,cam_y,cam_z,cam_pitch,cam_yaw,cam_roll,fov,pawn_x,pawn_y,pawn_z,vel_x,vel_y,vel_z,ctl_pitch,ctl_yaw,ctl_roll,crouched,falling\n")
     marker, start = 0, os.clock()
     print("[BodycamProbe] recording started")
-    LoopAsync(16, function()
-        if not rec then return true end
-        ExecuteInGameThread(function() if rec then pcall(sample) end end)
-        return false
-    end)
+    -- Sample from the player's own BP tick (game thread, once per frame). A LoopAsync +
+    -- ExecuteInGameThread per sample crashed after ~35s inside UE4SS's callback cleanup.
+    if not hooked then
+        hooked = true
+        RegisterHook("/BodycamAnimationFramework/Blueprints/Bodycam_Player.Bodycam_Player_C:ReceiveTick", function(self)
+            if rec and self:get():GetAddress() == pawn:GetAddress() then pcall(sample) end
+        end)
+    end
 end
 
 RegisterKeyBind(Key.F7, function() ExecuteInGameThread(function() pcall(dump_all) end) end)
