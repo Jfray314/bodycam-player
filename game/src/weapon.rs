@@ -138,6 +138,32 @@ pub struct Action {
     next_slot: usize,
 }
 
+/// PRAS RecoilData.ControllerRecoil: per-shot (min, max) steps in degrees and the RecoilSmoothing interp speed.
+#[derive(Clone, Debug)]
+pub struct ControllerRecoil {
+    pub horizontal: (f32, f32),
+    pub vertical: (f32, f32),
+    pub smoothing: f32,
+}
+
+impl ControllerRecoil {
+    fn from(anims: &Value) -> Self {
+        let c = &anims["RecoilData"]["ControllerRecoil"];
+        let r = |k: &str| (c[k]["x"].as_f64().unwrap_or(0.0) as f32, c[k]["y"].as_f64().unwrap_or(0.0) as f32);
+        let (lo, hi) = r("HorizontalRecoilStep");
+        let (vlo, vhi) = r("VerticalRecoilStep");
+        ControllerRecoil { horizontal: (lo.min(hi), lo.max(hi)), vertical: (vlo.min(vhi), vlo.max(vhi)), smoothing: r("RecoilSmoothing").1.max(1.0) }
+    }
+}
+
+/// One shot fired by the player (camera recoil/shake, audio, viewmodel recoil).
+#[derive(Message, Clone, Debug)]
+pub struct Fired {
+    pub row: String,
+    pub controller: ControllerRecoil,
+    pub aiming: bool,
+}
+
 /// Fired when a weapon action montage starts (audio plays its PlayWepSounds notifies, viewmodel plays the anim).
 #[derive(Message, Clone, Debug)]
 pub struct MontageStarted {
@@ -185,6 +211,7 @@ pub struct WeaponPlugin;
 impl Plugin for WeaponPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<MontageStarted>()
+            .add_message::<Fired>()
             .add_systems(Startup, setup_fx)
             .add_systems(PostStartup, give_loadout)
             .add_systems(Update, ((actions, swap, aim, fire, fade).chain(), log_montages));
@@ -317,6 +344,7 @@ fn fire(
     mut ray: MeshRayCast,
     mut targets: Query<&mut Health>,
     fx: Res<TracerFx>,
+    mut fired: MessageWriter<Fired>,
 ) {
     let (inv, p) = &mut *q;
     inv.cooldown -= time.delta_secs();
@@ -364,9 +392,8 @@ fn fire(
         Transform::from_translation(origin + gt.forward() * 0.6),
         Fading(0.05),
     ));
-    // ponytail: linear Instability kick until PRAS ControllerRecoil (assets/weapons RecoilData) is ported.
-    let kick = s.instability.unwrap_or(0.5) * 0.02;
-    p.recoil += Vec2::new(rng.random_range(-kick..=kick) * 0.3, kick);
+    let w = &inv.slots[cur];
+    fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming });
 }
 
 fn log_montages(mut ev: MessageReader<MontageStarted>) {

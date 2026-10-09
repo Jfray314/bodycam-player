@@ -97,3 +97,8 @@ for name, row in rows.items():
     char = fire[0].get('Character') if isinstance(fire[0], dict) else None
     print(f"{name:14s} reloads={len(data['anim_set'].get('ReloadTacCalm', []))} fire_len={char.get('length') if isinstance(char, dict) else '-'} recoil={'RecoilData' in data['anim_set']}")
 print('wrote', n)
+
+# PRAS fire camera shake (BafCameraShake) with its rotation curve expanded.
+shake = export(load('/BodycamAnimationFramework/PRAS/CameraShakes/Shake_Rifle_Standard.Shake_Rifle_Standard'), 'Shake_Rifle_Standard')
+json.dump(expand(clean(shake['properties'])), open(os.path.join(os.path.dirname(os.path.normpath(OUT)), 'fire_shake.json'), 'w'), indent=1)
+print('wrote fire_shake.json')
