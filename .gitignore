@@ -1,7 +1,8 @@
 /target
 # extracted game assets: local only, never commit
 /extracted
+/assets-local
 run.log
 player_manifest.txt
-/assets-local
 /.claude/worktrees
+/shots
