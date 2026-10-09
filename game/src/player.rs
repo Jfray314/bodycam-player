@@ -140,6 +140,15 @@ pub struct Player {
     /// Active Shake_Rifle_Standard instances: (age s, pitch/yaw/roll amplitude deg), and the smoothed output.
     shakes: Vec<(f32, Vec3)>,
     shake: Vec3,
+    /// Bodycam_Player "Smooth Control Rotation": RInterpTo(control rotation, 25) - the arms + camera mount follow this.
+    smooth_yaw: f32,
+    smooth_pitch: f32,
+    /// UE Yaw(DeltaTime) = Look.X / dt / 50 (Look.X taken as degrees of yaw input this frame).
+    yaw_rate: f32,
+    /// IA_Move X (strafe, right +), Q/E held, and the Spring Camera roll (UE deg, cw +) FInterp'd at 8.
+    move_x: f32,
+    lean_pressed: bool,
+    roll: f32,
     /// Camera pose in player space from body motion only (no bob/shake); the viewmodel attaches here.
     pub view_base: Transform,
 }
@@ -178,6 +187,8 @@ fn look(time: Res<Time>, motion: Res<AccumulatedMouseMotion>, cursor: Single<&Cu
     let step = p.recoil_pending * (p.recoil_smoothing * time.delta_secs()).min(1.0);
     p.recoil_pending -= step;
     p.yaw -= d.x * SENS + step.x.to_radians();
+    // ponytail: assumes the IA_Look value is degrees of yaw; the MouseInputModifier scale is not extracted.
+    p.yaw_rate = (d.x * SENS).to_degrees() / time.delta_secs().max(1e-4) / 50.0;
     p.pitch = (p.pitch - d.y * SENS + step.y.to_radians()).clamp(-89.9f32.to_radians(), 89.9f32.to_radians()); // ViewPitchMin/Max
 }
 
@@ -260,6 +271,7 @@ fn movement(
         keys.pressed(KeyCode::KeyW) as i8 as f32 - keys.pressed(KeyCode::KeyS) as i8 as f32,
     )
     .normalize_or_zero();
+    p.move_x = input.x;
     p.crouched = keys.pressed(KeyCode::ControlLeft); // IA_Crouch: LeftControl, InputTriggerDown (hold)
     // GA_Character_Sprint: forward only, blocked by aim/crouch (GE_BlockSprint).
     // ALS CanSprint (LookingDirection mode): input amount > 0.5 and move direction within 100 deg of the view;
@@ -377,6 +389,7 @@ fn lean(
             map(value * map(wall * 100.0, 100.0, 300.0, 1.0, 0.0), -15.0, 15.0, 1.0, -1.0)
         }
     };
+    p.lean_pressed = pressed != 0.0;
     let blocked = (target < 0.0 && block_left) || (target > 0.0 && block_right);
     p.lean = crate::status::finterp_to(p.lean, if blocked { 0.0 } else { target }, time.delta_secs(), LEAN_SPEED);
 }
@@ -424,15 +437,29 @@ fn bodycam_camera(time: Res<Time>, cm: Res<CameraMotion>, mut player: Single<&mu
     add(&mut c, [0.0, 0.0, 0.0, lp[3], lp[4], lp[5]].map(|v| v * side), p.lean_roll);
     // UE hangs the camera off the arms' FP_Camera socket, so bob/land/lean move arms and camera together;
     // only camera shakes (fire) are camera-only. The arms follow this pose.
+    // Smooth Control Rotation (Bodycam_Player tick): RInterpTo 25 drives SpringArms (arms + camera mount); the body keeps
+    // the raw yaw, so the camera gets the lag as a local yaw offset. Snap on large jumps (spawn/teleport).
+    if (p.yaw - p.smooth_yaw).abs() > 1.0 {
+        p.smooth_yaw = p.yaw;
+    }
+    p.smooth_yaw = crate::status::finterp_to(p.smooth_yaw, p.yaw, dt, 25.0);
+    p.smooth_pitch = crate::status::finterp_to(p.smooth_pitch, p.pitch, dt, 25.0);
+    let lag_yaw = p.smooth_yaw - p.yaw;
+    // Spring Camera roll: FInterp 8 toward strafe (Movement.X -1..1 -> -5..5) + look (Yaw(DeltaTime) -3..3 -> 8..-8);
+    // while aiming / holding lean the BP uses the lean rotation instead, which our measured lean roll already covers.
+    let map = |v: f32, a: f32, b: f32, c: f32, d: f32| c + (d - c) * ((v - a) / (b - a)).clamp(0.0, 1.0);
+    let roll_target = if p.aiming || p.lean_pressed { 0.0 } else { map(p.move_x, -1.0, 1.0, -5.0, 5.0) + map(p.yaw_rate, -3.0, 3.0, 8.0, -8.0) };
+    p.roll = crate::status::finterp_to(p.roll, roll_target, dt, 8.0);
+    c[5] -= p.roll; // UE roll cw+ -> Bevy ccw+
     p.view_base = Transform::from_xyz(c[0], p.center + c[1], c[2])
-        .with_rotation(Quat::from_euler(EulerRot::YXZ, c[4].to_radians(), p.pitch + c[3].to_radians(), c[5].to_radians()));
+        .with_rotation(Quat::from_euler(EulerRot::YXZ, lag_yaw + c[4].to_radians(), p.smooth_pitch + c[3].to_radians(), c[5].to_radians()));
 
     // Fire shake is in UE convention: pitch up+, yaw right+ (-> Bevy left+), roll cw+ (-> Bevy ccw+).
     let fs = fire_shake(p, dt);
     add(&mut c, [0.0, 0.0, 0.0, fs.x, -fs.y, -fs.z], 1.0);
 
     cam.translation = Vec3::new(c[0], p.center + c[1], c[2]);
-    cam.rotation = Quat::from_euler(EulerRot::YXZ, c[4].to_radians(), p.pitch + c[3].to_radians(), c[5].to_radians());
+    cam.rotation = Quat::from_euler(EulerRot::YXZ, lag_yaw + c[4].to_radians(), p.smooth_pitch + c[3].to_radians(), c[5].to_radians());
 }
 
 #[cfg(test)]
