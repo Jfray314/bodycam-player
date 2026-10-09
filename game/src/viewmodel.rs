@@ -48,6 +48,8 @@ impl Plugin for ViewmodelPlugin {
 struct ViewmodelAssets {
     arms: Handle<Gltf>,
     guns: HashMap<&'static str, Handle<Gltf>>,
+    /// Per-gun arm clips (models/arms_anims/<gun>.glb, same skeleton); arms.glb only carries M4A1/Glock.
+    arm_anims: Vec<Handle<Gltf>>,
 }
 
 /// glb under models/guns for a weapon, from its BAS animation folder (e.g. Animations/M4a1/...).
@@ -79,7 +81,8 @@ fn gun_model(anims: &serde_json::Value) -> Option<&'static str> {
 fn load(mut cmd: Commands, assets: Res<AssetServer>) {
     let names = ["M4A1", "Glock17", "Akm", "Deagle", "FAL", "Mossberg590", "Remington700", "Revolver", "SCAR-H", "SVD", "UZI", "MP9", "Vector", "MP5", "Benelli", "Crossbow", "Vaiga"];
     let guns = names.iter().map(|n| (*n, assets.load(format!("models/guns/{n}.glb")))).collect();
-    cmd.insert_resource(ViewmodelAssets { arms: assets.load("models/arms.glb"), guns });
+    let arm_anims = names[2..].iter().map(|n| assets.load(format!("models/arms_anims/{n}.glb"))).collect();
+    cmd.insert_resource(ViewmodelAssets { arms: assets.load("models/arms.glb"), guns, arm_anims });
 }
 
 #[derive(Component)]
@@ -98,9 +101,13 @@ struct Anim {
     action_pitch: f32,
 }
 
-fn clip_graph(g: &Gltf, graphs: &mut Assets<AnimationGraph>) -> (Handle<AnimationGraph>, HashMap<String, AnimationNodeIndex>) {
+fn clip_graph<'a>(gs: impl IntoIterator<Item = &'a Gltf>, graphs: &mut Assets<AnimationGraph>) -> (Handle<AnimationGraph>, HashMap<String, AnimationNodeIndex>) {
     let mut graph = AnimationGraph::new();
-    let nodes = g.named_animations.iter().map(|(n, c)| (n.to_string(), graph.add_clip(c.clone(), 1.0, graph.root))).collect();
+    let nodes = gs
+        .into_iter()
+        .flat_map(|g| g.named_animations.iter())
+        .map(|(n, c)| (n.to_string(), graph.add_clip(c.clone(), 1.0, graph.root)))
+        .collect();
     (graphs.add(graph), nodes)
 }
 
@@ -109,6 +116,7 @@ fn spawn_arms(
     vm: Res<ViewmodelAssets>,
     gltfs: Res<Assets<Gltf>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
+    assets: Res<AssetServer>,
     player: Single<Entity, With<Player>>,
     mut done: Local<bool>,
 ) {
@@ -116,8 +124,12 @@ fn spawn_arms(
         return;
     }
     let Some(g) = gltfs.get(&vm.arms) else { return };
+    // Wait for every per-gun clip file (a missing one just contributes no clips).
+    if vm.arm_anims.iter().any(|h| !gltfs.contains(h) && !assets.get_load_state(h).is_some_and(|s| s.is_failed())) {
+        return;
+    }
     *done = true;
-    let (graph, nodes) = clip_graph(g, &mut graphs);
+    let (graph, nodes) = clip_graph(std::iter::once(g).chain(vm.arm_anims.iter().filter_map(|h| gltfs.get(h))), &mut graphs);
     let arms = cmd
         .spawn((
             ArmsRoot,
@@ -200,7 +212,7 @@ fn attach_gun(
     for (e, _) in &guns {
         cmd.entity(e).despawn();
     }
-    let (graph, nodes) = clip_graph(g, &mut graphs);
+    let (graph, nodes) = clip_graph([g], &mut graphs);
     let gun = cmd
         .spawn((GunRoot(want), WorldAssetRoot(g.scenes[0].clone()), AnimationGraphHandle(graph), Anim { nodes, current: None, montage_until: 0.0, action_pitch: 0.0 }, Transform::default()))
         .id();

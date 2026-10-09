@@ -10,26 +10,32 @@ mod weapon;
 use bevy::prelude::*;
 
 /// Dev hook for headless checks: BODYCAM_AUTO="R@6:0.5,J@12" holds keys at those times (seconds), default 0.1 s.
-/// "RMB" holds the right mouse button (aim).
+/// "LMB"/"RMB" hold mouse buttons, "Ctrl" crouches.
 fn autotest(
     time: Res<Time>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
-    mut plan: Local<Option<Vec<(Option<KeyCode>, f32, f32)>>>,
+    mut plan: Local<Option<Vec<(Result<KeyCode, MouseButton>, f32, f32)>>>,
 ) {
     let plan = plan.get_or_insert_with(|| {
         std::env::var("BODYCAM_AUTO").unwrap_or_default().split(',').filter_map(|s| {
             let (k, t) = s.split_once('@')?;
             let (t, hold) = t.split_once(':').unwrap_or((t, "0.1"));
             let key = match k {
-                "RMB" => None,
-                "R" => Some(KeyCode::KeyR),
-                "J" => Some(KeyCode::KeyJ),
-                "2" => Some(KeyCode::Digit2),
-                "1" => Some(KeyCode::Digit1),
-                "W" => Some(KeyCode::KeyW),
-                "Q" => Some(KeyCode::KeyQ),
-                "E" => Some(KeyCode::KeyE),
+                "LMB" => Err(MouseButton::Left),
+                "RMB" => Err(MouseButton::Right),
+                "Ctrl" => Ok(KeyCode::ControlLeft),
+                "1" => Ok(KeyCode::Digit1),
+                "2" => Ok(KeyCode::Digit2),
+                "3" => Ok(KeyCode::Digit3),
+                "4" => Ok(KeyCode::Digit4),
+                "5" => Ok(KeyCode::Digit5),
+                "R" => Ok(KeyCode::KeyR),
+                "J" => Ok(KeyCode::KeyJ),
+                "W" => Ok(KeyCode::KeyW),
+                "Q" => Ok(KeyCode::KeyQ),
+                "E" => Ok(KeyCode::KeyE),
+                "Shift" => Ok(KeyCode::ShiftLeft),
                 _ => return None,
             };
             Some((key, t.parse().ok()?, hold.parse().ok()?))
@@ -37,12 +43,12 @@ fn autotest(
     });
     let t = time.elapsed_secs();
     for (k, at, hold) in plan.iter() {
-        let on = t >= *at && t < at + hold;
-        match k {
-            Some(k) if on => keys.press(*k),
-            Some(k) if t >= at + hold && keys.pressed(*k) => keys.release(*k),
-            None if on => mouse.press(MouseButton::Right),
-            None if t >= at + hold && mouse.pressed(MouseButton::Right) => mouse.release(MouseButton::Right),
+        let (on, off) = (t >= *at && t < at + hold, t >= at + hold);
+        match *k {
+            Ok(k) if on => keys.press(k),
+            Ok(k) if off && keys.pressed(k) => keys.release(k),
+            Err(b) if on => mouse.press(b),
+            Err(b) if off && mouse.pressed(b) => mouse.release(b),
             _ => {}
         }
     }
