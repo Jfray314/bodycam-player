@@ -101,12 +101,21 @@ struct Anim {
     action_pitch: f32,
 }
 
+/// UE additive clips (local-space deltas: fire, regrips), from tools/additive_clips.py.
+fn is_additive(clip: &str) -> bool {
+    static SET: std::sync::OnceLock<std::collections::HashSet<String>> = std::sync::OnceLock::new();
+    SET.get_or_init(|| serde_json::from_str(include_str!("../../assets/additive_clips.json")).expect("additive_clips.json")).contains(clip)
+}
+
+/// root -> additive blend [ base blend (full-pose clips, crossfaded by AnimationTransitions), additive clips... ].
 fn clip_graph<'a>(gs: impl IntoIterator<Item = &'a Gltf>, graphs: &mut Assets<AnimationGraph>) -> (Handle<AnimationGraph>, HashMap<String, AnimationNodeIndex>) {
     let mut graph = AnimationGraph::new();
+    let add = graph.add_additive_blend(1.0, graph.root);
+    let base = graph.add_blend(1.0, add);
     let nodes = gs
         .into_iter()
         .flat_map(|g| g.named_animations.iter())
-        .map(|(n, c)| (n.to_string(), graph.add_clip(c.clone(), 1.0, graph.root)))
+        .map(|(n, c)| (n.to_string(), graph.add_clip(c.clone(), 1.0, if is_additive(n) { add } else { base })))
         .collect();
     (graphs.add(graph), nodes)
 }
@@ -221,6 +230,10 @@ fn attach_gun(
 
 fn play(anim: &mut Anim, player: &mut AnimationPlayer, tr: &mut AnimationTransitions, clip: &str, repeat: bool) -> bool {
     let Some(&node) = anim.nodes.get(clip) else { return false };
+    if is_additive(clip) {
+        player.start(node); // layered on top of whatever plays; restarts on every shot
+        return true;
+    }
     let a = tr.play(player, node, BLEND);
     if repeat {
         a.repeat();
@@ -239,30 +252,39 @@ fn play_events(
     mut montages: MessageReader<MontageStarted>,
     mut fired: MessageReader<Fired>,
     inv: Option<Single<&Inventory>>,
+    p: Single<&Player>,
     mut roots: Query<(&mut Anim, Has<ArmsRoot>)>,
     mut players: Query<(&mut AnimationPlayer, &mut AnimationTransitions, &AnimLink)>,
 ) {
-    let mut starts: Vec<(String, f32, f32)> = montages
+    // (clip, length, action pitch, also on the arms)
+    let mut starts: Vec<(String, f32, f32, bool)> = montages
         .read()
         .map(|m| {
             let a = inv.as_ref().map(|i| &i.slots[i.current].anims);
             let bas = |k: &str| a.and_then(|a| a[k].as_f64()).unwrap_or(0.0) as f32;
             let max = a.and_then(|a| a["ActionPitchAngle"]["x"].as_f64()).unwrap_or(0.0) as f32 * bas("SpineAdditiveActionWeight");
-            (clip_of(&m.montage.path), m.montage.length, max * action_weight(m.kind))
+            (clip_of(&m.montage.path), m.montage.length, max * action_weight(m.kind), true)
         })
         .collect();
     if fired.read().count() > 0
         && let Some(inv) = &inv
         && let Some(path) = inv.slots[inv.current].anims["Fire"][0]["Character"]["path"].as_str()
     {
-        starts.push((clip_of(path), 0.0, 0.0)); // fire is additive-ish: play, but let the base loop resume right away
+        // UE layers fire additively over hip or aim. Additive fire clips layer here too; the few full-pose ones
+        // (M4A1) would drop the aim, so while aiming only the gun plays those and the kick comes from the camera.
+        let clip = clip_of(path);
+        let on_arms = !p.aiming || is_additive(&clip);
+        starts.push((clip, 0.0, 0.0, on_arms));
     }
     let now = time.elapsed_secs();
-    for (clip, len, pitch) in starts {
+    for (clip, len, pitch, on_arms) in starts {
         for (mut player, mut tr, link) in &mut players {
             let Ok((mut anim, is_arms)) = roots.get_mut(link.0) else { continue };
+            if is_arms && !on_arms {
+                continue;
+            }
             let name = if is_arms { clip.clone() } else { clip.replacen("A_FP_", "A_W_", 1) };
-            if play(&mut anim, &mut player, &mut tr, &name, false) {
+            if play(&mut anim, &mut player, &mut tr, &name, false) && !is_additive(&name) {
                 anim.montage_until = now + if len > 0.0 { len } else { 0.25 };
                 anim.action_pitch = pitch;
             }
@@ -380,12 +402,14 @@ pub fn debug_bones(
     meshes: Query<(Option<&Name>, &ViewVisibility, &InheritedVisibility, &GlobalTransform), With<Mesh3d>>,
     mut last: Local<f32>,
 ) {
-    if std::env::var("BODYCAM_DEBUG_BONES").is_err() || time.elapsed_secs() - *last < 0.5 {
+    if std::env::var("BODYCAM_DEBUG_BONES").is_err() || time.elapsed_secs() - *last < 0.1 {
         return;
     }
     *last = time.elapsed_secs();
     let Ok(r) = arms.single() else { return };
     info!("t={:.1} arms root world {:?}", *last, r.translation());
+    let (y, x, z) = cam.rotation().to_euler(EulerRot::YXZ);
+    info!("t={:.1} cam yaw {:.1} pitch {:.1} roll {:.1}", *last, y.to_degrees(), x.to_degrees(), z.to_degrees());
     let cam = cam.affine().inverse();
     for (n, gt) in joints.iter().filter(|(n, _)| ["ik_hand_gun", "hand_r", "hand_l"].contains(&n.as_str())) {
         let t = cam.transform_point3(gt.translation());
