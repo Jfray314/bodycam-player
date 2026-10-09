@@ -23,8 +23,12 @@ pub struct ViewmodelPlugin;
 impl Plugin for ViewmodelPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, load)
-            .add_systems(Update, (spawn_arms, hook_players, attach_gun, play_events, base_loop).chain())
-            .add_systems(PostUpdate, place_arms.before(bevy::transform::TransformSystems::Propagate));
+            .add_systems(Update, (spawn_arms, hook_players, no_cull, attach_gun, play_events, base_loop).chain())
+            .add_systems(Last, debug_bones)
+            .add_systems(
+                PostUpdate,
+                (place_arms, follow_head.after(bevy::app::AnimationSystems)).before(bevy::transform::TransformSystems::Propagate),
+            );
     }
 }
 
@@ -141,6 +145,21 @@ fn hook_players(
     }
 }
 
+/// The viewmodel is always in front of the camera; skinned-mesh bounds go stale under montages and got culled.
+fn no_cull(
+    mut cmd: Commands,
+    new: Query<Entity, Added<Mesh3d>>,
+    parents: Query<&ChildOf>,
+    arms: Query<(), With<ArmsRoot>>,
+    guns: Query<(), With<GunRoot>>,
+) {
+    for e in &new {
+        if root_of(e, &parents, &arms).is_some() || root_of(e, &parents, &guns).is_some() {
+            cmd.entity(e).insert((bevy::camera::visibility::NoFrustumCulling, crate::player::IgnoreTraces));
+        }
+    }
+}
+
 /// Links a glTF AnimationPlayer entity to its viewmodel root.
 #[derive(Component)]
 struct AnimLink(Entity);
@@ -247,9 +266,97 @@ fn base_loop(
     }
 }
 
+/// UE attaches the camera to the arms' FP_Camera socket, so montages that move the head (mag check looks down at
+/// the gun, reloads tilt) move the view. Delta D = head_now * head_idle^-1 in arms space (the socket offset cancels);
+/// applied only while a montage plays, because the measured walk/idle camera curves already contain the base loops.
+fn follow_head(
+    time: Res<Time>,
+    p: Single<&Player>,
+    arms: Single<(Entity, &Anim), With<ArmsRoot>>,
+    joints: Query<(Entity, &Name)>,
+    locals: Query<&Transform, Without<crate::player::BodycamCamera>>,
+    parents: Query<&ChildOf>,
+    mut cam: Single<&mut Transform, With<crate::player::BodycamCamera>>,
+    mut head: Local<Option<Entity>>,
+    mut idle: Local<Option<Transform>>,
+    mut weight: Local<f32>,
+) {
+    let (root, anim) = *arms;
+    if head.is_none() {
+        *head = joints.iter().find(|(e, n)| n.as_str() == "head" && root_of_entity(*e, root, &parents)).map(|j| j.0);
+    }
+    let Some(h) = *head else { return };
+    // Head transform in arms-root space: product of local transforms up the joint chain.
+    let mut rel = *locals.get(h).unwrap();
+    let mut e = h;
+    while let Ok(c) = parents.get(e) {
+        e = c.parent();
+        if e == root {
+            break;
+        }
+        rel = *locals.get(e).unwrap() * rel;
+    }
+    let montage = time.elapsed_secs() < anim.montage_until;
+    if !montage && anim.current.is_some() {
+        *idle = Some(rel); // track the base loop's head so the montage delta starts from where the base pose was
+    }
+    let Some(idle) = *idle else { return };
+    *weight = crate::status::finterp_to(*weight, if montage { 1.0 } else { 0.0 }, time.delta_secs(), 1.0 / BLEND.as_secs_f32());
+    let d = Transform::from_matrix(rel.to_matrix() * idle.to_matrix().inverse());
+    let d = Transform { translation: d.translation * *weight, rotation: Quat::IDENTITY.slerp(d.rotation, *weight), ..default() };
+    let to_socket = Transform::from_translation(FP_CAMERA_SOCKET);
+    let residual = Transform::from_matrix(p.view_base.to_matrix().inverse() * cam.to_matrix());
+    **cam = Transform::from_matrix(
+        p.view_base.to_matrix() * to_socket.to_matrix().inverse() * d.to_matrix() * to_socket.to_matrix() * residual.to_matrix(),
+    );
+}
+
+fn root_of_entity(mut e: Entity, root: Entity, parents: &Query<&ChildOf>) -> bool {
+    while let Ok(c) = parents.get(e) {
+        e = c.parent();
+        if e == root {
+            return true;
+        }
+    }
+    false
+}
+
 /// Arms root = body view pose * inverse(FP_Camera socket): the socket lands on the un-shaken camera point.
 fn place_arms(p: Single<&Player>, mut arms: Query<&mut Transform, With<ArmsRoot>>) {
     for mut t in &mut arms {
         *t = p.view_base * Transform::from_translation(-FP_CAMERA_SOCKET);
+    }
+}
+
+/// Dev: BODYCAM_DEBUG_BONES=1 logs key arm bones (arms-root space) twice a second.
+pub fn debug_bones(
+    time: Res<Time>,
+    arms: Query<&GlobalTransform, With<ArmsRoot>>,
+    joints: Query<(&Name, &GlobalTransform)>,
+    morphs: Query<(Option<&Name>, &bevy::mesh::morph::MorphWeights)>,
+    meshes: Query<(Option<&Name>, &ViewVisibility, &InheritedVisibility, &GlobalTransform), With<Mesh3d>>,
+    mut last: Local<f32>,
+) {
+    if std::env::var("BODYCAM_DEBUG_BONES").is_err() || time.elapsed_secs() - *last < 0.5 {
+        return;
+    }
+    *last = time.elapsed_secs();
+    let Ok(r) = arms.single() else { return };
+    info!("t={:.1} arms root world {:?}", *last, r.translation());
+    let mut worst = (0.0f32, String::new());
+    for (n, gt) in &joints {
+        let (sc, _, t) = (r.affine().inverse() * gt.affine()).to_scale_rotation_translation();
+        let m = t.length().max(sc.max_element()) * if t.is_nan() || sc.is_nan() { 1e9 } else { 1.0 };
+        if m > worst.0 {
+            worst = (m, format!("{} pos {:?} scale {:?}", n.as_str(), t, sc));
+        }
+    }
+    info!("t={:.1} farthest joint: {}", *last, worst.1);
+    for (n, vv, iv, gt) in &meshes {
+        info!("t={:.1} mesh {} view_visible={} inherited={} world={:?}", *last, n.map(|n| n.as_str()).unwrap_or("?"), vv.get(), iv.get(), gt.translation());
+    }
+    for (n, w) in &morphs {
+        let mx = w.weights().iter().fold(0.0f32, |a, b| a.max(b.abs()));
+        info!("t={:.1} morph {} n={} max|w|={}", *last, n.map(|n| n.as_str()).unwrap_or("?"), w.weights().len(), mx);
     }
 }

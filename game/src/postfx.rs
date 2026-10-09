@@ -239,13 +239,16 @@ fn apply_fov(st: Res<PostFxState>, mut q: Query<&mut Projection, With<BodycamCam
     }
 }
 
-fn screenshot(mut cmd: Commands, mut frame: Local<u32>, mut exit: MessageWriter<AppExit>) {
+/// `BODYCAM_SCREENSHOT=path` saves one frame at `BODYCAM_SCREENSHOT_AT` seconds (default 2) and exits.
+fn screenshot(mut cmd: Commands, time: Res<Time>, mut state: Local<u8>, mut exit: MessageWriter<AppExit>) {
     let Ok(path) = std::env::var("BODYCAM_SCREENSHOT") else { return };
-    *frame += 1;
-    let at: u32 = std::env::var("BODYCAM_SCREENSHOT_FRAME").ok().and_then(|v| v.parse().ok()).unwrap_or(120);
-    if *frame == at {
+    let at: f32 = std::env::var("BODYCAM_SCREENSHOT_AT").ok().and_then(|v| v.parse().ok()).unwrap_or(2.0);
+    let t = time.elapsed_secs();
+    if *state == 0 && t >= at {
+        *state = 1;
         cmd.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
-    } else if *frame == at + 30 {
+    } else if *state == 1 && t >= at + 0.5 {
+        *state = 2;
         exit.write(AppExit::Success);
     }
 }

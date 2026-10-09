@@ -9,6 +9,26 @@ mod weapon;
 
 use bevy::prelude::*;
 
+/// Dev hook for headless checks: BODYCAM_AUTO="R@6:0.5,J@12" holds keys at those times (seconds), default 0.1 s.
+fn autotest(time: Res<Time>, mut keys: ResMut<ButtonInput<KeyCode>>, mut plan: Local<Option<Vec<(KeyCode, f32, f32)>>>) {
+    let plan = plan.get_or_insert_with(|| {
+        std::env::var("BODYCAM_AUTO").unwrap_or_default().split(',').filter_map(|s| {
+            let (k, t) = s.split_once('@')?;
+            let (t, hold) = t.split_once(':').unwrap_or((t, "0.1"));
+            let key = match k { "R" => KeyCode::KeyR, "J" => KeyCode::KeyJ, "2" => KeyCode::Digit2, "1" => KeyCode::Digit1, "W" => KeyCode::KeyW, _ => return None };
+            Some((key, t.parse().ok()?, hold.parse().ok()?))
+        }).collect()
+    });
+    let t = time.elapsed_secs();
+    for (k, at, hold) in plan.iter() {
+        if t >= *at && t < at + hold {
+            keys.press(*k);
+        } else if t >= at + hold && keys.pressed(*k) {
+            keys.release(*k);
+        }
+    }
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(AssetPlugin {
@@ -20,6 +40,7 @@ fn main() {
         .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin))
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
         .add_systems(Startup, test_range)
+        .add_systems(PreUpdate, autotest.after(bevy::input::InputSystems))
         .run();
 }
 
