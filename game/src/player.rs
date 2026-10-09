@@ -109,7 +109,7 @@ impl Plugin for PlayerPlugin {
         app.insert_resource(CameraMotion::load())
             .add_message::<Footstep>()
             .add_systems(Startup, spawn)
-            .add_systems(Update, (grab_cursor, on_fire, look, movement, bodycam_camera).chain());
+            .add_systems(Update, (grab_cursor, on_fire, look, movement, lean, bodycam_camera).chain());
     }
 }
 
@@ -250,8 +250,6 @@ fn movement(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut q: Single<(&mu
     let within_100 = input.length() > 0.5 && input.x.atan2(input.y).to_degrees().abs() < 100.0;
     p.sprinting = keys.pressed(KeyCode::ShiftLeft) && within_100 && !p.crouched && !p.aiming;
     let max = if p.crouched { CROUCH } else if p.sprinting { SPRINT } else if p.aiming { ADS } else { WALK };
-    let lean_target = keys.pressed(KeyCode::KeyE) as i8 as f32 - keys.pressed(KeyCode::KeyQ) as i8 as f32;
-    p.lean = crate::status::finterp_to(p.lean, lean_target, dt, LEAN_SPEED);
 
     let rot = Quat::from_rotation_y(p.yaw);
     let mut v = Vec3::new(p.vel.x, 0.0, p.vel.z);
@@ -288,6 +286,68 @@ fn movement(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut q: Single<(&mu
     }
     p.since_land += dt;
     tf.rotation = rot;
+}
+
+/// Entities the player's own traces ignore (lens housing plane, tracers, viewmodel).
+#[derive(Component)]
+pub struct IgnoreTraces;
+
+/// Bodycam_Player "Check Automatic Leaning" + "Update Leaning Values", run every tick.
+fn lean(
+    time: Res<Time>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut q: Single<(&mut Player, &Transform)>,
+    cam: Single<&GlobalTransform, With<BodycamCamera>>,
+    ignore: Query<(), With<IgnoreTraces>>,
+    mut ray: bevy::picking::mesh_picking::ray_cast::MeshRayCast,
+) {
+    use bevy::picking::mesh_picking::ray_cast::MeshRayCastSettings;
+    let (p, tf) = &mut *q;
+    let filter = |e: Entity| !ignore.contains(e);
+    let settings = MeshRayCastSettings::default().with_filter(&filter);
+    let mut cast = |from: Vec3, dir: Vec3, max: f32| -> Option<f32> {
+        let d = Dir3::new(dir).ok()?;
+        ray.cast_ray(Ray3d::new(from, d), &settings).first().map(|(_, h)| h.distance).filter(|&dist| dist <= max)
+    };
+    let center = tf.translation + Vec3::Y * p.center;
+    let right = tf.rotation * Vec3::X;
+    let forward = tf.rotation * Vec3::NEG_Z; // "Get Forward Rotation": control yaw forward
+    let head = cam.translation(); // ponytail: camera stands in for the 'head' socket until the body mesh exists
+    // BlockLeft/RightLean: SphereTraceSingle radius 20 from head, 25 cm sideways. ponytail: ray of 25 + 20 cm.
+    let block_right = cast(head, right, 0.45).is_some();
+    let block_left = cast(head, -right, 0.45).is_some();
+
+    let pressed = keys.pressed(KeyCode::KeyE) as i8 as f32 - keys.pressed(KeyCode::KeyQ) as i8 as f32; // IA_Lean
+    let target = if pressed != 0.0 {
+        pressed
+    } else {
+        // Five forward traces each side, offset i * Corner Peek Division (10 cm), from (actor xy, camera z).
+        // Length by gait: walking 300 cm (SelectFloat always picks 300), sprinting 100 cm. Hits right count +1, left -1; keep the nearest wall.
+        let len = if p.sprinting { 1.0 } else { 3.0 };
+        let start = Vec3::new(center.x, cam.translation().y, center.z);
+        let (mut hits, mut wall) = (0i32, 3.0f32);
+        for side in [1.0f32, -1.0] {
+            for i in 1..=5 {
+                if let Some(d) = cast(start + right * side * 0.10 * i as f32, forward, len)
+                    && d < wall
+                {
+                    hits += side as i32;
+                    wall = d;
+                }
+            }
+        }
+        let value = 15.0 / 5.0 * hits as f32; // |Leaning Camera Offset Rotation.X| / 5 * TraceIndexHit
+        let map = |v: f32, a: f32, b: f32, c: f32, d: f32| c + (d - c) * ((v - a) / (b - a)).clamp(0.0, 1.0);
+        if p.sprinting {
+            map(value, -15.0, 15.0, 1.0, -1.0)
+        } else if p.aiming {
+            0.0 // no automatic leaning while aiming
+        } else {
+            map(value * map(wall * 100.0, 100.0, 300.0, 1.0, 0.0), -15.0, 15.0, 1.0, -1.0)
+        }
+    };
+    let blocked = (target < 0.0 && block_left) || (target > 0.0 && block_right);
+    p.lean = crate::status::finterp_to(p.lean, if blocked { 0.0 } else { target }, time.delta_secs(), LEAN_SPEED);
 }
 
 /// AC_BodycamCamera replacement: measured idle pose + gait loops + land event + lean, on the chest mount.

@@ -395,6 +395,7 @@ fn fire(
             MeshMaterial3d(fx.1.clone()),
             Transform::from_translation((origin + end) / 2.0).looking_at(end, Vec3::Y).with_scale(Vec3::new(1.0, 1.0, len)),
             Fading(0.04),
+            crate::player::IgnoreTraces,
         ));
     }
     // Muzzle flash

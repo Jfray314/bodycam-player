@@ -171,6 +171,7 @@ fn attach(
             MeshMaterial3d(mats.add(mat)),
             Transform::default(),
             bevy::light::NotShadowCaster,
+            crate::player::IgnoreTraces,
         ));
     }
 }
