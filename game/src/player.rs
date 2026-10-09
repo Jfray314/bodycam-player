@@ -124,6 +124,10 @@ pub struct Player {
     pub aiming: bool,
     /// -1 left .. 1 right, blended.
     pub lean: f32,
+    /// Lean as the camera shows it (measured in-game, camera_motion.json sequences.lean): the offset follows
+    /// Leaning Alpha through a second FInterp at 12 (anim blend), the roll trails at ~2 (29.5 deg reached after ~1.5 s).
+    lean_pos: f32,
+    lean_roll: f32,
     /// Smoothed capsule centre height above the feet.
     center: f32,
     /// Stride phase (0..1) and how much of the current gait loop is applied.
@@ -389,7 +393,10 @@ fn bodycam_camera(time: Res<Time>, cm: Res<CameraMotion>, mut player: Single<&mu
     // Recorded lean peaks are signed; mirror for the other side.
     let lp = cm.lean_pose();
     let side = if lp[5] < 0.0 { 1.0 } else { -1.0 }; // positive lean = right = negative (cw) roll
-    add(&mut c, lp.map(|v| v * side), p.lean);
+    p.lean_pos = crate::status::finterp_to(p.lean_pos, p.lean, dt, 12.0);
+    p.lean_roll = crate::status::finterp_to(p.lean_roll, p.lean, dt, 2.0);
+    add(&mut c, [lp[0], lp[1], lp[2], 0.0, 0.0, 0.0].map(|v| v * side), p.lean_pos);
+    add(&mut c, [0.0, 0.0, 0.0, lp[3], lp[4], lp[5]].map(|v| v * side), p.lean_roll);
     // UE hangs the camera off the arms' FP_Camera socket, so bob/land/lean move arms and camera together;
     // only camera shakes (fire) are camera-only. The arms follow this pose.
     p.view_base = Transform::from_xyz(c[0], p.center + c[1], c[2])
@@ -411,6 +418,26 @@ mod tests {
         assert!(cm.loops.walk.curve.len() == 64 && cm.loops.walk.period_s > 0.5);
         assert!(cm.idle[1] > 0.6 && cm.idle[1] < 0.8); // chest mount ~72 cm above capsule centre
         assert!(cm.lean_pose()[5].abs() > 20.0); // measured lean roll ~29 deg
+    }
+
+    /// Lean step response (alpha FInterp 12 -> offset 12 / roll 2) tracks the in-game recording within 15 %.
+    #[test]
+    fn lean_matches_recording() {
+        let cm = super::CameraMotion::load();
+        let s = &cm.sequences.lean.series;
+        let peak = cm.lean_pose();
+        let start = s.iter().position(|f| f[0].abs() > 0.005).unwrap() - 1;
+        let (mut alpha, mut pos, mut roll) = (0.0f32, 0.0f32, 0.0f32);
+        let dt = 1.0 / cm.hz;
+        for (i, f) in s[start..start + 90].iter().enumerate() {
+            if i % 10 == 0 {
+                assert!((pos - (f[0] / peak[0]).abs()).abs() < 0.15, "offset at frame {i}: {pos} vs {}", (f[0] / peak[0]).abs());
+                assert!((roll - (f[5] / peak[5]).abs()).abs() < 0.15, "roll at frame {i}: {roll} vs {}", (f[5] / peak[5]).abs());
+            }
+            alpha = crate::status::finterp_to(alpha, 1.0, dt, super::LEAN_SPEED);
+            pos = crate::status::finterp_to(pos, alpha, dt, 12.0);
+            roll = crate::status::finterp_to(roll, alpha, dt, 2.0);
+        }
     }
 
     #[test]
