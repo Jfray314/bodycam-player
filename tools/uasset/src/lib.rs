@@ -1,4 +1,5 @@
 //! Reader for cooked UE 5.5 legacy packages (.uasset + .uexp) with unversioned properties.
+pub mod kismet;
 pub mod package;
 pub mod props;
 pub mod usmap;

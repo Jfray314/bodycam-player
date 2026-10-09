@@ -497,6 +497,14 @@ impl<'a> Reader<'a> {
         o.insert("class".into(), json!(self.pkg.path(e.class)));
         o.insert("outer".into(), json!(self.pkg.path(e.outer)));
         o.insert("cdo".into(), json!(e.flags & RF_CLASS_DEFAULT_OBJECT != 0));
+        if class_name == "Function" || class_name == "DelegateFunction" {
+            let res = crate::kismet::export_fn(self, i, &mut o);
+            o.insert("status".into(), json!(if res.is_ok() { "ok" } else { "partial" }));
+            if let Err(err) = res {
+                o.insert("error".into(), json!(err));
+            }
+            return Value::Object(o);
+        }
         let skip = ["Class", "Function", "DelegateFunction", "ScriptStruct", "UserDefinedStruct", "Enum", "UserDefinedEnum", "MetaData"];
         if skip.contains(&class_name.as_str()) || class_name.ends_with("GeneratedClass") {
             o.insert("status".into(), json!("skipped"));
