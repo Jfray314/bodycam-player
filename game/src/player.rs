@@ -159,7 +159,7 @@ fn movement(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut q: Single<(&mu
         keys.pressed(KeyCode::KeyW) as i8 as f32 - keys.pressed(KeyCode::KeyS) as i8 as f32,
     )
     .normalize_or_zero();
-    p.crouched = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::KeyC);
+    p.crouched = keys.pressed(KeyCode::ControlLeft); // IA_Crouch: LeftControl, InputTriggerDown (hold)
     // GA_Character_Sprint: forward only, blocked by aim/crouch (GE_BlockSprint).
     p.sprinting = keys.pressed(KeyCode::ShiftLeft) && input.y > 0.0 && !p.crouched && !p.aiming;
     let max = if p.crouched { CROUCH } else if p.sprinting { SPRINT } else if p.aiming { ADS } else { WALK };
