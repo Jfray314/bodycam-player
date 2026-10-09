@@ -242,9 +242,10 @@ fn apply_fov(st: Res<PostFxState>, mut q: Query<&mut Projection, With<BodycamCam
 fn screenshot(mut cmd: Commands, mut frame: Local<u32>, mut exit: MessageWriter<AppExit>) {
     let Ok(path) = std::env::var("BODYCAM_SCREENSHOT") else { return };
     *frame += 1;
-    if *frame == 120 {
+    let at: u32 = std::env::var("BODYCAM_SCREENSHOT_FRAME").ok().and_then(|v| v.parse().ok()).unwrap_or(120);
+    if *frame == at {
         cmd.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
-    } else if *frame == 150 {
+    } else if *frame == at + 30 {
         exit.write(AppExit::Success);
     }
 }
