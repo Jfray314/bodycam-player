@@ -72,24 +72,29 @@ fn find(h: &[u8], pat: &[u8]) -> Option<usize> { h.windows(pat.len()).position(|
 fn u32le(b: &[u8], o: usize) -> u32 { u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) }
 
 /// Split the block stream into (packet data, optional sample-count override for the last packet).
-fn packets(d: &[u8]) -> Option<Vec<(&[u8], Option<usize>)>> {
+/// Streamed waves are several chunks, each starting with its own "SEEK" table; they are decoded back to back.
+fn packets(d: &[u8]) -> Result<Vec<(&[u8], Option<usize>)>, String> {
     let u16le = |o: usize| d.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]]) as usize);
-    'start: for p in 0..d.len() {
-        if d.get(p..p + 2) != Some(&[0x99, 0x99]) { continue; }
-        let (mut o, mut out) = (p, vec![]);
-        while d.len() - o > 4 {
-            if d[o..o + 2] != [0x99, 0x99] { continue 'start; }
-            let (mut sz, mut dur, mut hdr) = (u16le(o + 2).unwrap(), None, 4);
-            if sz == 0xFFFF {
-                match (u16le(o + 4), u16le(o + 6)) { (Some(s), Some(du)) => { sz = s; dur = Some(du); hdr = 8 } _ => continue 'start }
-            }
-            if sz == 0 || o + hdr + sz > d.len() { continue 'start; }
-            out.push((&d[o + hdr..o + hdr + sz], dur));
-            o += hdr + sz;
+    let (mut o, mut out) = (0, vec![]);
+    while d.len() - o > 8 {
+        if &d[o..o + 4] == b"SEEK" {
+            let n = u16le(o + 11).ok_or("bad SEEK")?;
+            o += 17 + 2 * n.saturating_sub(1);
+            if d.get(o..o + 2) != Some(&[0x99, 0x99]) { return Err(format!("no block after SEEK at {o}")); }
+        } else if out.is_empty() && d[o..o + 2] != [0x99, 0x99] {
+            o += 1; // inline-in-uexp: skip to the first sync word
+            continue;
         }
-        return Some(out);
+        if d[o..o + 2] != [0x99, 0x99] { return Err(format!("bad sync at {o}")); }
+        let (mut sz, mut dur, mut hdr) = (u16le(o + 2).unwrap(), None, 4);
+        if sz == 0xFFFF {
+            match (u16le(o + 4), u16le(o + 6)) { (Some(s), Some(du)) => { sz = s; dur = Some(du); hdr = 8 } _ => return Err("bad escape".into()) }
+        }
+        if sz == 0 || o + hdr + sz > d.len() { return Err(format!("bad block size at {o}")); }
+        out.push((&d[o + hdr..o + hdr + sz], dur));
+        o += hdr + sz;
     }
-    None
+    if out.is_empty() { Err("no blocks".into()) } else { Ok(out) }
 }
 
 /// Decode a UEBA sound: `uexp` holds the header, `bulk` is the .ubulk (None => stream follows header in uexp).
@@ -98,7 +103,7 @@ pub fn decode(uexp: &[u8], bulk: Option<&[u8]>) -> Result<Decoded, String> {
     let (ch, rate, count) = (uexp[h + 5] as usize, u32le(uexp, h + 8), u32le(uexp, h + 12) as usize);
     if ch == 0 || ch > 2 || uexp[h + 4] != 1 { return Err(format!("unsupported UEBA ch={ch} ver={}", uexp[h + 4])); }
     let data = bulk.unwrap_or(&uexp[h + 0x1a..]);
-    let pk = packets(data).ok_or("no block stream")?;
+    let pk = packets(data)?;
 
     let fl: usize = if rate < 22050 { 512 } else if rate < 44100 { 1024 } else { 2048 };
     let ov = fl / 16;
@@ -165,6 +170,7 @@ pub fn decode(uexp: &[u8], bulk: Option<&[u8]>) -> Result<Decoded, String> {
         }
         first = false;
     }
+    if pcm[0].len() < count { return Err(format!("short: decoded {} of {count} samples", pcm[0].len())); }
     for p in &mut pcm { p.truncate(count); }
     Ok(Decoded { channels: ch, rate, pcm })
 }
