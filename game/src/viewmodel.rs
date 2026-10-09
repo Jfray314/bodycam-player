@@ -305,10 +305,11 @@ fn base_loop(
     let Some(fire) = anims["Fire"][0]["Character"]["path"].as_str() else { return };
     let prefix = clip_of(fire).trim_end_matches("Fire").to_string(); // "A_FP_M4A1_"
     let aim = anims["AimIdlePose"]["path"].as_str().map(clip_of);
-    // Walk_Loop is BAS CurveWalk: a curve source for the procedural walk motion, not a pose (played raw it snaps the
-    // arms to the ref pose). ponytail: walking keeps the idle loop; drive procedural walk sway from its curves later.
-    let want = match (p.aiming, aim) {
-        (true, Some(a)) => a,
+    let moving = p.grounded && Vec2::new(p.vel.x, p.vel.z).length() > 0.1;
+    let walk = anims["CurveWalk"]["path"].as_str().map(clip_of);
+    let want = match (p.aiming, aim, walk) {
+        (true, Some(a), _) => a,
+        (false, _, Some(w)) if moving => w,
         _ => format!("{prefix}Idle_Loop01"),
     };
     let now = time.elapsed_secs();
