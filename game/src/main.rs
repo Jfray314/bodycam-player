@@ -1,5 +1,6 @@
 mod hud;
 mod player;
+mod postfx;
 mod weapon;
 
 use bevy::prelude::*;
@@ -7,7 +8,8 @@ use bevy::prelude::*;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin))
+        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin))
+        .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
         .add_systems(Startup, test_range)
         .run();
 }
