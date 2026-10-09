@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["tools/extract", "game"]
+members = ["tools/extract", "tools/uasset", "game"]
 
 [profile.dev.package."*"]
 opt-level = 3
