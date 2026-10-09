@@ -137,12 +137,9 @@ fn swap(keys: Res<ButtonInput<KeyCode>>, mut inv: Single<&mut Inventory>, mut wh
     }
 }
 
-fn aim(mouse: Res<ButtonInput<MouseButton>>, mut p: Single<&mut Player>, mut proj: Single<&mut Projection, With<BodycamCamera>>, time: Res<Time>) {
+/// Aiming doesn't zoom: the bodycam FOV stays 120 (measured live); the gun comes up to the camera instead.
+fn aim(mouse: Res<ButtonInput<MouseButton>>, mut p: Single<&mut Player>) {
     p.aiming = mouse.pressed(MouseButton::Right);
-    if let Projection::Perspective(pp) = &mut **proj {
-        let target = if p.aiming { 75f32 } else { 100f32 }.to_radians();
-        pp.fov += (target - pp.fov) * (12.0 * time.delta_secs()).min(1.0);
-    }
 }
 
 fn fire(

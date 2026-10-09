@@ -69,15 +69,17 @@ pub struct BodycamPostFx {
 impl Default for BodycamPostFx {
     fn default() -> Self {
         Self {
-            distortion: 0.40, edge_stretch: 0.12, ca: 0.010,
-            vignette: 0.80, vignette_radius: 0.28, vignette_oval: 0.85,
-            edge_blur: 3.5, edge_blur_start: 0.20, sharpen: 0.9,
-            grain: 0.10, temporal_noise: 0.06, banding: 0.20,
-            dirt: 0.8, dirt_threshold: 0.9, dirt_gain: 1.5, exposure_bias: -0.9,
+            // Tuned against in-game screenshots: round lens housing with near-black corners and a
+            // warm rim, strong edge CA + blur, clean neutral centre, no visible grain.
+            distortion: 0.35, edge_stretch: 0.0, ca: 0.028,
+            vignette: 0.97, vignette_radius: 0.5, vignette_oval: 1.0,
+            edge_blur: 9.0, edge_blur_start: 0.25, sharpen: 0.5,
+            grain: 0.02, temporal_noise: 0.015, banding: 0.0,
+            dirt: 0.25, dirt_threshold: 4.0, dirt_gain: 0.6, exposure_bias: -0.7,
             rolling_shutter: 0.010,
             flash_amount: 0.0, damage_amount: 0.0, explosion_shake: 0.0, dirt_boost: 0.0,
             time: 0.0, yaw_rate: 0.0, pitch_rate: 0.0, pump: 0.0,
-            tint_r: 0.98, tint_g: 1.0, tint_b: 1.02,
+            tint_r: 1.0, tint_g: 1.0, tint_b: 1.0,
         }
     }
 }
@@ -100,7 +102,8 @@ impl FullscreenMaterial for BodycamPostFx {
     }
 }
 
-/// Vertical FOV of the unwarped player camera; the render FOV is widened by the distortion overscan.
+/// Horizontal FOV (UE CameraComponent.FieldOfView = 120, constant, also while aiming).
+/// The barrel warp is corner-normalised, so the frame keeps exactly this FOV at the corners.
 #[derive(Resource)]
 pub struct PostFxState {
     pub base_fov_deg: f32,
@@ -135,7 +138,7 @@ fn setup(mut cmd: Commands, mut images: ResMut<Assets<Image>>) {
         TextureFormat::R8Unorm,
         RenderAssetUsages::RENDER_WORLD,
     ));
-    cmd.insert_resource(PostFxState { base_fov_deg: 100.0, enabled: true, preset: 0, mask });
+    cmd.insert_resource(PostFxState { base_fov_deg: 120.0, enabled: true, preset: 0, mask });
 }
 
 fn stack(st: &PostFxState) -> impl Bundle {
@@ -147,7 +150,7 @@ fn stack(st: &PostFxState) -> impl Bundle {
         Tonemapping::AgX,
         // Crushed blacks, desaturated cool grade.
         ColorGrading {
-            global: ColorGradingGlobal { temperature: -0.04, post_saturation: 0.82, ..default() },
+            global: ColorGradingGlobal { post_saturation: 0.92, ..default() },
             shadows: ColorGradingSection { gamma: 1.0, lift: -0.02, contrast: 1.12, ..default() },
             ..default()
         },
@@ -213,13 +216,11 @@ fn motion_state(time: Res<Time>, mut q: Query<(&GlobalTransform, &mut BodycamPos
     }
 }
 
-/// Render wider than the player's 100 degrees so the fisheye never shows black edges.
-fn apply_fov(st: Res<PostFxState>, mut q: Query<(&mut Projection, Option<&BodycamPostFx>), With<BodycamCamera>>) {
-    for (mut proj, fx) in &mut q {
+/// UE's FOV is horizontal; Bevy's is vertical.
+fn apply_fov(st: Res<PostFxState>, mut q: Query<&mut Projection, With<BodycamCamera>>) {
+    for mut proj in &mut q {
         if let Projection::Perspective(p) = &mut *proj {
-            let base = (st.base_fov_deg.to_radians() * 0.5).tan();
-            let over = fx.map_or(1.0, |f| 1.0 + f.distortion + f.edge_stretch);
-            p.fov = 2.0 * (base * over).atan();
+            p.fov = 2.0 * ((st.base_fov_deg.to_radians() * 0.5).tan() / p.aspect_ratio).atan();
         }
     }
 }

@@ -82,7 +82,7 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let r2 = dot(d, d) * 0.5;
     let norm = 1.0 + fx.distortion + fx.edge_stretch;
     let sd = d * (1.0 + fx.distortion * r2 + fx.edge_stretch * r2 * r2) / norm;
-    let ca = fx.ca * r2;
+    let ca = fx.ca * r2 * sqrt(r2);
     let uv_r = (sd * (1.0 + ca)) * 0.5 + 0.5;
     let uv_g = sd * 0.5 + 0.5;
     let uv_b = (sd * (1.0 - ca)) * 0.5 + 0.5;
@@ -125,9 +125,13 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     // Exposure bias + sensor pumping (EV), then cool tint.
     col *= exp2(fx.exposure_bias + fx.pump) * vec3<f32>(fx.tint_r, fx.tint_g, fx.tint_b);
 
-    // Vignette: dark, oval (wider than tall).
+    // Lens housing: frame-shaped oval falloff to near-black corners, with a warm orange rim
+    // where the image meets the housing (visible against bright areas in-game).
     let vd = vec2<f32>(d.x * fx.vignette_oval, d.y);
-    col *= 1.0 - fx.vignette * smoothstep(fx.vignette_radius, 1.25, dot(vd, vd) * 0.5);
+    let vr = sqrt(dot(vd, vd) * 0.5);
+    let rim = smoothstep(fx.vignette_radius + 0.22, fx.vignette_radius + 0.36, vr) * (1.0 - smoothstep(fx.vignette_radius + 0.36, fx.vignette_radius + 0.48, vr));
+    col *= vec3<f32>(1.0) + rim * vec3<f32>(0.45, 0.02, -0.4);
+    col *= 1.0 - fx.vignette * smoothstep(fx.vignette_radius, 1.0, vr);
 
     // Damage: red edge darkening + blood splatter on the lens.
     if (fx.damage_amount > 0.001) {
