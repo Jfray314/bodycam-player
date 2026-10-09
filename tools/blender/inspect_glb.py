@@ -18,7 +18,7 @@ def info(path):
         p = m.get("pbrMetallicRoughness", {})
         tex = lambda t: j["images"][j["textures"][t["index"]]["source"]].get("name") if t else None
         mats.append({"name": m["name"], "baseColor": tex(p.get("baseColorTexture")), "baseColorFactor": p.get("baseColorFactor"),
-                     "orm": tex(p.get("metallicRoughnessTexture")), "normal": tex(m.get("normalTexture")), "occlusion": tex(m.get("occlusionTexture"))})
+                     "roughnessFactor": p.get("roughnessFactor"), "metallicFactor": p.get("metallicFactor"), "normalScale": (m.get("normalTexture") or {}).get("scale"), "orm": tex(p.get("metallicRoughnessTexture")), "normal": tex(m.get("normalTexture")), "occlusion": tex(m.get("occlusionTexture"))})
     joints = sum(len(s["joints"]) for s in j.get("skins", []))
     return {"file": path, "bones": joints, "meshes": len(j.get("meshes", [])), "clips": clips, "materials": mats}
 
