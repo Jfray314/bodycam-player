@@ -13,8 +13,8 @@ cargo run -p game
 
 ## Blockers
 - `Bodycam/Config/*.ini` sits in an AES-encrypted pak. Input bindings come from `IA_*` / `InputConfig_*` assets instead.
-- Cooked assets use unversioned properties. Reading arbitrary property values needs a `.usmap` mapping dumped from the
-  running game (UE4SS / Dumper-7). Until then, values are pulled by hand-mapped byte patterns (see `tools/ge_stats.py`).
+- Cooked assets use unversioned properties. Mappings dumped with UE4SS on 2026-10-09 (engine 5.5.4, includes BP types):
+  `extracted/Bodycam.usmap` (v4, uncompressed). Next: a usmap-driven property reader to replace `tools/ge_stats.py`.
 - Character movement and attribute-set C++ live in `Bodycam-Win64-Shipping.exe`, not in assets.
 
 ## Source → Rust map
