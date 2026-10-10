@@ -135,12 +135,7 @@ pub struct Player {
     /// Seconds since landing (drives the measured land curve); large = inactive.
     since_land: f32,
     /// PRAS ControllerRecoil still to apply (deg; x = yaw right, y = pitch up) and its RecoilSmoothing.
-    recoil_pending: Vec2,
-    recoil_smoothing: f32,
-    /// Recoil applied to the view and not yet recovered (deg), ControllerRecoil Damping / Compensation.
-    recoil_offset: Vec2,
-    recoil_damping: f32,
-    recoil_comp: f32,
+    ctl_recoil: CtlRecoil,
     /// Active Shake_Rifle_Standard instances: (age s, pitch/yaw/roll amplitude deg), and the smoothed output.
     shakes: Vec<(f32, Vec3)>,
     shake: Vec3,
@@ -183,27 +178,54 @@ fn grab_cursor(mouse: Res<ButtonInput<MouseButton>>, keys: Res<ButtonInput<KeyCo
     }
 }
 
-fn look(time: Res<Time>, motion: Res<AccumulatedMouseMotion>, cursor: Single<&CursorOptions>, mut q: Single<&mut Player>) {
+/// UE APlayerController Add{Pitch,Yaw}Input multiplies by the default Input{Pitch,Yaw}Scale of 2.5; measured
+/// ctl_pitch per M4A1 shot is 0.65 deg for a 0.2..0.3 step (probe, rec_1791597946).
+const CTL_INPUT_SCALE: f32 = 2.5;
+
+/// PRAS ControllerRecoil: the per-shot step reaches the view through RecoilSmoothing (interp speed). The applied
+/// offset returns to zero at Damping (rate/s) only once the trigger is released (measured: pitch climbs linearly
+/// through a held burst, then decays e^-15t; a semi click decays ~0.05 s after the shot). Player input against it
+/// (Compensation 0..1) is credited to the offset so the recovery doesn't pull past where the player corrected.
+/// ponytail: Compensation semantics from the PRAS docs only; no recording has mouse input during recoil.
+#[derive(Default)]
+pub struct CtlRecoil {
+    pending: Vec2,
+    offset: Vec2,
+    smoothing: f32,
+    damping: f32,
+    comp: f32,
+}
+
+impl CtlRecoil {
+    pub fn fire(&mut self, c: &crate::weapon::ControllerRecoil, rng: &mut impl Rng) {
+        let r = |(a, b): (f32, f32), rng: &mut dyn rand::RngCore| if a == b { a } else { rng.random_range(a..=b) };
+        self.pending += Vec2::new(r(c.horizontal, rng), r(c.vertical, rng)) * CTL_INPUT_SCALE;
+        self.smoothing = c.smoothing;
+        (self.damping, self.comp) = (c.damping, c.compensation);
+    }
+
+    /// View delta (deg; x yaw right, y pitch up) this frame. `input` = player look this frame in the same convention.
+    pub fn tick(&mut self, dt: f32, input: Vec2, trigger_held: bool) -> Vec2 {
+        let step = self.pending * (self.smoothing * dt).min(1.0);
+        self.pending -= step;
+        self.offset += step;
+        for i in 0..2 {
+            if input[i] * self.offset[i] < 0.0 {
+                let c = (input[i].abs() * self.comp).min(self.offset[i].abs());
+                self.offset[i] -= c * self.offset[i].signum();
+            }
+        }
+        let ret = if trigger_held { Vec2::ZERO } else { self.offset * (self.damping * dt).min(1.0) };
+        self.offset -= ret;
+        step - ret
+    }
+}
+
+fn look(time: Res<Time>, motion: Res<AccumulatedMouseMotion>, mouse: Res<ButtonInput<MouseButton>>, cursor: Single<&CursorOptions>, mut q: Single<&mut Player>) {
     let p = &mut **q;
     let d = if cursor.grab_mode == CursorGrabMode::Locked { motion.delta } else { Vec2::ZERO };
-    // PRAS ControllerRecoil: the per-shot step reaches the view through RecoilSmoothing (interp speed); the applied
-    // offset then returns to zero at Damping (rate/s) while player input against it (Compensation 0..1) is
-    // credited to the offset so the recovery doesn't pull the view past where the player already corrected.
-    // ponytail: Damping/Compensation semantics from the PRAS docs, not from code.
-    let dt = time.delta_secs();
-    let step = p.recoil_pending * (p.recoil_smoothing * dt).min(1.0);
-    p.recoil_pending -= step;
-    p.recoil_offset += step;
     let input = Vec2::new(d.x, -d.y) * SENS.to_degrees(); // same sign convention as the recoil step
-    for i in 0..2 {
-        if input[i] * p.recoil_offset[i] < 0.0 {
-            let c = (input[i].abs() * p.recoil_comp).min(p.recoil_offset[i].abs());
-            p.recoil_offset[i] -= c * p.recoil_offset[i].signum();
-        }
-    }
-    let ret = p.recoil_offset * (p.recoil_damping * dt).min(1.0);
-    p.recoil_offset -= ret;
-    let step = step - ret;
+    let step = p.ctl_recoil.tick(time.delta_secs(), input, mouse.pressed(MouseButton::Left));
     p.yaw -= d.x * SENS + step.x.to_radians();
     // ponytail: assumes the IA_Look value is degrees of yaw; the MouseInputModifier scale is not extracted.
     p.yaw_rate = (d.x * SENS).to_degrees() / time.delta_secs().max(1e-4) / 50.0;
@@ -242,9 +264,7 @@ fn on_fire(mut ev: MessageReader<Fired>, mut q: Single<&mut Player>) {
     let shake: &FireShake = &FIRE_SHAKE;
     for f in ev.read() {
         let c = &f.controller;
-        q.recoil_pending += Vec2::new(rng.random_range(c.horizontal.0..=c.horizontal.1), rng.random_range(c.vertical.0..=c.vertical.1));
-        q.recoil_smoothing = c.smoothing;
-        (q.recoil_damping, q.recoil_comp) = (c.damping, c.compensation);
+        q.ctl_recoil.fire(c, &mut rng);
         let r = |r: &Range2, rng: &mut rand::rngs::ThreadRng| rng.random_range(r.x.min(r.y)..=r.x.max(r.y));
         let amp = Vec3::new(r(&shake.pitch, &mut rng), r(&shake.yaw, &mut rng), r(&shake.roll, &mut rng));
         q.shakes.push((0.0, amp));
@@ -516,5 +536,46 @@ mod tests {
         let s: &super::FireShake = &super::FIRE_SHAKE;
         assert_eq!(s.rotation_curve.curves.float_curves.len(), 3);
         assert_eq!(s.play_rate, 2.0);
+    }
+
+    /// RMS of simulated mean ctl_pitch vs the probe's mean (mouse untouched bursts) for M4A1 hip/aim bursts.
+    /// Run: cargo test -p game ctl_recoil_fit -- --nocapture
+    #[test]
+    fn ctl_recoil_fit() {
+        use super::CtlRecoil;
+        use bevy::prelude::Vec2;
+        use rand::SeedableRng;
+        let reference: serde_json::Value = serde_json::from_str(include_str!("../../assets/recoil_reference.json")).unwrap();
+        let w: serde_json::Value = serde_json::from_str(include_str!("../../assets/weapons/M4A1.json")).unwrap();
+        let cr = crate::weapon::ControllerRecoil::from(&w["anim_set"]);
+        for key in ["M4A1/hip/1", "M4A1/aim/1", "M4A1/hip/30"] {
+            let b = &reference["bursts"][key];
+            let data: Vec<f32> = b["ctl_pitch"]["mean"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect();
+            let times: Vec<f32> = b["times"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect();
+            let release = times.last().unwrap() + 0.04; // trigger release a little after the last shot
+            let (dt, seeds) = (0.0125f32, 200);
+            let mut mean = vec![0.0f32; data.len()];
+            for seed in 0..seeds {
+                let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+                let (mut c, mut y) = (CtlRecoil::default(), 0.0f32);
+                let mut next = 0;
+                for j in 0..data.len() {
+                    let t = (j as f32 - 2.0) * dt;
+                    while next < times.len() && times[next] <= t + 1e-4 {
+                        c.fire(&cr, &mut rng);
+                        next += 1;
+                    }
+                    y += c.tick(dt, Vec2::ZERO, t < release).y;
+                    mean[j] += y / seeds as f32;
+                }
+            }
+            let n = data.len() - 2;
+            let rms = (data[2..].iter().zip(&mean[2..]).map(|(a, b)| (a - b).powi(2)).sum::<f32>() / n as f32).sqrt();
+            let sig = (data[2..].iter().map(|a| a * a).sum::<f32>() / n as f32).sqrt();
+            println!("ctl_pitch {key}: rms {rms:.3} deg (signal rms {sig:.3})");
+            if key.ends_with("/1") {
+                assert!(rms < 0.15, "{key}: {rms}");
+            }
+        }
     }
 }

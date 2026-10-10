@@ -187,7 +187,7 @@ pub struct ControllerRecoil {
 }
 
 impl ControllerRecoil {
-    fn from(anims: &Value) -> Self {
+    pub(crate) fn from(anims: &Value) -> Self {
         let c = &anims["RecoilData"]["ControllerRecoil"];
         let r = |k: &str| (c[k]["x"].as_f64().unwrap_or(0.0) as f32, c[k]["y"].as_f64().unwrap_or(0.0) as f32);
         let (lo, hi) = r("HorizontalRecoilStep");
