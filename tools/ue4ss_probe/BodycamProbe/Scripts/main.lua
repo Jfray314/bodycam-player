@@ -1,6 +1,6 @@
--- BodycamProbe: reads live values the asset files don't contain (C++ defaults, runtime camera motion).
+-- BodycamProbe: reads live values the asset files don't contain (C++ defaults, runtime camera/viewmodel motion).
 -- F7 = dump properties of player/camera/movement objects
--- F8 = start/stop recording the final camera view every frame-ish (CSV)
+-- F8 = start/stop recording camera + every numeric property of the viewmodel/recoil/status objects, every frame (CSV)
 -- F9 = drop a numbered marker into the recording (to split segments)
 -- Output: C:/code/bodycam-player/extracted/probe/
 local UEHelpers = require("UEHelpers")
@@ -49,6 +49,7 @@ local CLASSES = {
     "ALS_AnimBP_C", "Viewmodel_C", "ABP_Procedural_GoPro_C", "ABP_Procedural_Sway_C",
     "ABP_Procedural_Viewmodel_C", "ABP_Procedural_Additives_C", "ABP_Procedural_AimOffset_C",
     "Bodycam_CameraShake_C", "Sprint_CameraShake_C", "WeaponAttributeSet", "BP_EquippableItem_C",
+    "RecoilAnimationComponent", "WW_SurvivorStatus_C",
 }
 
 local function dump_all()
@@ -69,11 +70,75 @@ local function dump_all()
     print("[BodycamProbe] dump written")
 end
 
-local rec, marker, start, hooked = nil, 0, 0, false
+-- Recording -----------------------------------------------------------------------------------------------
+-- Property reads only: calling UFunctions (GetCameraLocation, GetSocketTransform...) from the tick crashed the game.
+-- Objects and the column list are resolved once when recording starts, not every sample.
 
--- Property reads only: calling UFunctions (GetCameraLocation etc.) from here crashed the game.
--- Objects are resolved once when recording starts, not every sample.
+-- Objects whose numeric properties are recorded (class names; the instance owned by the local pawn is used).
+-- Anim instances hold the BP-side state (ADS alpha, stress alphas, sway inputs) and the native AnimNode_SpringSway
+-- structs; RecoilAnimationComponent is PRAS; WW_SurvivorStatus has stress/stamina/health.
+local TRACKED = {
+    "Viewmodel_C", "ABP_Procedural_Sway_C", "ABP_Procedural_Viewmodel_C", "ABP_Procedural_Additives_C",
+    "ABP_Procedural_AimOffset_C", "ABP_Procedural_GoPro_C", "AC_BodycamAnimationComponent_C", "AC_BodycamCamera_C",
+    "RecoilAnimationComponent", "WW_SurvivorStatus_C",
+}
+local NUMERIC = { FloatProperty = true, DoubleProperty = true, IntProperty = true, BoolProperty = true, ByteProperty = true, EnumProperty = true }
+local LEAF_STRUCTS = { -- struct name -> fields recorded as numbers
+    Vector = { "X", "Y", "Z" }, Vector2D = { "X", "Y" }, Rotator = { "Pitch", "Yaw", "Roll" },
+    Quat = { "X", "Y", "Z", "W" }, Vector4 = { "X", "Y", "Z", "W" },
+}
+local MAX_DEPTH = 3       -- struct nesting (AnimNode_SpringSway -> its vectors)
+local MAX_COLUMNS = 4000
+
+local rec, marker, start, hooked = nil, 0, 0, false
 local pc, cm, pawn, root, mv
+local columns = {}        -- { obj, path = {names...}, leaf = field or nil, bool = true/false }
+
+local function owned_by_pawn(o)
+    local ok, name = pcall(function() return o:GetFullName() end)
+    return ok and name and name:find(pawn:GetFName():ToString(), 1, true) ~= nil
+end
+
+local function struct_name(prop)
+    local ok, s = pcall(function() return prop:GetStruct():GetFName():ToString() end)
+    return ok and s or nil
+end
+
+-- Walks a struct/class's properties and appends a column per numeric leaf.
+local function collect(obj, label, prop_owner, path, depth)
+    pcall(function()
+        prop_owner:ForEachProperty(function(prop)
+            if #columns >= MAX_COLUMNS then return end
+            local name = prop:GetFName():ToString()
+            local ptype = prop:GetClass():GetFName():ToString()
+            local p = {}
+            for i, v in ipairs(path) do p[i] = v end
+            p[#p + 1] = name
+            if NUMERIC[ptype] then
+                columns[#columns + 1] = { obj = obj, path = p, name = label .. "." .. table.concat(p, "."), bool = ptype == "BoolProperty" }
+            elseif ptype == "StructProperty" then
+                local s = struct_name(prop)
+                if s and LEAF_STRUCTS[s] then
+                    for _, f in ipairs(LEAF_STRUCTS[s]) do
+                        columns[#columns + 1] = { obj = obj, path = p, leaf = f, name = label .. "." .. table.concat(p, ".") .. "." .. f }
+                    end
+                elseif s and depth < MAX_DEPTH then
+                    collect(obj, label, prop:GetStruct(), p, depth + 1)
+                end
+            end
+        end)
+    end)
+end
+
+local function collect_object(obj, label)
+    local cls = obj:GetClass()
+    while cls ~= nil and cls:IsValid() do
+        local cname = cls:GetFName():ToString()
+        if cname == "Object" or cname == "Actor" or cname == "ActorComponent" or cname == "AnimInstance" or cname == "SceneComponent" then break end
+        collect(obj, label, cls, {}, 0)
+        cls = cls:GetSuperStruct()
+    end
+end
 
 local function resolve()
     pc = UEHelpers.GetPlayerController()
@@ -81,7 +146,29 @@ local function resolve()
     cm, pawn = pc.PlayerCameraManager, pc.Pawn
     if not cm or not cm:IsValid() or not pawn or not pawn:IsValid() then return false end
     root, mv = pawn.RootComponent, pawn.CharacterMovement
-    return root ~= nil and root:IsValid() and mv ~= nil and mv:IsValid()
+    if not (root ~= nil and root:IsValid() and mv ~= nil and mv:IsValid()) then return false end
+    columns = {}
+    for _, c in ipairs(TRACKED) do
+        local all = FindAllOf(c)
+        local n = 0
+        for _, o in ipairs(all or {}) do
+            if o:IsValid() and owned_by_pawn(o) then
+                n = n + 1
+                collect_object(o, c .. (n > 1 and tostring(n) or ""))
+            end
+        end
+        print(string.format("[BodycamProbe] %s: %d instance(s)", c, n))
+    end
+    print("[BodycamProbe] columns: " .. #columns)
+    return true
+end
+
+local function read(col)
+    local v = col.obj
+    for _, k in ipairs(col.path) do v = v[k] end
+    if col.leaf then v = v[col.leaf] end
+    if col.bool then return v and 1 or 0 end
+    return v
 end
 
 local function sample()
@@ -91,9 +178,14 @@ local function sample()
     local pl, pv, ctl = root.RelativeLocation, mv.Velocity, pc.ControlRotation
     local crouched = pawn.bIsCrouched and 1 or 0
     local falling = (mv.MovementMode == 3) and 1 or 0
-    rec:write(string.format("%.4f,%d,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.3f,%d,%d\n",
+    local row = { string.format("%.4f,%d,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.3f,%d,%d",
         os.clock() - start, marker, cl.X, cl.Y, cl.Z, cr.Pitch, cr.Yaw, cr.Roll, fov,
-        pl.X, pl.Y, pl.Z, pv.X, pv.Y, pv.Z, ctl.Pitch, ctl.Yaw, ctl.Roll, crouched, falling))
+        pl.X, pl.Y, pl.Z, pv.X, pv.Y, pv.Z, ctl.Pitch, ctl.Yaw, ctl.Roll, crouched, falling) }
+    for i, col in ipairs(columns) do
+        local ok, v = pcall(read, col)
+        row[i + 1] = (ok and type(v) == "number") and string.format("%.5g", v) or ""
+    end
+    rec:write(table.concat(row, ","), "\n")
 end
 
 local function toggle_record()
@@ -105,9 +197,11 @@ local function toggle_record()
         return
     end
     if not resolve() then print("[BodycamProbe] player not found, spawn in first") return end
-    rec = io.open(OUT .. "camera_" .. os.time() .. ".csv", "w")
+    rec = io.open(OUT .. "rec_" .. os.time() .. ".csv", "w")
     if not rec then print("[BodycamProbe] cannot open output dir " .. OUT) return end
-    rec:write("t,marker,cam_x,cam_y,cam_z,cam_pitch,cam_yaw,cam_roll,fov,pawn_x,pawn_y,pawn_z,vel_x,vel_y,vel_z,ctl_pitch,ctl_yaw,ctl_roll,crouched,falling\n")
+    local head = { "t,marker,cam_x,cam_y,cam_z,cam_pitch,cam_yaw,cam_roll,fov,pawn_x,pawn_y,pawn_z,vel_x,vel_y,vel_z,ctl_pitch,ctl_yaw,ctl_roll,crouched,falling" }
+    for i, col in ipairs(columns) do head[i + 1] = (col.name:gsub(",", "_")) end
+    rec:write(table.concat(head, ","), "\n")
     marker, start = 0, os.clock()
     print("[BodycamProbe] recording started")
     -- Sample from the player's own BP tick (game thread, once per frame). A LoopAsync +
