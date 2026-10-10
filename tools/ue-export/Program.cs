@@ -173,7 +173,7 @@ void ExportAll(string[]? only)
     if (only == null || only.Contains("arms"))
     {
         ExportMesh("Bodycam/Content/BodycamSkin/Arms/Basic/SKM_HumanArmsLongSleeves_Morphers", "arms");
-        foreach (var k in keys.Where(k => k.Contains("/AdditiveMotions/") || k.Contains("/Gopro/Adjust/") || k.Contains("Additive")).Where(IsSeq)) ExportAnim(Strip(k), "common");
+        foreach (var k in keys.Where(k => k.Contains("/AdditiveMotions/") || k.Contains("/Gopro/Adjust/") || k.Contains("Additive") || k.Contains("Shake_Loop") || k.Contains("/ShakingHands/")).Where(IsSeq)) ExportAnim(Strip(k), "common");
     }
     foreach (var dirName in keys.Select(k => k[AnimRoot.Length..].Split('/')[0]).Distinct())
     {

@@ -50,10 +50,74 @@ pub fn finterp_to(current: f32, target: f32, dt: f32, speed: f32) -> f32 {
     current + d * (dt * speed).clamp(0.0, 1.0)
 }
 
+/// UE MapRangeClamped.
+pub fn map_range_clamped(v: f32, a0: f32, a1: f32, b0: f32, b1: f32) -> f32 {
+    if a0 == a1 {
+        return b1;
+    }
+    (b0 + (v - a0) / (a1 - a0) * (b1 - b0)).clamp(b0.min(b1), b0.max(b1))
+}
+
+/// GA_Fire_Base "ReceiveFireEvent": IncreaseStress(MapRangeClamped(FireRate, 0.05..0.8 -> 0.025..0.35)).
+pub fn fire_stress(fire_rate: f32) -> f32 {
+    map_range_clamped(fire_rate, 0.05, 0.8, 0.025, 0.35)
+}
+
+impl SurvivorStatus {
+    /// WW_SurvivorStatus.IncreaseStress: unclamped (only the 1 s decay clamps to 0.1..1).
+    pub fn increase_stress(&mut self, d: f32) {
+        self.stress += d;
+    }
+
+    /// Bodycam_Player.IsStress: RandomBoolWithWeight(clamp(Stamina + Stress + MapRange(Health 0..100 -> 1..0), 0, 1)).
+    pub fn is_stress(&self) -> bool {
+        let w = (self.stamina + self.stress + map_range_clamped(self.health, 0.0, 100.0, 1.0, 0.0)).clamp(0.0, 1.0);
+        rand::random::<f32>() < w
+    }
+}
+
+/// Damage to the player (ApplyPointDamage -> K2_OnHealthChanged); `flinch` ponytail: Bodycam_Player's 0.1-0.15 s flinch not ported.
+#[derive(Message)]
+pub struct PlayerDamage(pub f32);
+
+/// Bodycam_Player.BulletFly: a bullet passed within `distance` cm of the player (whiz): Stress += 0.3.
+#[derive(Message)]
+pub struct BulletFly {
+    pub distance_cm: f32,
+}
+
 pub struct StatusPlugin;
 impl Plugin for StatusPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SurvivorStatus>().add_systems(Update, update);
+        app.init_resource::<SurvivorStatus>().add_message::<PlayerDamage>().add_message::<BulletFly>().add_systems(Update, (update, stress_sources));
+    }
+}
+
+fn stress_sources(
+    mut s: ResMut<SurvivorStatus>,
+    mut fired: MessageReader<crate::weapon::Fired>,
+    mut whiz: MessageReader<BulletFly>,
+    mut dmg: MessageReader<PlayerDamage>,
+    mut dead_for: Local<f32>,
+    time: Res<Time>,
+) {
+    for f in fired.read() {
+        s.increase_stress(fire_stress(f.fire_rate));
+    }
+    for _ in whiz.read() {
+        s.increase_stress(0.3);
+    }
+    for d in dmg.read() {
+        s.health -= d.0;
+    }
+    // Test-bench death: no ragdoll/respawn flow ported, so just refill after 3 s.
+    if s.health <= 0.0 {
+        *dead_for += time.delta_secs();
+        if *dead_for > 3.0 {
+            *dead_for = 0.0;
+            s.health = s.health_max;
+            s.stress = 0.1;
+        }
     }
 }
 
@@ -99,5 +163,12 @@ mod tests {
         assert_eq!(super::finterp_to(0.0, 1.0, 0.1, 5.0), 0.5);
         assert_eq!(super::finterp_to(0.0, 1.0, 1.0, 5.0), 1.0);
         assert_eq!(super::finterp_to(0.3, 1.0, 0.1, 0.0), 1.0);
+    }
+
+    #[test]
+    fn fire_stress_matches_maprange() {
+        assert_eq!(super::fire_stress(0.0), 0.025);
+        assert_eq!(super::fire_stress(2.0), 0.35);
+        assert!((super::fire_stress(0.425) - 0.1875).abs() < 1e-6);
     }
 }

@@ -1,5 +1,6 @@
 mod audio;
 mod curve;
+mod gunfight;
 mod hud;
 mod map;
 mod player;
@@ -64,7 +65,7 @@ fn main() {
             file_path: std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into()),
             ..default()
         }))
-        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, recoil::RecoilPlugin, map::MapPlugin))
+        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, recoil::RecoilPlugin, map::MapPlugin, gunfight::GunfightPlugin))
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
         .add_systems(Startup, test_range.run_if(|| !map::available()))
         .add_systems(PreUpdate, autotest.after(bevy::input::InputSystems))
