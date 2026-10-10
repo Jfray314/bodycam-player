@@ -7,6 +7,7 @@ mod postfx;
 mod recoil;
 mod status;
 mod viewmodel;
+mod sway;
 mod weapon;
 
 use bevy::prelude::*;
@@ -17,6 +18,7 @@ fn autotest(
     time: Res<Time>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
+    mut fake: ResMut<sway::FakeLook>,
     mut plan: Local<Option<Vec<(Result<KeyCode, MouseButton>, f32, f32)>>>,
 ) {
     let plan = plan.get_or_insert_with(|| {
@@ -38,14 +40,25 @@ fn autotest(
                 "Q" => Ok(KeyCode::KeyQ),
                 "E" => Ok(KeyCode::KeyE),
                 "Shift" => Ok(KeyCode::ShiftLeft),
+                // Fake mouse motion for the viewmodel sway (see sway::FakeLook): counts per frame while held.
+                "LookR" => Ok(KeyCode::F24),
+                "LookL" => Ok(KeyCode::F23),
+                "LookU" => Ok(KeyCode::F22),
                 _ => return None,
             };
             Some((key, t.parse().ok()?, hold.parse().ok()?))
         }).collect()
     });
     let t = time.elapsed_secs();
+    fake.0 = Vec2::ZERO;
     for (k, at, hold) in plan.iter() {
         let (on, off) = (t >= *at && t < at + hold, t >= at + hold);
+        match *k {
+            Ok(KeyCode::F24) if on => fake.0.x += 12.0,
+            Ok(KeyCode::F23) if on => fake.0.x -= 12.0,
+            Ok(KeyCode::F22) if on => fake.0.y -= 12.0,
+            _ => {}
+        }
         match *k {
             Ok(k) if on => keys.press(k),
             Ok(k) if off && keys.pressed(k) => keys.release(k),
@@ -64,7 +77,7 @@ fn main() {
             file_path: std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into()),
             ..default()
         }))
-        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, recoil::RecoilPlugin, map::MapPlugin))
+        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, sway::SwayPlugin, recoil::RecoilPlugin, map::MapPlugin))
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
         .add_systems(Startup, test_range.run_if(|| !map::available()))
         .add_systems(PreUpdate, autotest.after(bevy::input::InputSystems))

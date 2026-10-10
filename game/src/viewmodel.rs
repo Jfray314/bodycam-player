@@ -6,6 +6,7 @@
 //! Animation: base loop (Idle_Loop01 / Walk_Loop / AimIdlePose) plus the BAS montages from `MontageStarted`
 //! and `Fired`, crossfaded; the gun plays the matching A_W_* clip.
 use crate::player::Player;
+use crate::sway::{Ads, AimOffset, Sway, ue_vec};
 use crate::weapon::{ActionKind, Fired, Inventory, MontageStarted};
 use bevy::animation::AnimationTargetId;
 use bevy::gltf::Gltf;
@@ -35,11 +36,11 @@ pub struct ViewmodelPlugin;
 impl Plugin for ViewmodelPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, load)
-            .add_systems(Update, (spawn_arms, hook_players, no_cull, attach_gun, play_events, base_loop).chain())
+            .add_systems(Update, (spawn_arms, hook_players, no_cull, attach_gun, play_events, base_loop, additive_weights).chain())
             .add_systems(Last, debug_bones)
             .add_systems(
                 PostUpdate,
-                (place_arms, follow_head.after(bevy::app::AnimationSystems)).before(bevy::transform::TransformSystems::Propagate),
+                (place_arms, (follow_head, left_elbow).after(bevy::app::AnimationSystems)).before(bevy::transform::TransformSystems::Propagate),
             );
     }
 }
@@ -91,7 +92,7 @@ struct ArmsRoot;
 struct GunRoot(&'static str);
 
 /// Arms animation state: clip name -> graph node, and what's playing.
-#[derive(Component)]
+#[derive(Component, Default)]
 struct Anim {
     nodes: HashMap<String, AnimationNodeIndex>,
     current: Option<String>,
@@ -99,6 +100,13 @@ struct Anim {
     montage_until: f32,
     /// Camera pitch (deg) the running montage asks for; 0 for fire.
     action_pitch: f32,
+    /// The running montage is an action (reload, draw, inspect...), not a fire kick: ActionPoseOffset applies.
+    action: bool,
+    /// Blend-out time of the last montage, used for the crossfade back to the base loop.
+    blend_out: f32,
+    after_montage: bool,
+    /// Additive clips: (length, blend in, blend out) of the montage that started them.
+    add_env: HashMap<AnimationNodeIndex, (f32, f32, f32)>,
 }
 
 /// UE additive clips (local-space deltas: fire, regrips), from tools/additive_clips.py.
@@ -144,7 +152,7 @@ fn spawn_arms(
             ArmsRoot,
             WorldAssetRoot(g.scenes[0].clone()),
             AnimationGraphHandle(graph),
-            Anim { nodes, current: None, montage_until: 0.0, action_pitch: 0.0 },
+            Anim { nodes, ..default() },
             Transform::default(),
             crate::player::IgnoreTraces,
         ))
@@ -223,18 +231,18 @@ fn attach_gun(
     }
     let (graph, nodes) = clip_graph([g], &mut graphs);
     let gun = cmd
-        .spawn((GunRoot(want), WorldAssetRoot(g.scenes[0].clone()), AnimationGraphHandle(graph), Anim { nodes, current: None, montage_until: 0.0, action_pitch: 0.0 }, Transform::default()))
+        .spawn((GunRoot(want), WorldAssetRoot(g.scenes[0].clone()), AnimationGraphHandle(graph), Anim { nodes, ..default() }, Transform::default()))
         .id();
     cmd.entity(hand).add_child(gun);
 }
 
-fn play(anim: &mut Anim, player: &mut AnimationPlayer, tr: &mut AnimationTransitions, clip: &str, repeat: bool) -> bool {
+fn play(anim: &mut Anim, player: &mut AnimationPlayer, tr: &mut AnimationTransitions, clip: &str, repeat: bool, blend: Duration) -> bool {
     let Some(&node) = anim.nodes.get(clip) else { return false };
     if is_additive(clip) {
         player.start(node); // layered on top of whatever plays; restarts on every shot
         return true;
     }
-    let a = tr.play(player, node, BLEND);
+    let a = tr.play(player, node, blend);
     if repeat {
         a.repeat();
     }
@@ -247,6 +255,19 @@ fn clip_of(montage_path: &str) -> String {
     montage_path.rsplit('.').next().unwrap_or("").trim_end_matches("_Montage").to_string()
 }
 
+/// One montage to start on the arms and/or the gun.
+struct Start {
+    arms: String,
+    /// Gun-side clip from the BAS `Weapon` key.
+    gun: Option<String>,
+    len: f32,
+    pitch: f32,
+    on_arms: bool,
+    action: bool,
+    blend_in: f32,
+    blend_out: f32,
+}
+
 fn play_events(
     time: Res<Time>,
     mut montages: MessageReader<MontageStarted>,
@@ -256,38 +277,82 @@ fn play_events(
     mut roots: Query<(&mut Anim, Has<ArmsRoot>)>,
     mut players: Query<(&mut AnimationPlayer, &mut AnimationTransitions, &AnimLink)>,
 ) {
-    // (clip, length, action pitch, also on the arms)
-    let mut starts: Vec<(String, f32, f32, bool)> = montages
+    let mut starts: Vec<Start> = montages
         .read()
         .map(|m| {
             let a = inv.as_ref().map(|i| &i.slots[i.current].anims);
             let bas = |k: &str| a.and_then(|a| a[k].as_f64()).unwrap_or(0.0) as f32;
             let max = a.and_then(|a| a["ActionPitchAngle"]["x"].as_f64()).unwrap_or(0.0) as f32 * bas("SpineAdditiveActionWeight");
-            (clip_of(&m.montage.path), m.montage.length, max * action_weight(m.kind), true)
+            Start {
+                arms: clip_of(&m.montage.path),
+                gun: m.montage.weapon.as_deref().map(clip_of),
+                len: m.montage.length,
+                pitch: max * action_weight(m.kind),
+                on_arms: true,
+                action: true,
+                blend_in: m.montage.blend_in,
+                blend_out: m.montage.blend_out,
+            }
         })
         .collect();
     if fired.read().count() > 0
         && let Some(inv) = &inv
-        && let Some(path) = inv.slots[inv.current].anims["Fire"][0]["Character"]["path"].as_str()
+        && let fire = &inv.slots[inv.current].anims["Fire"][0]
+        && let Some(path) = fire["Character"]["path"].as_str()
     {
         // UE layers fire additively over hip or aim. Additive fire clips layer here too; the few full-pose ones
         // (M4A1) would drop the aim, so while aiming only the gun plays those and the kick comes from the camera.
         let clip = clip_of(path);
         let on_arms = !p.aiming || is_additive(&clip);
-        starts.push((clip, 0.0, 0.0, on_arms));
+        let b = |k: &str, d: f64| fire["Character"][k].as_f64().unwrap_or(d) as f32;
+        starts.push(Start {
+            on_arms,
+            gun: fire["Weapon"]["path"].as_str().map(clip_of),
+            len: b("length", 0.0),
+            blend_in: b("blend_in", 0.25),
+            blend_out: b("blend_out", 0.25),
+            arms: clip,
+            pitch: 0.0,
+            action: false,
+        });
     }
     let now = time.elapsed_secs();
-    for (clip, len, pitch, on_arms) in starts {
+    for s in starts {
         for (mut player, mut tr, link) in &mut players {
             let Ok((mut anim, is_arms)) = roots.get_mut(link.0) else { continue };
-            if is_arms && !on_arms {
+            if is_arms && !s.on_arms {
                 continue;
             }
-            let name = if is_arms { clip.clone() } else { clip.replacen("A_FP_", "A_W_", 1) };
-            if play(&mut anim, &mut player, &mut tr, &name, false) && !is_additive(&name) {
-                anim.montage_until = now + if len > 0.0 { len } else { 0.25 };
-                anim.action_pitch = pitch;
+            let Some(name) = (if is_arms { Some(s.arms.clone()) } else { s.gun.clone() }) else { continue };
+            if !play(&mut anim, &mut player, &mut tr, &name, false, Duration::from_secs_f32(s.blend_in)) {
+                continue;
             }
+            if is_additive(&name) {
+                let node = anim.nodes[&name];
+                anim.add_env.insert(node, (s.len, s.blend_in, s.blend_out));
+            } else {
+                // The montage blends out over its last BlendOut seconds, so the base loop takes over that early.
+                anim.montage_until = now + if s.len > 0.0 { (s.len - s.blend_out).max(0.05) } else { 0.25 };
+                anim.action_pitch = s.pitch;
+                anim.action = s.action;
+                anim.blend_out = s.blend_out;
+                anim.after_montage = true;
+            }
+        }
+    }
+}
+
+/// Additive clips: montage BlendIn/BlendOut envelope, and AdsAdditiveBlend while aiming (arms only).
+fn additive_weights(ads: Res<Ads>, inv: Option<Single<&Inventory>>, roots: Query<(&Anim, Has<ArmsRoot>)>, mut players: Query<(&mut AnimationPlayer, &AnimLink)>) {
+    let ads_blend = inv.map(|i| i.slots[i.current].anims["AdsSettings"]["AdsAdditiveBlend"].as_f64().unwrap_or(1.0) as f32).unwrap_or(1.0);
+    for (mut player, link) in &mut players {
+        let Ok((anim, is_arms)) = roots.get(link.0) else { continue };
+        let ads_w = if is_arms { 1.0 + (ads_blend - 1.0) * ads.alpha } else { 1.0 };
+        for (&node, &(len, bin, bout)) in &anim.add_env {
+            let Some(a) = player.animation_mut(node) else { continue };
+            let t = a.seek_time();
+            let env = if len > 0.0 { (t / bin.max(1e-3)).min(1.0) * ((len - t) / bout.max(1e-3)).clamp(0.0, 1.0) } else { 1.0 };
+            a.set_weight(env * ads_w);
         }
     }
 }
@@ -297,6 +362,7 @@ fn base_loop(
     time: Res<Time>,
     p: Single<&Player>,
     inv: Option<Single<&Inventory>>,
+    ads: Res<Ads>,
     mut roots: Query<&mut Anim, With<ArmsRoot>>,
     mut players: Query<(&mut AnimationPlayer, &mut AnimationTransitions, &AnimLink)>,
 ) {
@@ -307,7 +373,7 @@ fn base_loop(
     let aim = anims["AimIdlePose"]["path"].as_str().map(clip_of);
     let moving = p.grounded && Vec2::new(p.vel.x, p.vel.z).length() > 0.1;
     let walk = anims["CurveWalk"]["path"].as_str().map(clip_of);
-    let want = match (p.aiming, aim, walk) {
+    let want = match (p.aiming, aim.clone(), walk) {
         (true, Some(a), _) => a,
         (false, _, Some(w)) if moving => w,
         _ => format!("{prefix}Idle_Loop01"),
@@ -318,8 +384,17 @@ fn base_loop(
         if now < anim.montage_until || anim.current.as_deref() == Some(want.as_str()) {
             continue;
         }
-        if !play(&mut anim, &mut player, &mut tr, &want, true) {
-            play(&mut anim, &mut player, &mut tr, &format!("{prefix}Idle_Loop01"), true);
+        // Montage exit uses its BlendOut; hip<->aim uses the weapon's AdsSpeed; everything else the default.
+        let dur = if std::mem::take(&mut anim.after_montage) {
+            anim.blend_out
+        } else if Some(&want) == aim.as_ref() || anim.current.as_ref() == aim.as_ref() {
+            ads.duration
+        } else {
+            BLEND.as_secs_f32()
+        };
+        let dur = Duration::from_secs_f32(dur);
+        if !play(&mut anim, &mut player, &mut tr, &want, true, dur) {
+            play(&mut anim, &mut player, &mut tr, &format!("{prefix}Idle_Loop01"), true, dur);
         }
     }
 }
@@ -389,9 +464,9 @@ fn root_of_entity(mut e: Entity, root: Entity, parents: &Query<&ChildOf>) -> boo
 /// Grip point (ik_hand_gun at hip idle, camera space) that BAS PoseOffset rotates about.
 const GRIP: Vec3 = Vec3::new(0.09, -0.22, -0.13);
 
-/// BAS ViewmodelOffsets.PoseOffset (UE cm, camera space) as a Bevy camera-space transform pivoting on the grip.
-fn pose_offset(anims: &serde_json::Value) -> Transform {
-    let o = &anims["ViewmodelOffsets"]["PoseOffset"];
+/// BAS ViewmodelOffsets.<key> (PoseOffset / ActionPoseOffset; UE cm, camera space) as a Bevy camera-space transform pivoting on the grip.
+fn pose_offset(anims: &serde_json::Value, key: &str) -> Transform {
+    let o = &anims["ViewmodelOffsets"][key];
     let f = |v: &serde_json::Value, k: &str| v[k].as_f64().unwrap_or(0.0) as f32;
     let (t, r) = (&o["Translation"], &o["Rotation"]);
     // UE (X fwd, Y right, Z up, left-handed) -> Bevy (-Z fwd, X right, Y up): p = (y, z, -x), q = (-y, -z, x, w).
@@ -400,21 +475,88 @@ fn pose_offset(anims: &serde_json::Value) -> Transform {
     Transform::from_translation(tr + GRIP) * Transform::from_rotation(rot) * Transform::from_translation(-GRIP)
 }
 
-/// Arms root = body view pose * hip PoseOffset * inverse(FP_Camera socket): the socket lands on the un-shaken camera
-/// point; the offset fades out while aiming (AimIdlePose already lines the sights up).
+/// Arms root = body view pose * recoil * spring sway * aim-in/out additive * (PoseOffset -> ActionPoseOffset during
+/// actions, faded out by the ADS alpha) * inverse(FP_Camera socket): the socket lands on the un-shaken camera point.
 fn place_arms(
     time: Res<Time>,
     p: Single<&Player>,
     inv: Option<Single<&Inventory>>,
     recoil: Res<crate::recoil::Recoil>,
-    mut arms: Query<&mut Transform, With<ArmsRoot>>,
-    mut hip: Local<f32>,
+    ads: Res<Ads>,
+    sway: Res<Sway>,
+    aim: Res<AimOffset>,
+    mut arms: Query<(&mut Transform, &Anim), With<ArmsRoot>>,
+    mut action: Local<f32>,
 ) {
-    *hip = crate::status::finterp_to(*hip, if p.aiming { 0.0 } else { 1.0 }, time.delta_secs(), 1.0 / BLEND.as_secs_f32());
-    let off = inv.map(|i| pose_offset(&i.slots[i.current].anims)).unwrap_or_default();
-    let off = Transform { translation: off.translation * *hip, rotation: Quat::IDENTITY.slerp(off.rotation, *hip), ..default() };
-    for mut t in &mut arms {
-        *t = p.view_base * recoil.offset * off * Transform::from_translation(-FP_CAMERA_SOCKET);
+    let (pose, act) = inv.map(|i| (pose_offset(&i.slots[i.current].anims, "PoseOffset"), pose_offset(&i.slots[i.current].anims, "ActionPoseOffset"))).unwrap_or_default();
+    let hip = 1.0 - ads.alpha;
+    let now = time.elapsed_secs();
+    for (mut t, anim) in &mut arms {
+        // ponytail: ActionPoseOffset blend speed (8/s) is a guess; the real blend lives in the compiled ABP.
+        *action = crate::status::finterp_to(*action, if now < anim.montage_until && anim.action { 1.0 } else { 0.0 }, time.delta_secs(), 8.0);
+        let off = Transform { translation: pose.translation.lerp(act.translation, *action), rotation: pose.rotation.slerp(act.rotation, *action), ..default() };
+        let off = Transform { translation: off.translation * hip, rotation: Quat::IDENTITY.slerp(off.rotation, hip), ..default() };
+        let aim = Transform::from_translation(GRIP) * aim.0 * Transform::from_translation(-GRIP);
+        *t = p.view_base * recoil.offset * sway.offset * aim * off * Transform::from_translation(-FP_CAMERA_SOCKET);
+    }
+}
+
+/// BAS ViewmodelOffsets.AimingLeftElbowOffset (M4 (0,0,7.5) cm up, VInterp 5): UE moves the left elbow with an IK pole
+/// target. Without IK the upper arm is twisted about the shoulder->hand axis, which moves the elbow and keeps the
+/// hand in place; the hand is counter-rotated so the grip orientation stays put.
+// ponytail: single-bone twist standing in for the IK pole target; elbow lands on the offset only to first order.
+fn left_elbow(
+    time: Res<Time>,
+    p: Single<&Player>,
+    inv: Option<Single<&Inventory>>,
+    arms: Single<(Entity, &GlobalTransform), With<ArmsRoot>>,
+    joints: Query<(Entity, &Name)>,
+    parents: Query<&ChildOf>,
+    globals: Query<&GlobalTransform>,
+    mut locals: Query<&mut Transform>,
+    mut ids: Local<Option<[Entity; 3]>>,
+    mut w: Local<f32>,
+    mut prev: Local<f32>,
+) {
+    let Some(inv) = inv else { return };
+    let (root, root_gt) = *arms;
+    if ids.is_none() {
+        let find = |n: &str| joints.iter().find(|(e, j)| j.as_str() == n && root_of_entity(*e, root, &parents)).map(|j| j.0);
+        *ids = (|| Some([find("upperarm_l")?, find("lowerarm_l")?, find("hand_l")?]))();
+    }
+    let Some([up, low, hand]) = *ids else { return };
+    let v = &inv.slots[inv.current].anims["ViewmodelOffsets"]["AimingLeftElbowOffset"];
+    let d = Vec3::new(v["x"].as_f64().unwrap_or(0.0) as f32, v["y"].as_f64().unwrap_or(0.0) as f32, v["z"].as_f64().unwrap_or(0.0) as f32);
+    *w = crate::status::finterp_to(*w, if p.aiming { 1.0 } else { 0.0 }, time.delta_secs(), 5.0);
+    if d == Vec3::ZERO {
+        return;
+    }
+    let (Ok(gu), Ok(gl), Ok(gh)) = (globals.get(up), globals.get(low), globals.get(hand)) else { return };
+    let (s, e, h) = (gu.translation(), gl.translation(), gh.translation());
+    let a = (h - s).normalize_or_zero();
+    // Globals are last frame's, i.e. still twisted by `prev`; undo it to measure the animated pose.
+    let undo = Quat::from_axis_angle(a, -*prev);
+    let r = undo * ((e - s) - a * (e - s).dot(a));
+    if a == Vec3::ZERO || r.length() < 1e-4 {
+        return;
+    }
+    let tang = a.cross(r).normalize();
+    let dw = root_gt.rotation() * ue_vec(d) * *w;
+    let theta = (tang.dot(dw) / r.length()).clamp(-0.6, 0.6);
+    let q = Quat::from_axis_angle(a, theta);
+    *prev = theta;
+    let Ok(up_parent) = parents.get(up) else { return };
+    let Ok(pg) = globals.get(up_parent.parent()) else { return };
+    if let Ok(mut t) = locals.get_mut(up) {
+        t.rotation = pg.rotation().inverse() * q * pg.rotation() * t.rotation;
+    }
+    if let Ok(hp) = parents.get(hand)
+        && let Ok(hpg) = globals.get(hp.parent())
+        && let Ok(mut t) = locals.get_mut(hand)
+    {
+        // new local = parent_old^-1 * q^-1 * parent_old * local (parent rotated by q, world hand rotation kept)
+        let po = undo * hpg.rotation();
+        t.rotation = po.inverse() * q.inverse() * po * t.rotation;
     }
 }
 
