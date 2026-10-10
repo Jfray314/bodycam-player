@@ -52,21 +52,36 @@ local CLASSES = {
     "RecoilAnimationComponent", "WW_SurvivorStatus_C",
 }
 
+local dumping = false
 local function dump_all()
+    -- One at a time (a second F7 while the first runs crashed), and only the local player's objects: dumping every
+    -- bot's objects in a bot match crashed too.
+    if dumping then return end
+    local lp = UEHelpers.GetPlayerController()
+    local me = lp and lp:IsValid() and lp.Pawn
+    if not (me and me:IsValid()) then print("[BodycamProbe] player not found, spawn in first") return end
+    local mine = me:GetFName():ToString()
+    dumping = true
     local f = io.open(OUT .. "dump_" .. os.time() .. ".txt", "w")
-    if not f then print("[BodycamProbe] cannot open output dir " .. OUT) return end
+    if not f then dumping = false print("[BodycamProbe] cannot open output dir " .. OUT) return end
     for _, c in ipairs(CLASSES) do
         local all = FindAllOf(c)
         f:write("\n######## " .. c .. " (" .. (all and #all or 0) .. " instances)\n")
         if all then
-            for i, o in ipairs(all) do
-                if i > 4 then break end
-                local ok, err = pcall(dump_object, f, o)
+            local n = 0
+            for _, o in ipairs(all) do
+                local ok_name, full = pcall(function() return o:GetFullName() end)
+                local own = ok_name and full and (full:find(mine, 1, true) or c == "WeaponAttributeSet" or c:find("CameraManager", 1, true))
+                if own then n = n + 1 end
+                if n > 4 then break end
+                local ok, err = true, nil
+                if own then ok, err = pcall(dump_object, f, o) end
                 if not ok then f:write("  <dump error " .. tostring(err) .. ">\n") end
             end
         end
     end
     f:close()
+    dumping = false
     print("[BodycamProbe] dump written")
 end
 
