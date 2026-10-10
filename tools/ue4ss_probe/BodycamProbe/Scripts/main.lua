@@ -203,6 +203,32 @@ local function sample()
     rec:write(table.concat(row, ","), "\n")
 end
 
+local function open_file(tag)
+    rec = io.open(OUT .. "rec_" .. os.time() .. tag .. ".csv", "w")
+    if not rec then print("[BodycamProbe] cannot open output dir " .. OUT) return false end
+    local head = { "t,marker,cam_x,cam_y,cam_z,cam_pitch,cam_yaw,cam_roll,fov,pawn_x,pawn_y,pawn_z,vel_x,vel_y,vel_z,ctl_pitch,ctl_yaw,ctl_roll,crouched,falling" }
+    for i, col in ipairs(columns) do head[i + 1] = (col.name:gsub(",", "_")) end
+    rec:write(table.concat(head, ","), "
+")
+    return true
+end
+
+-- Called from every Bodycam_Player tick (bots too). After a death the controller possesses a new pawn: the old
+-- objects go invalid, so re-resolve and continue in a new file (rec_<time>_respawn.csv), same clock and markers.
+local function on_tick(self)
+    if not rec then return end
+    local me = self:get()
+    local ok, same = pcall(function() return pawn:IsValid() and me:GetAddress() == pawn:GetAddress() end)
+    if ok and same then pcall(sample) return end
+    local ok2, mine = pcall(function()
+        return pc:IsValid() and pc.Pawn and pc.Pawn:IsValid() and pc.Pawn:GetAddress() == me:GetAddress()
+    end)
+    if not (ok2 and mine) then return end
+    rec:close()
+    rec = nil
+    if resolve() and open_file("_respawn") then print("[BodycamProbe] respawn: recording continues in a new file") end
+end
+
 local function toggle_record()
     if rec then
         local f = rec
@@ -212,20 +238,14 @@ local function toggle_record()
         return
     end
     if not resolve() then print("[BodycamProbe] player not found, spawn in first") return end
-    rec = io.open(OUT .. "rec_" .. os.time() .. ".csv", "w")
-    if not rec then print("[BodycamProbe] cannot open output dir " .. OUT) return end
-    local head = { "t,marker,cam_x,cam_y,cam_z,cam_pitch,cam_yaw,cam_roll,fov,pawn_x,pawn_y,pawn_z,vel_x,vel_y,vel_z,ctl_pitch,ctl_yaw,ctl_roll,crouched,falling" }
-    for i, col in ipairs(columns) do head[i + 1] = (col.name:gsub(",", "_")) end
-    rec:write(table.concat(head, ","), "\n")
+    if not open_file("") then return end
     marker, start = 0, os.clock()
     print("[BodycamProbe] recording started")
     -- Sample from the player's own BP tick (game thread, once per frame). A LoopAsync +
     -- ExecuteInGameThread per sample crashed after ~35s inside UE4SS's callback cleanup.
     if not hooked then
         hooked = true
-        RegisterHook("/BodycamAnimationFramework/Blueprints/Bodycam_Player.Bodycam_Player_C:ReceiveTick", function(self)
-            if rec and self:get():GetAddress() == pawn:GetAddress() then pcall(sample) end
-        end)
+        RegisterHook("/BodycamAnimationFramework/Blueprints/Bodycam_Player.Bodycam_Player_C:ReceiveTick", function(self) pcall(on_tick, self) end)
     end
 end
 
