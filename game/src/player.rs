@@ -22,6 +22,26 @@ const CROUCH_HALF_HEIGHT: f32 = 0.55; // CrouchedHalfHeight 55
 const SENS: f32 = 0.0022;
 /// Bodycam_Player "Update Leaning Values": Leaning Alpha = FInterpTo(Alpha, Target, dt, 12).
 const LEAN_SPEED: f32 = 12.0;
+/// Measured lean cascade after Leaning Alpha (assets/sway_reference.json): camera offset / NormalizedLean 8, camera roll 2 on top of that.
+const LEAN_POS_SPEED: f32 = 8.0;
+const LEAN_ROLL_SPEED: f32 = 2.0;
+/// AC_BodycamCamera.Yaw(DeltaTime) = yaw rate (deg/s) * this (measured, corr 0.998, no lag).
+const YAW_DELTA_PER_DEG_S: f32 = 0.00796;
+/// Camera roll (cam_roll in the recordings) follows FInterp(1.77) of strafe + look terms; the BP's FInterp 8 alone is 2-3x too fast.
+// ponytail: single empirical stage (look gain 2.59 covers the missing arm/camera lag); the BP structure behind it isn't decoded.
+const ROLL_SPEED: f32 = 1.77;
+const ROLL_LOOK_GAIN: f32 = 2.59;
+
+/// Yaw rate (deg/s, right +) -> AC_BodycamCamera Yaw(DeltaTime).
+pub fn yaw_delta_time(deg_per_s: f32) -> f32 {
+    deg_per_s * YAW_DELTA_PER_DEG_S
+}
+
+/// Spring Camera roll target (UE deg, cw +): Movement.X (-1..1) -> -5..5 plus Yaw(DeltaTime) (-3..3) -> 8..-8.
+pub fn spring_roll_target(move_x: f32, yaw_delta: f32) -> f32 {
+    let map = |v: f32, a: f32, b: f32, c: f32, d: f32| c + (d - c) * ((v - a) / (b - a)).clamp(0.0, 1.0);
+    map(move_x, -1.0, 1.0, -5.0, 5.0) + ROLL_LOOK_GAIN * map(yaw_delta, -3.0, 3.0, 8.0, -8.0)
+}
 
 #[derive(Deserialize)]
 struct Loop {
@@ -125,7 +145,7 @@ pub struct Player {
     /// -1 left .. 1 right, blended.
     pub lean: f32,
     /// Lean as the camera shows it (measured in-game, camera_motion.json sequences.lean): the offset follows
-    /// Leaning Alpha through a second FInterp at 12 (anim blend), the roll trails at ~2 (29.5 deg reached after ~1.5 s).
+    /// Leaning Alpha through FInterp 8 (LEAN_POS_SPEED), the roll trails that at 2 (29.5 deg reached after ~1.5 s).
     lean_pos: f32,
     lean_roll: f32,
     /// Smoothed capsule centre height above the feet.
@@ -149,7 +169,7 @@ pub struct Player {
     smooth_pitch: f32,
     /// UE Yaw(DeltaTime) = Look.X / dt / 50 (Look.X taken as degrees of yaw input this frame).
     yaw_rate: f32,
-    /// IA_Move X (strafe, right +), Q/E held, and the Spring Camera roll (UE deg, cw +) FInterp'd at 8.
+    /// IA_Move X (strafe, right +), Q/E held, and the Spring Camera roll (UE deg, cw +), see ROLL_SPEED.
     move_x: f32,
     lean_pressed: bool,
     roll: f32,
@@ -205,8 +225,7 @@ fn look(time: Res<Time>, motion: Res<AccumulatedMouseMotion>, cursor: Single<&Cu
     p.recoil_offset -= ret;
     let step = step - ret;
     p.yaw -= d.x * SENS + step.x.to_radians();
-    // ponytail: assumes the IA_Look value is degrees of yaw; the MouseInputModifier scale is not extracted.
-    p.yaw_rate = (d.x * SENS).to_degrees() / time.delta_secs().max(1e-4) / 50.0;
+    p.yaw_rate = yaw_delta_time((d.x * SENS).to_degrees() / time.delta_secs().max(1e-4));
     p.pitch = (p.pitch - d.y * SENS + step.y.to_radians()).clamp(-89.9f32.to_radians(), 89.9f32.to_radians()); // ViewPitchMin/Max
 }
 
@@ -450,8 +469,9 @@ fn bodycam_camera(time: Res<Time>, cm: Res<CameraMotion>, mut player: Single<&mu
     // Recorded lean peaks are signed; mirror for the other side.
     let lp = cm.lean_pose();
     let side = if lp[5] < 0.0 { 1.0 } else { -1.0 }; // positive lean = right = negative (cw) roll
-    p.lean_pos = crate::status::finterp_to(p.lean_pos, p.lean, dt, 12.0);
-    p.lean_roll = crate::status::finterp_to(p.lean_roll, p.lean, dt, 2.0);
+    // Measured (tools/probe_sway.py): alpha FInterp 12 -> FInterp 8 = NormalizedLean and camera offset (0.16 cm rms), roll one more FInterp 2.
+    p.lean_pos = crate::status::finterp_to(p.lean_pos, p.lean, dt, LEAN_POS_SPEED);
+    p.lean_roll = crate::status::finterp_to(p.lean_roll, p.lean_pos, dt, LEAN_ROLL_SPEED);
     add(&mut c, [lp[0], lp[1], lp[2], 0.0, 0.0, 0.0].map(|v| v * side), p.lean_pos);
     add(&mut c, [0.0, 0.0, 0.0, lp[3], lp[4], lp[5]].map(|v| v * side), p.lean_roll);
     // UE hangs the camera off the arms' FP_Camera socket, so bob/land/lean move arms and camera together;
@@ -464,11 +484,9 @@ fn bodycam_camera(time: Res<Time>, cm: Res<CameraMotion>, mut player: Single<&mu
     p.smooth_yaw = crate::status::finterp_to(p.smooth_yaw, p.yaw, dt, 25.0);
     p.smooth_pitch = crate::status::finterp_to(p.smooth_pitch, p.pitch, dt, 25.0);
     let lag_yaw = p.smooth_yaw - p.yaw;
-    // Spring Camera roll: FInterp 8 toward strafe (Movement.X -1..1 -> -5..5) + look (Yaw(DeltaTime) -3..3 -> 8..-8);
     // while aiming / holding lean the BP uses the lean rotation instead, which our measured lean roll already covers.
-    let map = |v: f32, a: f32, b: f32, c: f32, d: f32| c + (d - c) * ((v - a) / (b - a)).clamp(0.0, 1.0);
-    let roll_target = if p.aiming || p.lean_pressed { 0.0 } else { map(p.move_x, -1.0, 1.0, -5.0, 5.0) + map(p.yaw_rate, -3.0, 3.0, 8.0, -8.0) };
-    p.roll = crate::status::finterp_to(p.roll, roll_target, dt, 8.0);
+    let roll_target = if p.aiming || p.lean_pressed { 0.0 } else { spring_roll_target(p.move_x, p.yaw_rate) };
+    p.roll = crate::status::finterp_to(p.roll, roll_target, dt, ROLL_SPEED);
     c[5] -= p.roll; // UE roll cw+ -> Bevy ccw+
     p.view_base = Transform::from_xyz(c[0], p.center + c[1], c[2])
         .with_rotation(Quat::from_euler(EulerRot::YXZ, lag_yaw + c[4].to_radians(), p.smooth_pitch + c[3].to_radians(), c[5].to_radians()));
@@ -491,24 +509,67 @@ mod tests {
         assert!(cm.lean_pose()[5].abs() > 20.0); // measured lean roll ~29 deg
     }
 
-    /// Lean step response (alpha FInterp 12 -> offset 12 / roll 2) tracks the in-game recording within 15 %.
+    /// Lean step response: alpha FInterp 12 -> offset FInterp 8 -> roll FInterp 2 against the in-game recording
+    /// (assets/sway_reference.json: NormalizedLean, camera right offset cm, camera roll deg after a Q/E press).
     #[test]
     fn lean_matches_recording() {
-        let cm = super::CameraMotion::load();
-        let s = &cm.sequences.lean.series;
-        let peak = cm.lean_pose();
-        let start = s.iter().position(|f| f[0].abs() > 0.005).unwrap() - 1;
-        let (mut alpha, mut pos, mut roll) = (0.0f32, 0.0f32, 0.0f32);
-        let dt = 1.0 / cm.hz;
-        for (i, f) in s[start..start + 90].iter().enumerate() {
-            if i % 10 == 0 {
-                assert!((pos - (f[0] / peak[0]).abs()).abs() < 0.15, "offset at frame {i}: {pos} vs {}", (f[0] / peak[0]).abs());
-                assert!((roll - (f[5] / peak[5]).abs()).abs() < 0.15, "roll at frame {i}: {roll} vs {}", (f[5] / peak[5]).abs());
+        let r: serde_json::Value = serde_json::from_str(include_str!("../../assets/sway_reference.json")).unwrap();
+        let s = &r["lean"]["series_60hz"];
+        let col = |k: &str| -> Vec<f32> { s[k].as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect() };
+        let (nl, off, roll) = (col("normalized_lean"), col("camera_right_cm"), col("cam_roll"));
+        let (off0, roll0) = (off[0], roll[0]);
+        let press = (s["press_offset_s"].as_f64().unwrap() * 60.0).round() as usize;
+        let dt = 1.0 / 60.0;
+        let (mut alpha, mut pos, mut rl) = (0.0f32, 0.0f32, 0.0f32);
+        let (mut e_nl, mut e_off, mut e_roll, mut n) = (0.0f32, 0.0f32, 0.0f32, 0);
+        for i in 0..nl.len() {
+            if i >= press {
+                alpha = crate::status::finterp_to(alpha, -1.0, dt, super::LEAN_SPEED);
+                pos = crate::status::finterp_to(pos, alpha, dt, super::LEAN_POS_SPEED);
+                rl = crate::status::finterp_to(rl, pos, dt, super::LEAN_ROLL_SPEED);
             }
-            alpha = crate::status::finterp_to(alpha, 1.0, dt, super::LEAN_SPEED);
-            pos = crate::status::finterp_to(pos, alpha, dt, 12.0);
-            roll = crate::status::finterp_to(roll, alpha, dt, 2.0);
+            // peaks: NormalizedLean 15 deg-units/15, offset 24 cm, roll 30.2 deg (recorded, measured peak sign -)
+            e_nl += (pos - nl[i]).powi(2);
+            e_off += (24.0 * pos - (off[i] - off0)).powi(2);
+            e_roll += (30.2 * rl - (roll[i] - roll0)).powi(2);
+            n += 1;
         }
+        let rms = |e: f32| (e / n as f32).sqrt();
+        eprintln!("lean rms: normalized {:.4}, offset {:.3} cm, roll {:.3} deg", rms(e_nl), rms(e_off), rms(e_roll));
+        assert!(rms(e_nl) < 0.02 && rms(e_off) < 0.6 && rms(e_roll) < 0.8);
+    }
+
+    /// Spring Camera roll against cam_roll of the strafe / look recordings. `before` is the previous model (Yaw(DeltaTime) =
+    /// rate / 50 and FInterp 8), `after` the fitted one.
+    #[test]
+    fn camera_roll_matches_recording() {
+        let r: serde_json::Value = serde_json::from_str(include_str!("../../assets/sway_reference.json")).unwrap();
+        let map = |v: f32, a: f32, b: f32, c: f32, d: f32| c + (d - c) * ((v - a) / (b - a)).clamp(0.0, 1.0);
+        let dt = 1.0 / 60.0;
+        let (mut before, mut after, mut n, mut sd) = (0.0f32, 0.0f32, 0, 0.0f32);
+        for (_file, wins) in r["roll"]["series_60hz"].as_object().unwrap() {
+            for w in wins.as_array().unwrap() {
+                let col = |k: &str| -> Vec<f32> { w[k].as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect() };
+                let (yaw, mx, roll) = (col("ctl_yaw"), col("move_x"), col("cam_roll"));
+                let (mut old, mut new) = (roll[0], roll[0]);
+                for i in 1..yaw.len() {
+                    let rate = (yaw[i] - yaw[i - 1]) / dt;
+                    // old: yaw_rate = rate / 50, target map(+-5) + map(8..-8), FInterp 8
+                    let t_old = map(mx[i], -1.0, 1.0, -5.0, 5.0) + map(rate / 50.0, -3.0, 3.0, 8.0, -8.0);
+                    old = crate::status::finterp_to(old, t_old, dt, 8.0);
+                    new = crate::status::finterp_to(new, super::spring_roll_target(mx[i], super::yaw_delta_time(rate)), dt, super::ROLL_SPEED);
+                    if i > 30 {
+                        before += (old - roll[i]).powi(2);
+                        after += (new - roll[i]).powi(2);
+                        sd += roll[i].powi(2);
+                        n += 1;
+                    }
+                }
+            }
+        }
+        let rms = |e: f32| (e / n as f32).sqrt();
+        eprintln!("camera roll rms deg: before {:.3}, after {:.3} (signal rms {:.3})", rms(before), rms(after), rms(sd));
+        assert!(rms(after) < 0.75 * rms(before) && rms(after) < 0.75 * rms(sd));
     }
 
     #[test]

@@ -373,6 +373,15 @@ impl Default for StressAnim {
     }
 }
 
+/// AC_BodycamAnimationComponent "Stress Tick" (matches the recordings: tools/probe_sway.py, subtle rms 0.013-0.018 of sd 0.26-0.34).
+/// `speed_cm` is VSize(GetVelocity), vertical part included.
+pub fn stress_tick(subtle: f32, speed_cm: f32, aiming: bool, stress: f32, dt: f32) -> (f32, f32) {
+    let mr = crate::status::map_range_clamped;
+    let sub_target = if aiming { 0.0 } else { mr(speed_cm, 0.0, 100.0, 0.1, 1.0) };
+    let strong = if aiming { mr(stress, 0.5, 1.0, 0.0, 1.0) } else { mr(stress, 0.0, 1.0, 0.0, 4.0) };
+    (crate::status::finterp_to(subtle, sub_target, dt, 10.0), strong)
+}
+
 /// AC "Stress Tick" + the two BAS stress idle clips (StressedIdleSubtle loop, StressedIdleStrong) layered additively on the
 /// arms at those alphas. The clips are full poses in UE; tools/stress_additive.py bakes them into deltas vs their first frame.
 // ponytail: A_FP_AK_Shake_Loop isn't in the exported glbs yet (tools/ue-export now exports it on the next full rebuild);
@@ -387,11 +396,7 @@ fn stress_layers(
     mut players: Query<(&mut AnimationPlayer, &AnimLink)>,
 ) {
     let Some(inv) = inv else { return };
-    let mr = crate::status::map_range_clamped;
-    let speed_cm = Vec2::new(p.vel.x, p.vel.z).length() * 100.0;
-    let sub_target = if p.aiming { 0.0 } else { mr(speed_cm, 0.0, 100.0, 0.1, 1.0) };
-    alpha.subtle = crate::status::finterp_to(alpha.subtle, sub_target, time.delta_secs(), 10.0);
-    alpha.strong = if p.aiming { mr(st.stress, 0.5, 1.0, 0.0, 1.0) } else { mr(st.stress, 0.0, 1.0, 0.0, 4.0) };
+    (alpha.subtle, alpha.strong) = stress_tick(alpha.subtle, p.vel.length() * 100.0, p.aiming, st.stress, time.delta_secs());
     let a = &inv.slots[inv.current].anims;
     let clip = |k: &str| a[k]["path"].as_str().map(clip_of);
     for (mut player, link) in &mut players {
@@ -695,5 +700,27 @@ pub fn debug_bones(
     for (n, w) in &morphs {
         let mx = w.weights().iter().fold(0.0f32, |a, b| a.max(b.abs()));
         info!("t={:.1} morph {} n={} max|w|={}", *last, n.map(|n| n.as_str()).unwrap_or("?"), w.weights().len(), mx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn stress_tick_matches_recording() {
+        let r: serde_json::Value = serde_json::from_str(include_str!("../../assets/sway_reference.json")).unwrap();
+        let s = &r["stress"]["series_60hz"];
+        let col = |k: &str| -> Vec<f32> { s[k].as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect() };
+        let (speed, aim, stress, sub, strong) = (col("speed_m_s"), col("aiming"), col("stress"), col("subtle"), col("strong"));
+        let (mut a, mut es, mut eg, mut ss) = (sub[0], 0.0f32, 0.0f32, 0.0f32);
+        for i in 1..sub.len() {
+            let (na, g) = super::stress_tick(a, speed[i] * 100.0, aim[i] > 0.5, stress[i], 1.0 / 60.0);
+            a = na;
+            es += (a - sub[i]).powi(2);
+            eg += (g - strong[i]).powi(2);
+            ss += (sub[i] - 0.4).powi(2);
+        }
+        let n = (sub.len() - 1) as f32;
+        eprintln!("stress alpha rms: subtle {:.4}, strong {:.4} (subtle signal {:.3})", (es / n).sqrt(), (eg / n).sqrt(), (ss / n).sqrt());
+        assert!((es / n).sqrt() < 0.05 && (eg / n).sqrt() < 0.1);
     }
 }
