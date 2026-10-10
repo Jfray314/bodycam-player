@@ -70,6 +70,11 @@ pub struct Montage {
     pub path: String,
     pub length: f32,
     pub notifies: Vec<(f32, String, Value)>,
+    /// FAlphaBlend BlendIn/BlendOut times (s) of the character montage.
+    pub blend_in: f32,
+    pub blend_out: f32,
+    /// Gun-side montage asset path (BAS `Weapon` key), if any.
+    pub weapon: Option<String>,
 }
 
 impl Montage {
@@ -78,6 +83,9 @@ impl Montage {
         Some(Montage {
             path: c.get("path")?.as_str()?.into(),
             length: c.get("length")?.as_f64()? as f32,
+            blend_in: c.get("blend_in").and_then(|b| b.as_f64()).unwrap_or(0.25) as f32,
+            blend_out: c.get("blend_out").and_then(|b| b.as_f64()).unwrap_or(0.25) as f32,
+            weapon: v.get("Weapon").and_then(|w| w.get("path")).and_then(|p| p.as_str()).map(Into::into),
             notifies: c
                 .get("notifies")?
                 .as_array()?

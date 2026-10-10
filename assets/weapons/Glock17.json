@@ -1882,7 +1882,9 @@
        "Sound": "/BodycamAnimationFramework/Animations/Glock/Sounds/BODYCAM_GLOCK_regrip.BODYCAM_GLOCK_regrip"
       }
      }
-    ]
+    ],
+    "blend_in": 0.25,
+    "blend_out": 0.25
    },
    {
     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Regrip02_Montage.A_FP_Glock_Regrip02_Montage",
@@ -1897,7 +1899,9 @@
        "Sound": "/BodycamAnimationFramework/Animations/Glock/Sounds/BODYCAM_GLOCK_regrip.BODYCAM_GLOCK_regrip"
       }
      }
-    ]
+    ],
+    "blend_in": 0.25,
+    "blend_out": 0.25
    },
    {
     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Regrip03_Montage.A_FP_Glock_Regrip03_Montage",
@@ -1912,7 +1916,9 @@
        "Sound": "/BodycamAnimationFramework/Animations/Glock/Sounds/BODYCAM_GLOCK_regrip.BODYCAM_GLOCK_regrip"
       }
      }
-    ]
+    ],
+    "blend_in": 0.25,
+    "blend_out": 0.25
    }
   ],
   "Fire": [
@@ -1921,13 +1927,17 @@
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Fire_Montage.A_FP_Glock_Fire_Montage",
      "length": 0.9,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.1,
+     "blend_out": 0.25
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_Fire_Montage.A_W_Glock_Fire_Montage",
      "length": 0.16666667,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -1960,7 +1970,9 @@
     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_Fire_Empty_Montage.A_W_Glock_Fire_Empty_Montage",
     "length": 0.1,
     "rate": 1.0,
-    "notifies": []
+    "notifies": [],
+    "blend_in": 0.0,
+    "blend_out": 0.0
    }
   },
   "FirstEquip": {
@@ -1979,13 +1991,17 @@
        "SoundTag": "Sound.Type.Equip"
       }
      }
-    ]
+    ],
+    "blend_in": 0.5,
+    "blend_out": 0.25
    },
    "Weapon": {
     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_Equip_Montage.A_W_Glock_Equip_Montage",
     "length": 1.1,
     "rate": 1.0,
-    "notifies": []
+    "notifies": [],
+    "blend_in": 0.0,
+    "blend_out": 0.0
    }
   },
   "Draw": {
@@ -1993,7 +2009,9 @@
     "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Draw_Montage.A_FP_Glock_Draw_Montage",
     "length": 0.45,
     "rate": 1.0,
-    "notifies": []
+    "notifies": [],
+    "blend_in": 0.25,
+    "blend_out": 0.25
    }
   },
   "holster": {
@@ -2012,7 +2030,9 @@
        "SoundTag": "Sound.Type.Inspect"
       }
      }
-    ]
+    ],
+    "blend_in": 0.25,
+    "blend_out": 0.25
    }
   },
   "ReloadTacCalm": [
@@ -2032,13 +2052,17 @@
         "SoundTag": "Sound.Type.Reload"
        }
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Calm01_Montage.A_W_Glock_reloadPartial_Calm01_Montage",
      "length": 3.6,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2081,13 +2105,17 @@
         "SoundTag": "Sound.Type.Reload"
        }
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Calm02_Montage.A_W_Glock_reloadPartial_Calm02_Montage",
      "length": 3.4,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2130,13 +2158,17 @@
         "SoundTag": "Sound.Type.Reload"
        }
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Calm03_Montage.A_W_Glock_reloadPartial_Calm03_Montage",
      "length": 3.1666667,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2179,13 +2211,17 @@
         "SoundTag": "Sound.Type.Reload"
        }
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Calm04_Montage.A_W_Glock_reloadPartial_Calm04_Montage",
      "length": 3.4,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2236,13 +2272,17 @@
        "duration": 0.0,
        "props": {}
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Stressed01_Montage.A_W_Glock_reloadPartial_Stressed01_Montage",
      "length": 3.7,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2291,13 +2331,17 @@
        "duration": 0.0,
        "props": {}
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Stressed02_Montage.A_W_Glock_reloadPartial_Stressed02_Montage",
      "length": 4.1,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2346,13 +2390,17 @@
        "duration": 0.0,
        "props": {}
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Stressed03_Montage.A_W_Glock_reloadPartial_Stressed03_Montage",
      "length": 4.0333333,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2401,13 +2449,17 @@
        "duration": 0.0,
        "props": {}
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadPartial_Stressed04_Montage.A_W_Glock_reloadPartial_Stressed04_Montage",
      "length": 3.4,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2452,13 +2504,17 @@
         "SoundTag": "Sound.Type.Reload"
        }
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Calm01_Montage.A_W_Glock_reloadEmpty_Calm01_Montage",
      "length": 4.366667,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2501,13 +2557,17 @@
         "SoundTag": "Sound.Type.Reload"
        }
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Calm02_Montage.A_W_Glock_reloadEmpty_Calm02_Montage",
      "length": 3.3,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2550,13 +2610,17 @@
         "SoundTag": "Sound.Type.Reload"
        }
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Calm03_Montage.A_W_Glock_reloadEmpty_Calm03_Montage",
      "length": 3.7333333,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2599,13 +2663,17 @@
         "SoundTag": "Sound.Type.Reload"
        }
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Calm04_Montage.A_W_Glock_reloadEmpty_Calm04_Montage",
      "length": 3.8666666,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2656,13 +2724,17 @@
        "duration": 0.0,
        "props": {}
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Stressed01_Montage.A_W_Glock_reloadEmpty_Stressed01_Montage",
      "length": 4.4333334,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2711,13 +2783,17 @@
        "duration": 0.0,
        "props": {}
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Stressed02_Montage.A_W_Glock_reloadEmpty_Stressed02_Montage",
      "length": 4.9,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2766,13 +2842,17 @@
        "duration": 0.0,
        "props": {}
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Stressed03_Montage.A_W_Glock_reloadEmpty_Stressed03_Montage",
      "length": 4.233333,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2821,13 +2901,17 @@
        "duration": 0.0,
        "props": {}
       }
-     ]
+     ],
+     "blend_in": 0.5,
+     "blend_out": 0.5
     },
     "Weapon": {
      "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_reloadEmpty_Stressed04_Montage.A_W_Glock_reloadEmpty_Stressed04_Montage",
      "length": 4.0,
      "rate": 1.0,
-     "notifies": []
+     "notifies": [],
+     "blend_in": 0.0,
+     "blend_out": 0.0
     },
     "StandingActionRandomPoseOffset": {
      "Min": {
@@ -2869,7 +2953,9 @@
        "Sound": "/BodycamAnimationFramework/Animations/Glock/Sounds/BODYCAM_GLOCK_inspect.BODYCAM_GLOCK_inspect"
       }
      }
-    ]
+    ],
+    "blend_in": 0.5,
+    "blend_out": 0.5
    },
    "StandingActionRandomPoseOffset": {
     "Min": {
@@ -2926,13 +3012,17 @@
        "Show?": false
       }
      }
-    ]
+    ],
+    "blend_in": 0.5,
+    "blend_out": 0.5
    },
    "Weapon": {
     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_magCheck_Empty_Montage.A_W_Glock_magCheck_Empty_Montage",
     "length": 9.133333,
     "rate": 1.0,
-    "notifies": []
+    "notifies": [],
+    "blend_in": 0.0,
+    "blend_out": 0.0
    },
    "StandingActionRandomPoseOffset": {
     "Min": {
@@ -2979,13 +3069,17 @@
        "Show?": false
       }
      }
-    ]
+    ],
+    "blend_in": 0.5,
+    "blend_out": 0.5
    },
    "Weapon": {
     "path": "/BodycamAnimationFramework/Animations/MGlock17/Weapon/A_W_Glock_magCheck_Full_Montage.A_W_Glock_magCheck_Full_Montage",
     "length": 5.0666666,
     "rate": 1.0,
-    "notifies": []
+    "notifies": [],
+    "blend_in": 0.0,
+    "blend_out": 0.0
    },
    "StandingActionRandomPoseOffset": {
     "Min": {
@@ -3002,8 +3096,2566 @@
     }
    }
   },
-  "AimIn": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/Glock17/Additive_Glock17_Aim_In.Additive_Glock17_Aim_In",
-  "AimOut": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/Glock17/Additive_Glock17_Aim_Out.Additive_Glock17_Aim_Out",
+  "AimIn": {
+   "path": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/Glock17/Additive_Glock17_Aim_In.Additive_Glock17_Aim_In",
+   "RotationCurve": {
+    "path": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/Glock17/Aim_Glock17_InRot.Aim_Glock17_InRot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        0.309811,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        0.887525,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        1.439213,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.166667,
+        1.607957,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.2,
+        1.629736,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.233333,
+        1.597043,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.266667,
+        1.419028,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.333333,
+        1.082187,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.366667,
+        0.119915,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.4,
+        -0.607995,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.433333,
+        -0.838398,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.706305,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.533333,
+        -0.294885,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.566667,
+        0.227049,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.6,
+        0.604261,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.666667,
+        0.684446,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.7,
+        0.437644,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.733333,
+        0.089294,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.766667,
+        -0.191405,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        -0.334639,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        -0.326772,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        -0.269926,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        -0.204358,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        -0.134525,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.033333,
+        -0.070714,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.066667,
+        -0.023964,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.1,
+        -0.002446,
+        0,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        -0.0,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        -0.329542,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        -1.017481,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        -1.863268,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.166667,
+        -2.607199,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.2,
+        -2.127651,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.233333,
+        0.342924,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.266667,
+        1.889276,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.333333,
+        1.280107,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.366667,
+        -0.666641,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.4,
+        -1.450939,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.433333,
+        -0.928567,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.016809,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.533333,
+        0.679156,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.566667,
+        0.911188,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.6,
+        0.34828,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.666667,
+        -0.459986,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.7,
+        -0.498548,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.733333,
+        -0.151244,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.766667,
+        0.167438,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        0.345532,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        0.394407,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        0.362986,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        0.278808,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        0.170085,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.033333,
+        0.070787,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.066667,
+        0.012115,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.1,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        0.630865,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        1.894448,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        3.148675,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.166667,
+        3.764582,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.2,
+        2.874624,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.233333,
+        1.341925,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.266667,
+        0.228422,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.333333,
+        -0.14537,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.366667,
+        -0.103019,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.4,
+        0.038156,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.433333,
+        0.09763,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.011952,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.533333,
+        -0.137678,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.566667,
+        -0.125689,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.6,
+        -0.048052,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.666667,
+        0.024894,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.7,
+        0.024708,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.733333,
+        -0.085617,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.766667,
+        -0.276437,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        -0.4302,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        -0.490043,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        -0.466013,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        -0.36804,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        -0.224707,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.033333,
+        -0.090403,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.066667,
+        -0.014857,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.1,
+        -3.2e-05,
+        0,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "PositionCurve": {
+    "path": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/Glock17/Aim_Glock17_InLoc.Aim_Glock17_InLoc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        0.11319,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        0.402332,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        0.90659,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.166667,
+        1.868557,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.2,
+        3.220015,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.233333,
+        4.194201,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.266667,
+        4.814766,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.333333,
+        5.125712,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.366667,
+        5.192878,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.4,
+        5.18141,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.433333,
+        5.169905,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        5.257498,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.533333,
+        5.453343,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.566667,
+        5.589672,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.6,
+        5.653019,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.666667,
+        5.657827,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.7,
+        5.637157,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.733333,
+        5.614027,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.766667,
+        5.603047,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        5.606146,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        5.607839,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        5.606848,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        5.603949,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        5.600096,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.033333,
+        5.596557,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.066667,
+        5.5945,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.1,
+        5.594076,
+        0,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        -0.158943,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        -0.370876,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        -0.338894,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.166667,
+        0.602364,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.2,
+        2.571148,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.233333,
+        4.073231,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.266667,
+        5.232822,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.333333,
+        6.133232,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.366667,
+        6.814685,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.4,
+        7.331077,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.433333,
+        7.704207,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        7.960727,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.533333,
+        8.110656,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.566667,
+        8.192264,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.6,
+        8.228202,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.666667,
+        8.238585,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.7,
+        8.245006,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.733333,
+        8.253966,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.766667,
+        8.261069,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        8.264617,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        8.264361,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        8.262916,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        8.261329,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        8.259646,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.033333,
+        8.258117,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.066667,
+        8.256961,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.1,
+        8.256415,
+        0,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        -0.089539,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        -0.204559,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        -0.167267,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.166667,
+        0.223923,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.2,
+        1.280151,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.233333,
+        2.346725,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.266667,
+        3.042663,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.333333,
+        3.43927,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.366667,
+        3.559265,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.4,
+        3.523193,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.433333,
+        3.491455,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        3.508682,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.533333,
+        3.544342,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.566667,
+        3.566299,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.6,
+        3.556656,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.666667,
+        3.539017,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.7,
+        3.557663,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.733333,
+        3.593521,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.766667,
+        3.635895,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        3.677475,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        3.710418,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        3.729034,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        3.732467,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        3.731842,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.033333,
+        3.731323,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.066667,
+        3.730957,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.1,
+        3.730789,
+        0,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "PositionScaleMin": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 1.0
+   },
+   "RotationScaleMin": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 1.0
+   },
+   "BlendTime": 0.1,
+   "NativeClass": "/BodycamAnimationFramework/Blueprints/Animation/Data/DA_BodycamAdditiveMotion.DA_BodycamAdditiveMotion_C"
+  },
+  "AimOut": {
+   "path": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/Glock17/Additive_Glock17_Aim_Out.Additive_Glock17_Aim_Out",
+   "RotationCurve": {
+    "path": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/Glock17/Aim_Glock17_OutRot.Aim_Glock17_OutRot",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        -0.108044,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        -0.44489,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        -0.886048,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        -1.190987,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.133333,
+        -1.017337,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.166667,
+        -0.066633,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.2,
+        1.06778,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.233333,
+        1.682059,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.266667,
+        1.844308,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.3,
+        1.709618,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.333333,
+        1.351317,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.366667,
+        0.860645,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.4,
+        0.339004,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.433333,
+        -0.137902,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.466667,
+        -0.507406,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.707988,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.533333,
+        -0.586033,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.566667,
+        -0.446869,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.6,
+        -0.123857,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.633333,
+        -0.066549,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.666667,
+        0.05387,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.7,
+        0.066289,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.733333,
+        0.076791,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.766667,
+        0.067561,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        0.032895,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.833333,
+        0.021479,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        1e-06,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        1e-06,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        -0.0,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.966667,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        0.0,
+        0,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        -0.301618,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        -1.269768,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        -2.607842,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        -3.585507,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.133333,
+        -3.746604,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.166667,
+        -3.240223,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.2,
+        -2.404963,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.233333,
+        -1.402265,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.266667,
+        -0.353348,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.3,
+        0.606368,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.333333,
+        1.283282,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.366667,
+        1.446207,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.4,
+        1.142946,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.433333,
+        0.63998,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.466667,
+        0.091411,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.421772,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.533333,
+        -1.019891,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.566667,
+        -1.110794,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.6,
+        -1.138975,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.633333,
+        -0.937545,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.666667,
+        -0.23545,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.7,
+        -0.07726,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.733333,
+        0.263406,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.766667,
+        0.305443,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        0.359978,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.833333,
+        0.341254,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        0.25366,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        0.211944,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        0.088581,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.966667,
+        0.0571,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        0.01281,
+        0,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        -0.251027,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        -1.050493,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        -2.140728,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        -2.927491,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.133333,
+        -3.036864,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.166667,
+        -2.566193,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.2,
+        -1.778064,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.233333,
+        -0.856755,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.266667,
+        -0.003212,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.3,
+        0.556286,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.333333,
+        0.524472,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.366667,
+        0.02718,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.4,
+        -0.36576,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.433333,
+        -0.48733,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.466667,
+        -0.476096,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.388959,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.533333,
+        -0.193061,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.566667,
+        -0.128238,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.6,
+        0.020444,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.633333,
+        0.042085,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.666667,
+        0.080523,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.7,
+        0.07961,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.733333,
+        0.06504,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.766667,
+        0.055053,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        0.023999,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.833333,
+        0.015534,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        1e-06,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        1e-06,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        1e-06,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.966667,
+        -0.0,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        -1e-06,
+        0,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "PositionCurve": {
+    "path": "/BodycamAnimationFramework/Blueprints/Animation/AdditiveMotions/Glock17/Aim_Glock17_OutLoc.Aim_Glock17_OutLoc",
+    "curves": {
+     "FloatCurves": [
+      [
+       [
+        0.0,
+        5.458944,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        4.980446,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        4.178513,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        3.238841,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.133333,
+        2.326715,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.166667,
+        1.525995,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.2,
+        0.848896,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.233333,
+        0.296699,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.266667,
+        -0.130188,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.3,
+        -0.431644,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.333333,
+        -0.608215,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.366667,
+        -0.663822,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.4,
+        -0.598198,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.433333,
+        -0.448963,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.466667,
+        -0.298794,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.184963,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.533333,
+        -0.063637,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.566667,
+        -0.036936,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.6,
+        0.030052,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.633333,
+        0.046555,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.666667,
+        0.085442,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.7,
+        0.089045,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.733333,
+        0.088524,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.766667,
+        0.082481,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        0.059494,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.833333,
+        0.05007,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        0.022793,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        0.015873,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        0.0023,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.966667,
+        0.001478,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        0.000322,
+        0,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        8.10625,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        7.56317,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        6.620055,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        5.447975,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.133333,
+        4.201194,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.166667,
+        2.970699,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.2,
+        1.809707,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.233333,
+        0.776642,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.266667,
+        -0.038712,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.3,
+        -0.539089,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.333333,
+        -0.779888,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.366667,
+        -0.876182,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.4,
+        -0.872032,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.433333,
+        -0.801781,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.466667,
+        -0.692249,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.564022,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.533333,
+        -0.368637,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.566667,
+        -0.3087,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.6,
+        -0.139381,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.633333,
+        -0.092697,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.666667,
+        0.013351,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.7,
+        0.027916,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.733333,
+        0.055279,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.766667,
+        0.056614,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        0.053963,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.833333,
+        0.049812,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        0.034706,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        0.028732,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        0.011745,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.966667,
+        0.007584,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        0.001709,
+        0,
+        0.0,
+        0.0
+       ]
+      ],
+      [
+       [
+        0.0,
+        3.663162,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.033333,
+        3.417846,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.066667,
+        2.989792,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        2.453125,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.133333,
+        1.875275,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.166667,
+        1.299408,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.2,
+        0.74968,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.233333,
+        0.245148,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.266667,
+        -0.200073,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.3,
+        -0.570145,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.333333,
+        -0.84491,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.366667,
+        -0.997986,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.4,
+        -0.991516,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.433333,
+        -0.848602,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.466667,
+        -0.678146,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.5,
+        -0.539612,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.533333,
+        -0.376617,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.566667,
+        -0.335495,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.6,
+        -0.226257,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.633333,
+        -0.198227,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.666667,
+        -0.124481,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.7,
+        -0.10614,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.733333,
+        -0.059113,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.766667,
+        -0.048187,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.8,
+        -0.021378,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.833333,
+        -0.015961,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.866667,
+        -0.003983,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.9,
+        -0.00238,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.933333,
+        6.1e-05,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        0.966667,
+        6.1e-05,
+        0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        3.1e-05,
+        0,
+        0.0,
+        0.0
+       ]
+      ]
+     ]
+    }
+   },
+   "PositionScaleMin": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 1.0
+   },
+   "RotationScaleMin": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 1.0
+   },
+   "BlendTime": 0.1,
+   "NativeClass": "/BodycamAnimationFramework/Blueprints/Animation/Data/DA_BodycamAdditiveMotion.DA_BodycamAdditiveMotion_C"
+  },
   "CurveWalk": {
    "path": "/BodycamAnimationFramework/Animations/General/Pistol/A_FP_Glock17_Walk_Loop.A_FP_Glock17_Walk_Loop",
    "length": 2.2666667,

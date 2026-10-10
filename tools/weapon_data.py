@@ -64,10 +64,14 @@ def expand(v, depth=0):
             obj = export(doc, (n.get('Notify') or '').split('.')[-1])
             notifies.append({'name': n.get('NotifyName'), 'time': round((n.get('LinkValue') or 0) + (n.get('TriggerTimeOffset') or 0), 4),
                              'duration': n.get('duration'), 'props': clean(obj.get('properties', {})) if obj else {}})
-        return {'path': v, 'length': p.get('SequenceLength'), 'rate': p.get('RateScale', 1.0), 'notifies': notifies}
+        out = {'path': v, 'length': p.get('SequenceLength'), 'rate': p.get('RateScale', 1.0), 'notifies': notifies}
+        if cls.endswith('AnimMontage'):  # FAlphaBlend default BlendTime 0.25 when cooked-out
+            out['blend_in'] = (p.get('BlendIn') or {}).get('BlendTime', 0.25)
+            out['blend_out'] = (p.get('BlendOut') or {}).get('BlendTime', 0.25)
+        return out
     if 'Curve' in cls:
         return {'path': v, 'curves': curve_keys(p)}
-    if cls.endswith('RecoilData'):
+    if cls.endswith('RecoilData') or cls.endswith('AdditiveMotion_C'):
         return {'path': v, **expand(clean(p), depth + 1)}
     return v
 
