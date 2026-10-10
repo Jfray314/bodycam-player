@@ -1,5 +1,7 @@
 mod audio;
 mod curve;
+mod dev;
+mod testmap;
 mod hud;
 mod player;
 mod postfx;
@@ -10,51 +12,6 @@ mod weapon;
 
 use bevy::prelude::*;
 
-/// Dev hook for headless checks: BODYCAM_AUTO="R@6:0.5,J@12" holds keys at those times (seconds), default 0.1 s.
-/// "LMB"/"RMB" hold mouse buttons, "Ctrl" crouches.
-fn autotest(
-    time: Res<Time>,
-    mut keys: ResMut<ButtonInput<KeyCode>>,
-    mut mouse: ResMut<ButtonInput<MouseButton>>,
-    mut plan: Local<Option<Vec<(Result<KeyCode, MouseButton>, f32, f32)>>>,
-) {
-    let plan = plan.get_or_insert_with(|| {
-        std::env::var("BODYCAM_AUTO").unwrap_or_default().split(',').filter_map(|s| {
-            let (k, t) = s.split_once('@')?;
-            let (t, hold) = t.split_once(':').unwrap_or((t, "0.1"));
-            let key = match k {
-                "LMB" => Err(MouseButton::Left),
-                "RMB" => Err(MouseButton::Right),
-                "Ctrl" => Ok(KeyCode::ControlLeft),
-                "1" => Ok(KeyCode::Digit1),
-                "2" => Ok(KeyCode::Digit2),
-                "3" => Ok(KeyCode::Digit3),
-                "4" => Ok(KeyCode::Digit4),
-                "5" => Ok(KeyCode::Digit5),
-                "R" => Ok(KeyCode::KeyR),
-                "J" => Ok(KeyCode::KeyJ),
-                "W" => Ok(KeyCode::KeyW),
-                "Q" => Ok(KeyCode::KeyQ),
-                "E" => Ok(KeyCode::KeyE),
-                "Shift" => Ok(KeyCode::ShiftLeft),
-                _ => return None,
-            };
-            Some((key, t.parse().ok()?, hold.parse().ok()?))
-        }).collect()
-    });
-    let t = time.elapsed_secs();
-    for (k, at, hold) in plan.iter() {
-        let (on, off) = (t >= *at && t < at + hold, t >= at + hold);
-        match *k {
-            Ok(k) if on => keys.press(k),
-            Ok(k) if off && keys.pressed(k) => keys.release(k),
-            Err(b) if on => mouse.press(b),
-            Err(b) if off && mouse.pressed(b) => mouse.release(b),
-            _ => {}
-        }
-    }
-}
-
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(AssetPlugin {
@@ -63,16 +20,18 @@ fn main() {
             file_path: std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into()),
             ..default()
         }))
-        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, recoil::RecoilPlugin))
+        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, recoil::RecoilPlugin, dev::DevPlugin))
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
         .add_systems(Startup, test_range)
-        .add_systems(PreUpdate, autotest.after(bevy::input::InputSystems))
         .run();
 }
 
 /// Indoor firing-range test room (walls, slatted skylight, crates, target stands) for judging the
 /// camera look against in-game screenshots. Not a port of any map.
 fn test_range(mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
+    if testmap::wanted() {
+        return testmap::spawn(&mut cmd, &mut meshes, &mut mats);
+    }
     let concrete = mats.add(StandardMaterial { base_color: Color::srgb(0.55, 0.53, 0.5), perceptual_roughness: 0.9, ..default() });
     let floor = mats.add(StandardMaterial { base_color: Color::srgb(0.6, 0.57, 0.52), perceptual_roughness: 0.85, ..default() });
     let crate_mat = mats.add(StandardMaterial { base_color: Color::srgb(0.35, 0.38, 0.28), perceptual_roughness: 0.7, ..default() });

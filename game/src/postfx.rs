@@ -1,4 +1,4 @@
-﻿//! Bodycam camera look. Bodycam_Player's BodycamBorders: an Engine Plane with FishEye_Inst (LENS_VEIW_05, a
+//! Bodycam camera look. Bodycam_Player's BodycamBorders: an Engine Plane with FishEye_Inst (LENS_VEIW_05, a
 //! photographed round lens housing, alpha = clear centre) on SpringArmBodycamBorders (arm 23 cm, lag speed 50,
 //! rotation lag 65), scaled 1.70 x 0.806 -> at 120 deg only its centre fills the view: black rounded corners
 //! that trail the camera slightly. Then the player CameraComponent blends M_PP_BodycamMaster (lens distortion driven by
@@ -16,7 +16,6 @@ use bevy::post_process::motion_blur::MotionBlur;
 use bevy::prelude::*;
 use bevy::render::extract_component::ExtractComponent;
 use bevy::render::render_resource::{Extent3d, ShaderType, TextureDimension, TextureFormat};
-use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::render::RenderApp;
 use bevy::shader::ShaderRef;
 
@@ -105,7 +104,7 @@ impl Plugin for PostFxPlugin {
         embedded_asset!(app, "postfx.wesl");
         app.add_plugins((FullscreenMaterialPlugin::<BodycamPostFx>::default(), AutoExposurePlugin))
             .add_systems(Startup, setup)
-            .add_systems(Update, (attach, toggles, motion_state, apply_fov, screenshot).chain())
+            .add_systems(Update, (attach, toggles, motion_state, apply_fov).chain())
             .add_systems(PostUpdate, borders_follow.after(bevy::transform::TransformSystems::Propagate));
     }
 }
@@ -240,19 +239,5 @@ fn apply_fov(st: Res<PostFxState>, mut q: Query<&mut Projection, With<BodycamCam
         if let Projection::Perspective(p) = &mut *proj {
             p.fov = 2.0 * ((st.base_fov_deg.to_radians() * 0.5).tan() / p.aspect_ratio).atan();
         }
-    }
-}
-
-/// `BODYCAM_SCREENSHOT=path` saves one frame at `BODYCAM_SCREENSHOT_AT` seconds (default 2) and exits.
-fn screenshot(mut cmd: Commands, time: Res<Time>, mut state: Local<u8>, mut exit: MessageWriter<AppExit>) {
-    let Ok(path) = std::env::var("BODYCAM_SCREENSHOT") else { return };
-    let at: f32 = std::env::var("BODYCAM_SCREENSHOT_AT").ok().and_then(|v| v.parse().ok()).unwrap_or(2.0);
-    let t = time.elapsed_secs();
-    if *state == 0 && t >= at {
-        *state = 1;
-        cmd.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
-    } else if *state == 1 && t >= at + 0.5 {
-        *state = 2;
-        exit.write(AppExit::Success);
     }
 }
