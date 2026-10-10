@@ -17,7 +17,7 @@ use serde_json::Value;
 pub struct SwayPlugin;
 impl Plugin for SwayPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Ads>().init_resource::<Sway>().init_resource::<FakeLook>().init_resource::<AimOffset>().add_systems(Update, (tick_ads, tick_sway, tick_motion).chain());
+        app.init_resource::<Ads>().init_resource::<Sway>().init_resource::<FakeLook>().init_resource::<AimOffset>().add_systems(Update, (tick_ads, tick_sway).chain());
     }
 }
 
@@ -236,6 +236,10 @@ struct Active {
     total: Vec3,
 }
 
+// Not scheduled: AC.ActiveAdditiveMotion stays identity through every aim in/out in the UE4SS recordings
+// (extracted/probe/rec_*.csv), so BAS AimIn/AimOut motions aren't played on aiming; holding the curve end
+// (M4 ~9 cm) shoved the gun off the sights. Kept for whatever does call PlayAdditiveMotion.
+#[allow(dead_code)]
 fn tick_motion(
     time: Res<Time>,
     p: Single<&Player>,
