@@ -1,4 +1,4 @@
-﻿//! First-person viewmodel: Bodycam_Player's `Arms` (SKM_HumanArmsLongSleeves_Morphers, AnimClass Viewmodel_C)
+//! First-person viewmodel: Bodycam_Player's `Arms` (SKM_HumanArmsLongSleeves_Morphers, AnimClass Viewmodel_C)
 //! with the equipped gun attached at `ik_hand_gun` (BP_EquippableItem.ItemAttachBone = VB ik_hand_gun, identity).
 //! Models/clips come from tools/build_models.py (assets-local/models). The arms hang off the body-driven view
 //! pose (`Player::view_base`) so the head's FP_Camera socket - where UE attaches the camera - sits on the camera,
@@ -6,7 +6,8 @@
 //! Animation: base loop (Idle_Loop01 / Walk_Loop / AimIdlePose) plus the BAS montages from `MontageStarted`
 //! and `Fired`, crossfaded; the gun plays the matching A_W_* clip.
 use crate::player::Player;
-use crate::weapon::{ActionKind, Fired, Inventory, MontageStarted};
+use crate::weapon::{ActionKind, Fired, HandShake, Inventory, MontageStarted, Regrip};
+use rand::Rng;
 use bevy::animation::AnimationTargetId;
 use bevy::gltf::Gltf;
 use bevy::prelude::*;
@@ -35,7 +36,9 @@ pub struct ViewmodelPlugin;
 impl Plugin for ViewmodelPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, load)
-            .add_systems(Update, (spawn_arms, hook_players, no_cull, attach_gun, play_events, base_loop).chain())
+            .init_resource::<StressAnim>()
+            .init_resource::<RegripState>()
+            .add_systems(Update, (spawn_arms, hook_players, no_cull, attach_gun, play_events, base_loop, stress_layers, regrips).chain())
             .add_systems(Last, debug_bones)
             .add_systems(
                 PostUpdate,
@@ -288,6 +291,106 @@ fn play_events(
                 anim.montage_until = now + if len > 0.0 { len } else { 0.25 };
                 anim.action_pitch = pitch;
             }
+        }
+    }
+}
+
+/// AC_BodycamAnimationComponent.StressedSubtleIdleAlpha / StressedStrongIdleAlpha (Stress Tick). Subtle starts at 2.0 (Bodycam_Player default).
+#[derive(Resource)]
+pub struct StressAnim {
+    pub subtle: f32,
+    pub strong: f32,
+}
+impl Default for StressAnim {
+    fn default() -> Self {
+        StressAnim { subtle: 2.0, strong: 0.0 }
+    }
+}
+
+/// AC "Stress Tick" + the two BAS stress idle clips (StressedIdleSubtle loop, StressedIdleStrong) layered additively on the
+/// arms at those alphas. The clips are full poses in UE; tools/stress_additive.py bakes them into deltas vs their first frame.
+// ponytail: A_FP_AK_Shake_Loop isn't in the exported glbs yet (tools/ue-export now exports it on the next full rebuild);
+// until then guns that use it fall back to A_FP_Glock17_Shake_Loop.
+fn stress_layers(
+    time: Res<Time>,
+    st: Res<crate::status::SurvivorStatus>,
+    p: Single<&Player>,
+    inv: Option<Single<&Inventory>>,
+    mut alpha: ResMut<StressAnim>,
+    roots: Query<&Anim, With<ArmsRoot>>,
+    mut players: Query<(&mut AnimationPlayer, &AnimLink)>,
+) {
+    let Some(inv) = inv else { return };
+    let mr = crate::status::map_range_clamped;
+    let speed_cm = Vec2::new(p.vel.x, p.vel.z).length() * 100.0;
+    let sub_target = if p.aiming { 0.0 } else { mr(speed_cm, 0.0, 100.0, 0.1, 1.0) };
+    alpha.subtle = crate::status::finterp_to(alpha.subtle, sub_target, time.delta_secs(), 10.0);
+    alpha.strong = if p.aiming { mr(st.stress, 0.5, 1.0, 0.0, 1.0) } else { mr(st.stress, 0.0, 1.0, 0.0, 4.0) };
+    let a = &inv.slots[inv.current].anims;
+    let clip = |k: &str| a[k]["path"].as_str().map(clip_of);
+    for (mut player, link) in &mut players {
+        let Ok(anim) = roots.get(link.0) else { continue };
+        for (name, w) in [(clip("StressedIdleSubtle"), alpha.subtle), (clip("StressedIdleStrong"), alpha.strong)] {
+            let Some(node) = name.as_ref().and_then(|n| anim.nodes.get(n).or_else(|| anim.nodes.get("A_FP_Glock17_Shake_Loop").filter(|_| n.ends_with("Shake_Loop")))) else { continue };
+            if !player.is_playing_animation(*node) {
+                player.start(*node).repeat();
+            }
+            if let Some(act) = player.animation_mut(*node) {
+                act.set_weight(w);
+            }
+        }
+    }
+}
+
+/// Pending end-fire / aim-end regrip (RetriggerableDelay) and the idle regrip loop timer.
+#[derive(Resource, Default)]
+struct RegripState {
+    pending: Option<f32>,
+    idle_in: f32,
+}
+
+/// Plays a random BAS ReGripMotions clip (additive) after the delay; AC idle loop re-arms every (len..4)+(5..8) s;
+/// HandShake plays A_FP_shakingHand_Montage when its clip exists in the glbs.
+fn regrips(
+    time: Res<Time>,
+    mut rg: ResMut<RegripState>,
+    mut req: MessageReader<Regrip>,
+    mut shake: MessageReader<HandShake>,
+    inv: Option<Single<&Inventory>>,
+    mut roots: Query<&mut Anim, With<ArmsRoot>>,
+    mut players: Query<(&mut AnimationPlayer, &mut AnimationTransitions, &AnimLink)>,
+) {
+    let Some(inv) = inv else { return };
+    let dt = time.delta_secs();
+    for r in req.read() {
+        rg.pending = Some(r.delay);
+    }
+    rg.idle_in -= dt;
+    if rg.idle_in <= 0.0 {
+        let mut rng = rand::rng();
+        rg.idle_in = rng.random_range(1.0..4.0) + rng.random_range(5.0..8.0);
+        if !inv.busy() {
+            rg.pending.get_or_insert(0.0);
+        }
+    }
+    let shaking = shake.read().count() > 0;
+    let mut clip = None;
+    if let Some(t) = &mut rg.pending {
+        *t -= dt;
+        if *t <= 0.0 {
+            rg.pending = None;
+            let list = inv.slots[inv.current].anims["ReGripMotions"].as_array();
+            clip = list.filter(|l| !l.is_empty()).and_then(|l| l[rand::rng().random_range(0..l.len())]["path"].as_str().map(clip_of));
+        }
+    }
+    let now = time.elapsed_secs();
+    for (mut player, mut tr, link) in &mut players {
+        let Ok(mut anim) = roots.get_mut(link.0) else { continue };
+        if let Some(c) = &clip {
+            play(&mut anim, &mut player, &mut tr, c, false);
+        }
+        if shaking && play(&mut anim, &mut player, &mut tr, "A_FP_shakingHand", false) {
+            anim.montage_until = now + 2.0; // ponytail: montage length unknown until the clip is exported
         }
     }
 }

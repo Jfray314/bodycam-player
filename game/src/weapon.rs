@@ -162,7 +162,20 @@ pub struct Fired {
     pub row: String,
     pub controller: ControllerRecoil,
     pub aiming: bool,
+    /// FireRate attribute (seconds between shots); drives the stress gain.
+    pub fire_rate: f32,
 }
+
+/// AC_BodycamAnimationComponent.PlayEndFireRegripMotion / ForceReGripMotion(delay): play a random ReGripMotions
+/// montage after a (retriggerable) delay.
+#[derive(Message, Clone, Debug)]
+pub struct Regrip {
+    pub delay: f32,
+}
+
+/// AC.PlayHandFatigue overflow (HandFatigue > 10): A_FP_shakingHand_Montage.
+#[derive(Message, Clone, Debug)]
+pub struct HandShake;
 
 /// Trigger pulled on an empty weapon (audio plays FireDry).
 #[derive(Message, Clone, Debug)]
@@ -186,6 +199,11 @@ pub struct Inventory {
     pub action: Option<Action>,
     /// Seconds R has been held (tap = reload, hold = mag check).
     r_held: f32,
+    /// GA_Fire_Base FireStartTime of the current trigger pull and LastFireTime (previous pull's start), seconds.
+    fire_start: Option<f32>,
+    last_fire_start: f32,
+    /// AC_BodycamAnimationComponent.HandFatigue.
+    hand_fatigue: f32,
 }
 
 impl Inventory {
@@ -199,14 +217,17 @@ impl Inventory {
     }
 }
 
+/// CurveFloat_RegripProbability (extracted/json/.../Fire/CurveFloat_RegripProbability.json), keys as [t, v, cubic, arrive, leave].
+const REGRIP_CURVE: [crate::curve::Key; 2] = [[0.2, 0.1, 2.0, 0.035_373_74, 0.035_373_74], [1.2, 1.0, 2.0, 0.000_488_48, 0.000_488_48]];
+
 #[derive(Component)]
 pub struct Health(pub f32);
 
 #[derive(Component)]
-struct Fading(f32);
+pub(crate) struct Fading(pub f32);
 
 #[derive(Resource)]
-struct TracerFx(Handle<Mesh>, Handle<StandardMaterial>);
+pub(crate) struct TracerFx(pub Handle<Mesh>, pub Handle<StandardMaterial>);
 
 fn setup_fx(mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
     let mat = StandardMaterial { base_color: Color::srgb(1.0, 0.9, 0.5), emissive: LinearRgba::rgb(8.0, 6.0, 2.0), unlit: true, ..default() };
@@ -219,6 +240,8 @@ impl Plugin for WeaponPlugin {
         app.add_message::<MontageStarted>()
             .add_message::<Fired>()
             .add_message::<DryFire>()
+            .add_message::<Regrip>()
+            .add_message::<HandShake>()
             .add_systems(Startup, setup_fx)
             .add_systems(PostStartup, give_loadout)
             .add_systems(Update, ((actions, swap, aim, fire, fade).chain(), log_montages));
@@ -252,7 +275,7 @@ fn give_loadout(mut cmd: Commands, player: Single<Entity, With<Player>>, mut out
     let mut slots = load_weapons();
     // Default loadout: primary M4A1 + sidearm Glock17, then every other gun for testing.
     slots.sort_by_key(|w| (w.name != "M4A1", w.name != "Glock17", w.name.clone()));
-    let mut inv = Inventory { slots, current: 0, cooldown: 0.0, action: None, r_held: 0.0 };
+    let mut inv = Inventory { slots, current: 0, cooldown: 0.0, action: None, r_held: 0.0, fire_start: None, last_fire_start: 0.0, hand_fatigue: 0.0 };
     let first = inv.slots[0].one("FirstEquip");
     inv.slots[0].equipped_once = true;
     inv.start(ActionKind::Draw, first, 0, &mut out);
@@ -260,7 +283,7 @@ fn give_loadout(mut cmd: Commands, player: Single<Entity, With<Player>>, mut out
 }
 
 /// Advances the current action; handles R tap/hold and J.
-fn actions(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut inv: Single<&mut Inventory>, mut out: MessageWriter<MontageStarted>) {
+fn actions(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, status: Res<crate::status::SurvivorStatus>, mut inv: Single<&mut Inventory>, mut out: MessageWriter<MontageStarted>) {
     let dt = time.delta_secs();
     if let Some(a) = &mut inv.action {
         a.t += dt;
@@ -301,8 +324,12 @@ fn actions(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut inv: Single<&mu
         inv.r_held = 0.0;
         let w = &inv.slots[cur];
         if tapped && !inv.busy() && w.ammo < w.cap() && w.mags > 0 {
-            let m = if w.ammo == 0 { w.pick("ReloadEmptyCalm") } else { w.pick("ReloadTacCalm") };
-            let m = m.or_else(|| w.pick("ReloadEmptyCalm"));
+            // GA_Reload_Base.DetermineStressedStatus: bIsStressed = RandomBoolWithWeight(Stress); GetReloadMontage picks the
+            // Stressed or Calm array. ponytail: Tac-reload falls back to the Empty array when a gun has none.
+            let stressed = rand::rng().random::<f32>() < status.stress;
+            let (empty, tac) = if stressed { ("ReloadEmptyStressed", "ReloadTacStressed") } else { ("ReloadEmptyCalm", "ReloadTacCalm") };
+            let m = if w.ammo == 0 { w.pick(empty) } else { w.pick(tac) };
+            let m = m.or_else(|| w.pick(empty)).or_else(|| w.pick("ReloadEmptyCalm"));
             inv.start(ActionKind::Reload, m, cur, &mut out);
         }
     }
@@ -338,8 +365,12 @@ fn swap(keys: Res<ButtonInput<KeyCode>>, mut inv: Single<&mut Inventory>, mut wh
 }
 
 /// Aiming doesn't zoom: the bodycam FOV stays 120 (measured live); the gun comes up to the camera instead.
-fn aim(mouse: Res<ButtonInput<MouseButton>>, mut p: Single<&mut Player>) {
+fn aim(mouse: Res<ButtonInput<MouseButton>>, mut p: Single<&mut Player>, mut regrip: MessageWriter<Regrip>) {
     p.aiming = mouse.pressed(MouseButton::Right);
+    // GA_Character_Aim end: AC.ForceReGripMotion(0.2).
+    if mouse.just_released(MouseButton::Right) {
+        regrip.write(Regrip { delay: 0.2 });
+    }
 }
 
 fn fire(
@@ -353,9 +384,32 @@ fn fire(
     fx: Res<TracerFx>,
     mut fired: MessageWriter<Fired>,
     mut dry: MessageWriter<DryFire>,
+    mut regrip: MessageWriter<Regrip>,
+    mut shake: MessageWriter<HandShake>,
 ) {
     let (inv, p) = &mut *q;
     inv.cooldown -= time.delta_secs();
+    let now = time.elapsed_secs();
+    // GA_Fire_Base ability end (trigger released): TryPlayRegripAnimation, then LastFireTime = FireStartTime.
+    if let Some(start) = inv.fire_start
+        && !mouse.pressed(MouseButton::Left)
+    {
+        let w = &inv.slots[inv.current];
+        let instability = w.stats.instability.unwrap_or(0.0);
+        let fr = w.stats.fire_rate.unwrap_or(0.1);
+        let weight = if !w.full_auto {
+            // SemiAuto: gap between this pull's start and the previous one's, mapped (FireRate+0.1 .. 2*FireRate -> 0.02..1).
+            crate::status::map_range_clamped(start - inv.last_fire_start, fr + 0.1, fr * 2.0, 0.02, 1.0) * instability
+        } else {
+            // Auto: RegripProbabilityCurve(held time 0.1..MaxFireTimeForRegrip(0.8) -> 0..1) * Instability.
+            crate::curve::eval(&REGRIP_CURVE, crate::status::map_range_clamped(now - start, 0.1, 0.8, 0.0, 1.0)) * instability
+        };
+        if rand::rng().random::<f32>() < weight {
+            regrip.write(Regrip { delay: rand::rng().random_range(0.1..0.5) });
+        }
+        inv.last_fire_start = start;
+        inv.fire_start = None;
+    }
     let w = &inv.slots[inv.current];
     let trigger = if w.full_auto { mouse.pressed(MouseButton::Left) } else { mouse.just_pressed(MouseButton::Left) };
     if trigger && w.ammo == 0 && mouse.just_pressed(MouseButton::Left) && inv.cooldown <= 0.0 && !inv.busy() && !p.sprinting {
@@ -367,6 +421,14 @@ fn fire(
     let s = w.stats.clone();
     let cur = inv.current;
     inv.slots[cur].ammo -= 1;
+    inv.fire_start.get_or_insert(now);
+    // AC.PlayHandFatigue native caller not found in the Blueprints; per-shot amount is a guess.
+    // ponytail: 0.5 per shot (> 10 -> shaking-hands montage after ~20 shots), real value lives in C++.
+    inv.hand_fatigue += 0.5;
+    if inv.hand_fatigue > 10.0 {
+        inv.hand_fatigue = 0.0;
+        shake.write(HandShake);
+    }
     inv.cooldown = s.fire_rate.unwrap_or(0.1);
 
     let (cam_e, gt) = *cam;
@@ -405,7 +467,7 @@ fn fire(
         Fading(0.05),
     ));
     let w = &inv.slots[cur];
-    fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming });
+    fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming, fire_rate: s.fire_rate.unwrap_or(0.1) });
 }
 
 fn log_montages(mut ev: MessageReader<MontageStarted>) {
