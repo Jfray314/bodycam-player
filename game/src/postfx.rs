@@ -160,6 +160,9 @@ fn attach(
         // UE Plane is 100x100 uu; RelativeScale3D 1.699687 x 0.805974 (BordersBaseScale) -> metres.
         let mat = StandardMaterial {
             base_color_texture: Some(assets.load("textures/LENS_VEIW_05.png")),
+            // Texture is near-black (rgb ~1,2,3 /255) but auto exposure lifts the dim map ~5 EV, which blew its
+            // faint blue tint up to bright blue corners. Black keeps only the shape (alpha); CA adds the rim colour.
+            base_color: Color::BLACK,
             alpha_mode: AlphaMode::Blend,
             unlit: true,
             ..default()
