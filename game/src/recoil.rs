@@ -202,11 +202,11 @@ impl Recoil {
 
         // UE (X fwd, Y right, Z up) cm -> Bevy (-Z fwd, X right, Y up) m. Negative pitch = muzzle up, kick < 0 = back.
         let kick = self.loc.x + self.push + self.fire_sway.y; // depth sway drifts forward (measured)
-        let right = self.loc.y + self.noise.x;
+        let right = self.loc.y + self.noise.x; // PRAS OutLoc.Y; the camera-space gun moves -0.96x of it (probe sockets, rec_1791602920), so Bevy x = -right below
         let up = self.loc.z + self.noise.y + self.z + self.fire_sway.x;
         self.out_rot = Vec3::new(self.rot.y, self.rot.z, self.rot.x);
         self.out_loc = Vec3::new(kick, right, up);
-        let t = Vec3::new(right, up, -kick) * 0.01;
+        let t = Vec3::new(-right, up, -kick) * 0.01;
         let r = |deg: f32| deg.to_radians();
         let curve_rot = Quat::from_euler(EulerRot::YXZ, r(-self.rot.z), r(-self.rot.y), r(-self.rot.x));
         let roll_sway = self.sway.y * f(sw, "RollSwayMultiplier");
@@ -272,7 +272,9 @@ mod tests {
     fn sim_burst(gun: &str, aiming: bool, b: &Value, seeds: u64) -> (Vec<Vec<f32>>, [f32; 6]) {
         let w: Value = serde_json::from_str(&std::fs::read_to_string(format!("../assets/weapons/{gun}.json")).unwrap()).unwrap();
         let d = &w["anim_set"]["RecoilData"];
-        let (interval, full_auto) = if gun == "M4A1" { (0.09, true) } else { (0.1, false) };
+        let stats: Value = serde_json::from_str(include_str!("../../assets/weapon_stats.json")).unwrap();
+        let interval = stats[gun]["FireRate"].as_f64().unwrap_or(0.1) as f32;
+        let full_auto = stats[gun]["fire_modes"].as_array().is_some_and(|m| m.iter().any(|x| x == "FullAuto"));
         let dt = 0.0125f32;
         let pre = 2usize;
         let len = b["len"].as_u64().unwrap() as usize;

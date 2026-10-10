@@ -13,7 +13,8 @@ import numpy as np
 
 P = 'RecoilAnimationComponent.'
 CH = ['OutRot.Pitch', 'OutRot.Yaw', 'OutRot.Roll', 'OutLoc.X', 'OutLoc.Y', 'OutLoc.Z']
-GUN = {(2.3, 0.3): 'M4A1', (3.0, 1.0): 'Glock17', (2.3, 1.0): 'Rifle?'}  # (Ads Speed, Ads.AdditiveBlendAlpha); 'Rifle?' = unidentified picked-up rifle
+GUN = {(2.3, 0.3): 'M4A1', (3.0, 1.0): 'Glock17', (2.3, 1.0): 'AK47'}  # (Ads Speed, Ads.AdditiveBlendAlpha); the picked-up rifle fires full auto every 0.11 s = AK47 (FAL, Crossbow are semi)
+FILE_GUN = {'rec_1791602986.csv': 'BC5'}  # same (Ads Speed, alpha) as the Glock17; known from the session notes (MP5 hip burst)
 DT, N, PRE = 0.0125, 400, 2  # grid step, samples after onset (1.5 s), samples kept before onset
 
 
@@ -65,7 +66,7 @@ def main():
         for b, s0 in enumerate(starts):
             s1 = starts[b + 1] if b + 1 < len(starts) else len(on)
             i = on[s0]
-            gun = GUN.get((round(a[i, 4], 1), round(a[i, 5], 1)))
+            gun = FILE_GUN.get(os.path.basename(f)) or GUN.get((round(a[i, 4], 1), round(a[i, 5], 1)))
             t0 = a[i, 0]
             end = min(a[on[s1 - 1], 0] + 1.2, a[on[s1], 0] - DT if s1 < len(on) else 1e9, a[-1, 0]) - t0
             if gun is None or i < 8 or end < 0.4 or (s0 and t0 - a[on[s0 - 1], 0] < (2.5 if s1 - s0 >= 3 else 0.45)):  # need a settled start (slow components decay ~1.5/s)
@@ -78,7 +79,7 @@ def main():
             rec['quiet'] = bool(abs(rec['ctl_pitch'][:PRE]).max() < 0.05 and abs(rec['ctl_yaw'][:PRE]).max() < 0.05)
             bursts.setdefault(f"{gun}/{'aim' if a[i, 3] > 0.5 else 'hip'}/{s1 - s0}", []).append(rec)
         for n, i in enumerate(on):
-            gun = GUN.get((round(a[i, 4], 1), round(a[i, 5], 1)))
+            gun = FILE_GUN.get(os.path.basename(f)) or GUN.get((round(a[i, 4], 1), round(a[i, 5], 1)))
             if gun is None or i < 8 or i + N + 2 >= len(a):
                 continue
             gap = a[i, 0] - a[on[n - 1], 0] if n else 9
