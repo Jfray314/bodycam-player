@@ -9,7 +9,9 @@ Needs numpy. Findings (what the recordings do and do not contain):
 - LookDeltaInput = 0.4777 * (control rotation rate deg/s) / 60, one frame late (ABP runs before the controller update).
   AC_BodycamCamera.Yaw(DeltaTime) = 0.00796 * yaw rate deg/s with no lag.
 - Camera roll (cam_roll) = FInterp(~1.8) of strafe(+-5) + 2.6 * look-rate term, lean = cascade FInterp 12 -> 8 (-> 2 for roll).
-- Final camera does not show ADS blend or sway (the camera is not hung on the arms in ADS) -> ADS alpha timing isn't observable.
+- Final camera does not show ADS blend or sway (the camera is not hung on the arms in ADS). Section 6 therefore uses the
+  socket.* columns (ik_hand_gun in the FP_Camera socket frame = the on-screen gun) to fit spring dynamics, gains/signs, the
+  strafe move spring and the ADS transition (-> out['gun']).
 """
 import csv, json, os, sys
 import numpy as np
@@ -194,10 +196,132 @@ r = load('rec_1791598198'); v3 = np.sqrt(r.g('vel_x') ** 2 + r.g('vel_y') ** 2 +
 out['stress']['series_60hz'] = resample(r, {'speed_m_s': v3, 'aiming': r.g(S + 'IsAiming'), 'stress': r.g('WW_SurvivorStatus_C.Stress'),
                                             'subtle': r.g(AC + 'StressedSubtleIdleAlpha'), 'strong': r.g(AC + 'StressedStrongIdleAlpha')}, 0.5, float(r.t[-1]) - 0.1)
 
+# 6. camera-space gun pose (socket.ik_hand_gun in the FP_Camera socket frame, UE cm / deg): spring dynamics, gains, ADS ease.
+# Needs the socket.* columns (recordings made after the F10 probe update); skipped when absent.
+def qmat(q):
+    x, y, z, w = q / np.linalg.norm(q)
+    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                     [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                     [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+def rotvec(R):
+    a = np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1)); v = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
+    return v / 2 if a < 1e-6 else v / (2 * np.sin(a)) * a
+def gun_cam(r):
+    sk = lambda n: (np.c_[[r.g(f'socket.{n}.{c}') for c in 'xyz']].T, np.c_[[r.g(f'socket.{n}.q{c}') for c in 'xyzw']].T)
+    (pg, qg), (pc, qc) = sk('ik_hand_gun'), sk('FP_Camera'); P = np.zeros((len(pg), 3)); M = np.zeros((len(pg), 3, 3))
+    for i in range(len(pg)):
+        Rc = qmat(qc[i]); P[i] = Rc.T @ (pg[i] - pc[i]); M[i] = Rc.T @ qmat(qg[i])
+    return P, M
+def gun_delta(r, nbase=40):
+    """gun origin delta (cm, camera frame X fwd Y right Z up) and rotation delta as UE (roll, pitch, yaw) degrees, vs the first nbase frames"""
+    P, M = gun_cam(r); Pb = np.median(P[:nbase], 0); Mb = M[nbase // 2]
+    rv = np.array([np.degrees(rotvec(m @ Mb.T)) for m in M])
+    return P - Pb, np.c_[-rv[:, 0], -rv[:, 1], rv[:, 2]], Pb   # math rotvec -> UE roll = -rx, pitch = -ry, yaw = rz
+def spring_s(u, dt, w, z, sub=0.004):
+    out = np.zeros(len(u)); x = v = 0.0
+    for k in range(len(u)):
+        m = max(1, int(np.ceil(dt[k] / sub))); h = dt[k] / m
+        for _ in range(m):
+            v += (w * w * (u[k] - x) - 2 * z * w * v) * h; x += v * h
+        out[k] = x
+    return out
+def poly_design(cols, p): return np.c_[tuple(cols + [np.ones(len(p))] + [p ** k for k in (1, 2, 3, 4)])]
+HAS_SOCKET = os.path.exists(os.path.join(PROBE, 'rec_1791602830.csv')) and 'socket.ik_hand_gun.x' in load('rec_1791602830').ix
+if HAS_SOCKET:
+    A = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', 'weapons', 'M4A1.json')))['anim_set']
+    hipP, hipR, hipM = A['HipLookPositionSway'], A['HipLookRotationSway'], A['MovePositionSway']
+    gun = {'frame': 'ik_hand_gun origin/orientation in the FP_Camera socket frame (X fwd, Y right, Z up, cm; rotation UE roll/pitch/yaw deg), relative to the first 40 frames of the recording'}
+    # 6a. hip look springs (M4A1, rec_1791602830: mouse flicks L/R then U/D, standing). Node inputs are the recorded InputValue (ClampMax 10).
+    r = load('rec_1791602830'); dP, dR, Pb = gun_delta(r)
+    u = {'yaw': np.clip(r.g(S + 'AnimGraphNode_SpringSway_9.InputValue'), -10, 10), 'pitch': np.clip(r.g(S + 'AnimGraphNode_SpringSway_7.InputValue'), -10, 10)}
+    pit = wrap(r.g('ctl_pitch')) / 90
+    # channel: (input, table, table axis, recorded). pos y <- yaw, pos z <- pitch, rot yaw (table z) <- yaw, rot pitch (table y) <- pitch
+    chans = {'pos_y': ('yaw', hipP, 'y', dP[:, 1]), 'pos_z': ('pitch', hipP, 'z', dP[:, 2]), 'rot_yaw': ('yaw', hipR, 'z', dR[:, 2]), 'rot_pitch': ('pitch', hipR, 'y', dR[:, 1])}
+    def fit_chan(inp, tab, ax, y, w, a):
+        z = a * tab['SpringDamping'][ax]; H = spring_s(u[inp], r.dt, w, z)
+        X = poly_design([H], pit); c = np.linalg.lstsq(X, y, rcond=None)[0]; return rms(X @ c - y), c[0] / tab['Scale'][ax]
+    best = None
+    for w in np.arange(7.5, 12.01, 0.5):
+        for a in np.arange(0.8, 1.61, 0.1):
+            e = [fit_chan(*c, w, a)[0] for c in chans.values()]; tot = float(np.sqrt(np.mean(np.square(e))))
+            if best is None or tot < best[0]: best = (tot, w, a)
+    _, W0, ZK = best
+    fits = {k: fit_chan(*c, W0, ZK) for k, c in chans.items()}
+    GP = float(np.mean([abs(fits['pos_y'][1]), abs(fits['pos_z'][1])])); GR = float(np.mean([abs(fits['rot_yaw'][1]), abs(fits['rot_pitch'][1])]))
+    sgn = {k: float(np.sign(fits[k][1])) for k in fits}
+    # free per-channel 2nd-order fits (omega, zeta, rms) to show the shared constants are not an artefact
+    def free(inp, tab, ax, y):
+        def cost(p):
+            w, z = p
+            if w < 1 or w > 40 or z < .1 or z > 3: return 1e9
+            X = poly_design([spring_s(u[inp], r.dt, w, z)], pit); return rms(X @ np.linalg.lstsq(X, y, rcond=None)[0] - y)
+        p, v = nelder(cost, [W0, ZK * tab['SpringDamping'][ax]], [2, .2], 60); return [round(float(p[0]), 2), round(float(p[1]), 2), round(float(v), 3)]
+    gun['look'] = {'model': 'x = spring(omega, zeta = zeta_per_damping * SpringDamping) of clamp(input,10) * Scale * gain, rotation about the gun origin; SpringStiffness / SpringSpeed / SmoothDamping did not change the response (free omega 9-10.5 on stiffness .7-1, speed 7-10)',
+                   'omega': round(float(W0), 2), 'zeta_per_damping': round(float(ZK), 2), 'pos_gain_cm_per_scale': round(GP, 4), 'rot_gain_deg_per_scale': round(GR, 4),
+                   'signs': {k: sgn[k] for k in sgn}, 'sign_note': 'sign of the gun delta per +1 of LookDeltaInput.X (yaw, + = turn right) / .Y (pitch, + = look up); rot_pitch is UE pitch (+ = nose up)',
+                   'per_channel_gain_per_scale': {k: round(float(v[1]), 4) for k, v in fits.items()}, 'per_channel_rms_fit': {k: round(float(v[0]), 3) for k, v in fits.items()},
+                   'channel_sd': {k: round(rms(c[3] - c[3].mean()), 3) for k, c in chans.items()},
+                   'free_fit_omega_zeta_rms': {k: free(*c) for k, c in chans.items()}, 'gun_origin_hip_cm': [round(float(x), 3) for x in Pb]}
+    # reference series for the Rust test: recorded input + recorded gun delta with the (const + pitch^1..4) baseline of the fixed-constant fit removed
+    pred = {}
+    for k, (inp, tab, ax, y) in chans.items():
+        pred[k] = sgn[k] * (GP if k.startswith('pos') else GR) * tab['Scale'][ax] * spring_s(u[inp], r.dt, W0, ZK * tab['SpringDamping'][ax])
+    ref = {}
+    for nm, y in (('pos_x', dP[:, 0]), ('pos_y', dP[:, 1]), ('pos_z', dP[:, 2]), ('rot_roll', dR[:, 0]), ('rot_pitch', dR[:, 1]), ('rot_yaw', dR[:, 2])):
+        X = poly_design([], pit); c = np.linalg.lstsq(X, y - pred.get(nm, 0 * y), rcond=None)[0]; ref[nm] = np.round(y - X @ c, 3).tolist()
+    gun['look']['series'] = {'t': np.round(r.t, 4).tolist(), 'ldi_x': np.round(r.g(S + 'AnimGraphNode_SpringSway_9.InputValue'), 3).tolist(), 'ldi_y': np.round(r.g(S + 'AnimGraphNode_SpringSway_7.InputValue'), 3).tolist(), 'gun_ref': ref}
+    gun['look']['step_response_pos_y_cm_10ms_x5'] = np.round(sgn['pos_y'] * GP * hipP['Scale']['y'] * spring_s(np.ones(150), np.full(150, 0.01), W0, ZK * hipP['SpringDamping']['y']), 4)[::5].tolist()
+    # 6b. strafe move spring (rec_1791602892: walking left/right; sprint and look windows masked)
+    r = load('rec_1791602892'); dP, dR, _ = gun_delta(r, 30)
+    u4 = r.g(S + 'AnimGraphNode_SpringSway_4.InputValue'); spd = np.hypot(r.g('vel_x'), r.g('vel_y'))
+    near = lambda b: np.convolve(b.astype(float), np.ones(90), 'same') > 0
+    mask = ~near(spd > 200) & ~near(np.abs(r.g(S + 'AnimGraphNode_SpringSway_9.InputValue')) > .05)
+    def fo(x, dt, s):
+        y = np.zeros(len(x)); c = 0.0
+        for k in range(len(x)): c = fi(c, x[k], dt[k], s); y[k] = c
+        return y
+    def mfit(s):
+        X = np.c_[fo(u4, r.dt, s), np.ones(len(u4))][mask]; c = np.linalg.lstsq(X, dP[:, 1][mask], rcond=None)[0]; return rms(X @ c - dP[:, 1][mask]), c[0]
+    sb = abs(float(nelder(lambda p: mfit(abs(p[0]))[0] if abs(p[0]) > .2 else 1e9, [2.5], [1.0], 80)[0][0]))
+    e2, g2 = mfit(hipM['SmoothDamping']['y']); GM = float(abs(g2) / hipM['Scale']['y'])
+    gun['move'] = {'model': 'pos_y = -gain * Scale * FInterp(DampingSpeed = table SmoothDamping)(strafe axis +-1, + = right); the spring / SpringSmoothingSpeed stage is transparent at this resolution',
+                   'free_rate': round(sb, 3), 'free_rms_cm': round(mfit(sb)[0], 3), 'table_rate': hipM['SmoothDamping']['y'], 'rms_cm_at_table_rate': round(float(e2), 3), 'gain_cm_per_scale': round(GM, 4),
+                   'sd_cm': round(rms(dP[:, 1][mask] - dP[:, 1][mask].mean()), 3), 'sign_per_strafe_right': float(np.sign(g2))}
+    idx = np.where(mask)[0]; wins = []
+    for seg in np.split(idx, np.where(np.diff(idx) > 3)[0] + 1):
+        if len(seg) > 60: wins.append({'t': np.round(r.t[seg] - r.t[seg[0]], 4).tolist(), 'strafe': np.round(u4[seg], 3).tolist(), 'pos_y_cm': np.round(dP[seg, 1], 3).tolist()})
+    gun['move']['windows'] = wins
+    # 6c. ADS transition: gun origin progress along the straight line hip -> ADS vs time since IsAiming flipped
+    ads = {'rec': {}}
+    shapes = {'sin': lambda x: 0.5 - 0.5 * np.cos(np.pi * x), 'linear': lambda x: x, 'smoothstep': lambda x: x * x * (3 - 2 * x)}
+    allf = {'in': [], 'out': []}
+    for nm in ('rec_1791602873', 'rec_1791602920'):
+        r = load(nm); ia = r.g(S + 'IsAiming'); P, _ = gun_cam(r); sw = np.where(np.diff(ia) != 0)[0] + 1
+        hip = np.median(P[:15], 0); adsp = np.median(np.vstack([P[a - 6:a] for a in sw if ia[a] == 0]), 0); ax = adsp - hip
+        for k, a in enumerate(sw):
+            b = sw[k + 1] if k + 1 < len(sw) else len(r.t); t = r.t[a:b] - r.t[a]; pr = ((P[a:b] - hip) @ ax) / (ax @ ax); m = t < 0.30
+            if m.sum() > 8: allf['in' if ia[a] else 'out'].append((t[m], pr[m]))
+        ads['rec'][nm] = {'gun_origin_ads_cm': [round(float(x), 3) for x in adsp], 'n_flips': int(len(sw)), 'ads_speed_pin': float(np.nanmedian(r.g('ABP_Procedural_Viewmodel_C.Ads Speed')))}
+    ads['fits'] = {}
+    for sh, f in shapes.items():
+        for lab in ('in', 'out'):
+            def cost(p, lab=lab, f=f):
+                if p[0] < .5 or p[0] > 12: return 1e9
+                return rms(np.concatenate([(f(np.clip((t - p[1]) * p[0], 0, 1)) if lab == 'in' else 1 - f(np.clip((t - p[1]) * p[0], 0, 1))) - pr for t, pr in allf[lab]]))
+            p, v = min((nelder(cost, [s0, 0.0], [.5, .03], 100) for s0 in (2.5, 3.5)), key=lambda z: z[1])
+            ads['fits'][f'{sh}_{lab}'] = {'speed': round(float(p[0]), 3), 't0': round(float(p[1]), 4), 'rms': round(float(v), 4)}
+    pin = ads['rec']['rec_1791602873']['ads_speed_pin']
+    ads['sin_speed_over_pin'] = round(float(np.mean([ads['fits'][f'sin_{l}']['speed'] for l in ('in', 'out')]) / pin), 3)
+    ads['note'] = 'alpha = sinusoidal(raw), raw moves linearly at AdsSpeed pin * sin_speed_over_pin: the gun origin reaches the ADS pose in ~0.35 s (the pin alone would give 0.43 s); BAS AimIn/AimOut additives are not played'
+    ads['series'] = {lab: [{'t': np.round(t, 4).tolist(), 'progress': np.round(pr, 4).tolist()} for t, pr in allf[lab]] for lab in allf}
+    gun['ads'] = ads
+    out['gun'] = gun
+
 os.makedirs(os.path.dirname(OUT) or '.', exist_ok=True)
 json.dump(out, open(OUT, 'w'), separators=(',', ':'))
 print(json.dumps({k: v for k, v in out.items() if k not in ('roll', 'lean', 'stress')}, indent=1)[:3000])
 print('roll', {k: v for k, v in out['roll'].items() if k != 'series_60hz'})
 print('lean', {k: v for k, v in out['lean'].items() if k != 'series_60hz'})
 print('stress', out['stress']['fits'])
+if 'gun' in out: print('gun look', {k: v for k, v in out['gun']['look'].items() if k != 'series'}, '\ngun move', {k: v for k, v in out['gun']['move'].items() if k != 'windows'}, '\ngun ads', {k: v for k, v in out['gun']['ads'].items() if k != 'series'})
 print('wrote', OUT, os.path.getsize(OUT), 'bytes')
