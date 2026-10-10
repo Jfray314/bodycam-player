@@ -137,6 +137,10 @@ pub struct Player {
     /// PRAS ControllerRecoil still to apply (deg; x = yaw right, y = pitch up) and its RecoilSmoothing.
     recoil_pending: Vec2,
     recoil_smoothing: f32,
+    /// Recoil applied to the view and not yet recovered (deg), ControllerRecoil Damping / Compensation.
+    recoil_offset: Vec2,
+    recoil_damping: f32,
+    recoil_comp: f32,
     /// Active Shake_Rifle_Standard instances: (age s, pitch/yaw/roll amplitude deg), and the smoothed output.
     shakes: Vec<(f32, Vec3)>,
     shake: Vec3,
@@ -173,10 +177,24 @@ fn grab_cursor(mouse: Res<ButtonInput<MouseButton>>, keys: Res<ButtonInput<KeyCo
 fn look(time: Res<Time>, motion: Res<AccumulatedMouseMotion>, cursor: Single<&CursorOptions>, mut q: Single<&mut Player>) {
     let p = &mut **q;
     let d = if cursor.grab_mode == CursorGrabMode::Locked { motion.delta } else { Vec2::ZERO };
-    // PRAS ControllerRecoil: the per-shot step reaches the view through RecoilSmoothing (interp speed).
-    // ponytail: ControllerRecoil.Damping (recovery) not applied; Bodycam leaves recoil for the player to pull down.
-    let step = p.recoil_pending * (p.recoil_smoothing * time.delta_secs()).min(1.0);
+    // PRAS ControllerRecoil: the per-shot step reaches the view through RecoilSmoothing (interp speed); the applied
+    // offset then returns to zero at Damping (rate/s) while player input against it (Compensation 0..1) is
+    // credited to the offset so the recovery doesn't pull the view past where the player already corrected.
+    // ponytail: Damping/Compensation semantics from the PRAS docs, not from code.
+    let dt = time.delta_secs();
+    let step = p.recoil_pending * (p.recoil_smoothing * dt).min(1.0);
     p.recoil_pending -= step;
+    p.recoil_offset += step;
+    let input = Vec2::new(d.x, -d.y) * SENS.to_degrees(); // same sign convention as the recoil step
+    for i in 0..2 {
+        if input[i] * p.recoil_offset[i] < 0.0 {
+            let c = (input[i].abs() * p.recoil_comp).min(p.recoil_offset[i].abs());
+            p.recoil_offset[i] -= c * p.recoil_offset[i].signum();
+        }
+    }
+    let ret = p.recoil_offset * (p.recoil_damping * dt).min(1.0);
+    p.recoil_offset -= ret;
+    let step = step - ret;
     p.yaw -= d.x * SENS + step.x.to_radians();
     p.pitch = (p.pitch - d.y * SENS + step.y.to_radians()).clamp(-89.9f32.to_radians(), 89.9f32.to_radians()); // ViewPitchMin/Max
 }
@@ -215,6 +233,7 @@ fn on_fire(mut ev: MessageReader<Fired>, mut q: Single<&mut Player>) {
         let c = &f.controller;
         q.recoil_pending += Vec2::new(rng.random_range(c.horizontal.0..=c.horizontal.1), rng.random_range(c.vertical.0..=c.vertical.1));
         q.recoil_smoothing = c.smoothing;
+        (q.recoil_damping, q.recoil_comp) = (c.damping, c.compensation);
         let r = |r: &Range2, rng: &mut rand::rngs::ThreadRng| rng.random_range(r.x.min(r.y)..=r.x.max(r.y));
         let amp = Vec3::new(r(&shake.pitch, &mut rng), r(&shake.yaw, &mut rng), r(&shake.roll, &mut rng));
         q.shakes.push((0.0, amp));
