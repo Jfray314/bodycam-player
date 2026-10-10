@@ -4,6 +4,8 @@
 //! Inputs follow IMC_KBM_CharacterOnFoot: R tap (<0.25 s, IA_Reload) reloads, R hold 0.25 s (IA_InspectAmmos)
 //! mag-checks, J inspects, 1-6 / wheel swap, LMB fire, RMB aim.
 use crate::player::{BodycamCamera, Player};
+use crate::viewmodel::GunRoot;
+use bevy::camera::primitives::MeshAabb;
 use bevy::input::mouse::MouseWheel;
 use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
 use bevy::prelude::*;
@@ -31,6 +33,9 @@ pub struct Stats {
     pub spread_aim_y: Option<f32>,
     #[serde(rename = "fire_modes")]
     pub fire_modes: Vec<String>,
+    /// GE_WeaponStat_* granted tags (Gameplay.Weapons.InfiniteMag).
+    #[serde(default, rename = "tags")]
+    pub tags: Vec<String>,
 }
 
 impl Stats {
@@ -48,6 +53,7 @@ impl Stats {
             spread_aim_x: self.spread_aim_x.or(d.spread_aim_x),
             spread_aim_y: self.spread_aim_y.or(d.spread_aim_y),
             fire_modes: if self.fire_modes.is_empty() { d.fire_modes.clone() } else { self.fire_modes },
+            tags: if self.tags.is_empty() { d.tags.clone() } else { self.tags },
         }
     }
 }
@@ -98,7 +104,8 @@ pub struct Weapon {
     pub name: String,
     pub stats: Stats,
     pub ammo: u32,
-    pub mags: u32,
+    /// Spare magazines (rounds in each), like MagazineManager.
+    pub mags: Vec<u32>,
     pub full_auto: bool,
     /// BAS_* animation set (baked JSON).
     pub anims: Value,
@@ -109,6 +116,26 @@ pub struct Weapon {
 impl Weapon {
     fn cap(&self) -> u32 {
         self.stats.ammo_capacity.unwrap_or(30.0) as u32
+    }
+    /// GA_Reload_Base.HasInfiniteMags (tag half; the lobby game-mode / game-rule halves are not modelled).
+    fn infinite_mags(&self) -> bool {
+        self.stats.tags.iter().any(|t| t == "Gameplay.Weapons.InfiniteMag")
+    }
+    fn can_reload(&self) -> bool {
+        self.ammo < self.cap() && (self.infinite_mags() || !self.mags.is_empty())
+    }
+    /// GA_Reload_Base at the refill point: the best (fullest) mag is chosen, a non-empty chamber/mag is returned
+    /// to the spares as its own mag (tactical reload), the best mag is consumed unless mags are infinite.
+    fn reload_done(&mut self) {
+        let best = self.mags.iter().copied().enumerate().max_by_key(|&(_, m)| m);
+        let Some((idx, amount)) = best else { return };
+        if self.ammo > 0 {
+            self.mags.push(self.ammo);
+        }
+        if !self.infinite_mags() {
+            self.mags.remove(idx);
+        }
+        self.ammo = amount;
     }
     fn one(&self, key: &str) -> Option<Montage> {
         Montage::from(self.anims.get(key)?)
@@ -134,6 +161,8 @@ pub struct Action {
     pub kind: ActionKind,
     pub montage: Montage,
     pub t: f32,
+    /// Reload only: the ammo refill happens at 0.7 x montage length (GA_Reload_Base WaitDelay), once.
+    refill_at: f32,
     /// Slot to draw after a holster.
     next_slot: usize,
 }
@@ -144,6 +173,9 @@ pub struct ControllerRecoil {
     pub horizontal: (f32, f32),
     pub vertical: (f32, f32),
     pub smoothing: f32,
+    /// Return-to-zero rate (1/s) and player-input credit (0..1).
+    pub damping: f32,
+    pub compensation: f32,
 }
 
 impl ControllerRecoil {
@@ -152,7 +184,7 @@ impl ControllerRecoil {
         let r = |k: &str| (c[k]["x"].as_f64().unwrap_or(0.0) as f32, c[k]["y"].as_f64().unwrap_or(0.0) as f32);
         let (lo, hi) = r("HorizontalRecoilStep");
         let (vlo, vhi) = r("VerticalRecoilStep");
-        ControllerRecoil { horizontal: (lo.min(hi), lo.max(hi)), vertical: (vlo.min(vhi), vlo.max(vhi)), smoothing: r("RecoilSmoothing").1.max(1.0) }
+        ControllerRecoil { horizontal: (lo.min(hi), lo.max(hi)), vertical: (vlo.min(vhi), vlo.max(vhi)), smoothing: r("RecoilSmoothing").1.max(1.0), damping: c["Damping"].as_f64().unwrap_or(0.0) as f32, compensation: c["Compensation"].as_f64().unwrap_or(0.0) as f32 }
     }
 }
 
@@ -213,7 +245,8 @@ impl Inventory {
     fn start(&mut self, kind: ActionKind, montage: Option<Montage>, next_slot: usize, out: &mut MessageWriter<MontageStarted>) {
         let Some(montage) = montage else { return };
         out.write(MontageStarted { row: self.slots[self.current].name.clone(), kind, montage: montage.clone() });
-        self.action = Some(Action { kind, montage, t: 0.0, next_slot });
+        let refill_at = if kind == ActionKind::Reload { montage.length * 0.7 } else { f32::MAX };
+        self.action = Some(Action { kind, montage, t: 0.0, refill_at, next_slot });
     }
 }
 
@@ -226,12 +259,31 @@ pub struct Health(pub f32);
 #[derive(Component)]
 pub(crate) struct Fading(pub f32);
 
+/// Simple moving effect (smoke puff, ejected shell, impact dust): velocity, gravity, growth rate per second.
+#[derive(Component)]
+struct Particle {
+    vel: Vec3,
+    gravity: f32,
+    grow: f32,
+}
+
+/// Placeholder meshes/materials for the fire effects (tracer, impact decal + dust, muzzle smoke, shell).
 #[derive(Resource)]
-pub(crate) struct TracerFx(pub Handle<Mesh>, pub Handle<StandardMaterial>);
+pub(crate) struct FireFx {
+    pub tracer: (Handle<Mesh>, Handle<StandardMaterial>),
+    decal: (Handle<Mesh>, Handle<StandardMaterial>),
+    puff: (Handle<Mesh>, Handle<StandardMaterial>),
+    shell: (Handle<Mesh>, Handle<StandardMaterial>),
+}
 
 fn setup_fx(mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
-    let mat = StandardMaterial { base_color: Color::srgb(1.0, 0.9, 0.5), emissive: LinearRgba::rgb(8.0, 6.0, 2.0), unlit: true, ..default() };
-    cmd.insert_resource(TracerFx(meshes.add(Cuboid::new(0.01, 0.01, 1.0)), mats.add(mat)));
+    let mut mat = |c: Color, e: LinearRgba, a: AlphaMode| mats.add(StandardMaterial { base_color: c, emissive: e, unlit: true, alpha_mode: a, cull_mode: None, ..default() });
+    cmd.insert_resource(FireFx {
+        tracer: (meshes.add(Cuboid::new(0.01, 0.01, 1.0)), mat(Color::srgb(1.0, 0.9, 0.5), LinearRgba::rgb(8.0, 6.0, 2.0), AlphaMode::Opaque)),
+        decal: (meshes.add(Circle::new(0.03)), mat(Color::srgba(0.04, 0.04, 0.04, 0.85), LinearRgba::BLACK, AlphaMode::Blend)),
+        puff: (meshes.add(Sphere::new(0.03)), mat(Color::srgba(0.7, 0.7, 0.7, 0.3), LinearRgba::BLACK, AlphaMode::Blend)),
+        shell: (meshes.add(Cuboid::new(0.005, 0.005, 0.02)), mat(Color::srgb(0.8, 0.6, 0.2), LinearRgba::BLACK, AlphaMode::Opaque)),
+    });
 }
 
 pub struct WeaponPlugin;
@@ -244,7 +296,7 @@ impl Plugin for WeaponPlugin {
             .add_message::<HandShake>()
             .add_systems(Startup, setup_fx)
             .add_systems(PostStartup, give_loadout)
-            .add_systems(Update, ((actions, swap, aim, fire, fade).chain(), log_montages));
+            .add_systems(Update, ((actions, swap, aim, fire, fade, particles).chain(), log_montages));
     }
 }
 
@@ -261,7 +313,7 @@ fn load_weapons() -> Vec<Weapon> {
         out.push(Weapon {
             name: v["row"].as_str().unwrap_or(key).into(),
             ammo: s.ammo_capacity.unwrap_or(30.0) as u32,
-            mags: s.mag_amount.unwrap_or(4.0) as u32,
+            mags: vec![s.ammo_capacity.unwrap_or(30.0) as u32; s.mag_amount.unwrap_or(4.0) as usize],
             full_auto: s.fire_modes.iter().any(|m| m == "FullAuto"),
             stats: s.clone(),
             anims: v["anim_set"].clone(),
@@ -285,19 +337,23 @@ fn give_loadout(mut cmd: Commands, player: Single<Entity, With<Player>>, mut out
 /// Advances the current action; handles R tap/hold and J.
 fn actions(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, status: Res<crate::status::SurvivorStatus>, mut inv: Single<&mut Inventory>, mut out: MessageWriter<MontageStarted>) {
     let dt = time.delta_secs();
+    let mut refill = false;
     if let Some(a) = &mut inv.action {
         a.t += dt;
+        if a.t >= a.refill_at {
+            a.refill_at = f32::MAX;
+            refill = true;
+        }
+    }
+    if refill {
+        let cur = inv.current;
+        inv.slots[cur].reload_done();
+    }
+    if let Some(a) = &inv.action {
         if a.t >= a.montage.length {
             let (kind, next) = (a.kind, a.next_slot);
             inv.action = None;
-            let cur = inv.current;
             match kind {
-                // GE_AddAmmo on completion. ponytail: no chambered-round bonus on tactical reloads.
-                ActionKind::Reload => {
-                    let w = &mut inv.slots[cur];
-                    w.ammo = w.cap();
-                    w.mags = w.mags.saturating_sub(1);
-                }
                 ActionKind::Holster => {
                     inv.current = next;
                     let w = &mut inv.slots[next];
@@ -323,7 +379,7 @@ fn actions(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, status: Res<crate::
         let tapped = inv.r_held < TAP;
         inv.r_held = 0.0;
         let w = &inv.slots[cur];
-        if tapped && !inv.busy() && w.ammo < w.cap() && w.mags > 0 {
+        if tapped && !inv.busy() && w.can_reload() {
             // GA_Reload_Base.DetermineStressedStatus: bIsStressed = RandomBoolWithWeight(Stress); GetReloadMontage picks the
             // Stressed or Calm array. ponytail: Tac-reload falls back to the Empty array when a gun has none.
             let stressed = rand::rng().random::<f32>() < status.stress;
@@ -373,19 +429,122 @@ fn aim(mouse: Res<ButtonInput<MouseButton>>, mut p: Single<&mut Player>, mut reg
     }
 }
 
+/// Elliptical-cone half angles in degrees -> UE FMath::VRandCone(Dir, HorizontalHalfAngle, VerticalHalfAngle)
+/// (RandomUnitVectorInEllipticalConeInDegrees(Dir, MaxYaw, MaxPitch)).
+pub fn random_in_elliptical_cone(dir: Vec3, yaw_deg: f32, pitch_deg: f32, rng: &mut impl Rng) -> Vec3 {
+    let (h, v) = (yaw_deg.to_radians(), pitch_deg.to_radians());
+    if h <= 0.0 && v <= 0.0 {
+        return dir;
+    }
+    let theta = std::f32::consts::TAU * rng.random::<f32>();
+    let mut phi = (2.0 * rng.random::<f32>() - 1.0).acos();
+    // Cone half angle as a function of theta: polar form of the ellipse (x/v)^2 + (y/h)^2 = 1; circular if one axis is 0.
+    let half = if h > 0.0 && v > 0.0 { (1.0 / ((theta.cos() / v).powi(2) + (theta.sin() / h).powi(2))).sqrt() } else { h.max(v) };
+    phi %= half;
+    let right = dir.cross(Vec3::Y).try_normalize().unwrap_or(Vec3::X);
+    (Quat::from_axis_angle(dir, theta) * Quat::from_axis_angle(right, phi) * dir).normalize()
+}
+
+/// GetBoneDamageMultiplier (GA_Fire_Base); 1.0 for anything that isn't a named bone.
+pub fn bone_multiplier(bone: &str) -> f32 {
+    match bone.to_ascii_lowercase().as_str() {
+        "head" | "neck" => 10.0,
+        "spine_01" => 2.5,
+        "spine_02" | "spine_03" => 4.0,
+        _ => 1.0,
+    }
+}
+
+/// Absorbance by EPhysicalSurface index (FXMaterialDataTable_GenericBullets rows).
+pub fn surface_absorbance(surface: u8) -> f32 {
+    match surface {
+        3 => 0.1,
+        6 | 15 | 36 | 51 => 0.6,
+        12 => 1.0,
+        13 => 0.3,
+        _ => 0.0,
+    }
+}
+
+/// Physical surface of a world mesh (what its PhysMat's SurfaceType would be); absent = `DEFAULT_ABSORBANCE`.
+#[derive(Component)]
+pub struct SurfaceMat(pub u8);
+
+/// GA_Fire_Base: BulletDamageMultiplier *= row.Absorbance (0 = stops). ponytail: the lobby map's meshes carry no PhysMat
+/// yet; unmarked geometry is treated as FXMaterialDataTable "Default" (concrete, 0) and stops the bullet.
+const DEFAULT_ABSORBANCE: f32 = 0.0;
+const FIRE_RANGE: f32 = 5000.0; // GA_Fire_Base.FireRange 500000 cm
+const MIN_BULLET_MULT: f32 = 0.25;
+
+/// The GA_Fire_Base hit loop: hits in trace order; each new actor records the current multiplier, then absorbs.
+/// Stops once the multiplier is <= 0.25. Returns (hit index, multiplier at the hit).
+pub fn penetrate<T: Eq + std::hash::Hash + Copy>(hits: &[(T, f32)]) -> Vec<(usize, f32)> {
+    let (mut mult, mut seen, mut out) = (1.0f32, std::collections::HashSet::new(), vec![]);
+    for (i, (actor, absorb)) in hits.iter().enumerate() {
+        if mult <= MIN_BULLET_MULT {
+            break;
+        }
+        if seen.insert(*actor) {
+            out.push((i, mult));
+            mult *= absorb;
+        }
+    }
+    out
+}
+
+/// WEP.GetBulletSpawnOrigin / GetInitialFireDirection: origin = the gun's muzzle, yaw = gun yaw,
+/// pitch = gun pitch when aiming, else camera pitch. ponytail: no FireLocation socket in the exported gun
+/// glb; the barrel axis is the gun-local axis most aligned with the camera, the muzzle the far end of the
+/// gun meshes' bounds (centred on the gun) along it.
+fn muzzle_basis(
+    gun: &Query<(Entity, &GlobalTransform), With<GunRoot>>,
+    kids: &Query<&Children>,
+    meshes: &Query<(&GlobalTransform, &Mesh3d)>,
+    assets: &Assets<Mesh>,
+    cam: &GlobalTransform,
+    aiming: bool,
+) -> (Vec3, Vec3) {
+    let cam_fwd = cam.forward().as_vec3();
+    let Ok((root, rgt)) = gun.single() else { return (cam.translation(), cam_fwd) };
+    let rot = rgt.rotation();
+    let axis = [Vec3::X, Vec3::NEG_X, Vec3::Y, Vec3::NEG_Y, Vec3::Z, Vec3::NEG_Z]
+        .into_iter()
+        .max_by(|a, b| (rot * *a).dot(cam_fwd).total_cmp(&(rot * *b).dot(cam_fwd)))
+        .unwrap();
+    let gun_fwd = rot * axis;
+    let (mut far, mut sum, mut n) = (f32::MIN, Vec3::ZERO, 0.0);
+    for e in kids.iter_descendants(root) {
+        let Ok((gt, m)) = meshes.get(e) else { continue };
+        let Some(aabb) = assets.get(&m.0).and_then(|m| m.get_aabb()) else { continue };
+        for i in 0..8u8 {
+            let sgn = Vec3::new(if i & 1 == 0 { -1.0 } else { 1.0 }, if i & 2 == 0 { -1.0 } else { 1.0 }, if i & 4 == 0 { -1.0 } else { 1.0 });
+            let w = gt.transform_point(Vec3::from(aabb.center) + Vec3::from(aabb.half_extents) * sgn);
+            far = far.max(w.dot(gun_fwd));
+            sum += w;
+            n += 1.0;
+        }
+    }
+    let centre = if n > 0.0 { sum / n } else { rgt.translation() };
+    let origin = centre + gun_fwd * (if n > 0.0 { far } else { centre.dot(gun_fwd) } - centre.dot(gun_fwd));
+    let yaw = (-gun_fwd.x).atan2(-gun_fwd.z);
+    let pitch = if aiming { gun_fwd.y.clamp(-1.0, 1.0).asin() } else { cam_fwd.y.clamp(-1.0, 1.0).asin() };
+    (origin, Vec3::new(-yaw.sin() * pitch.cos(), pitch.sin(), -yaw.cos() * pitch.cos()))
+}
+
 fn fire(
     mut cmd: Commands,
     time: Res<Time>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut q: Single<(&mut Inventory, &mut Player)>,
-    cam: Single<(Entity, &GlobalTransform), With<BodycamCamera>>,
+    cam: Single<&GlobalTransform, With<BodycamCamera>>,
     mut ray: MeshRayCast,
-    mut targets: Query<&mut Health>,
-    fx: Res<TracerFx>,
+    mut targets: Query<(Option<&Name>, Option<&SurfaceMat>, Option<&mut Health>, Has<crate::player::IgnoreTraces>)>,
+    fx: Res<FireFx>,
     mut fired: MessageWriter<Fired>,
     mut dry: MessageWriter<DryFire>,
     mut regrip: MessageWriter<Regrip>,
     mut shake: MessageWriter<HandShake>,
+    (gun, kids, gun_meshes, mesh_assets): (Query<(Entity, &GlobalTransform), With<GunRoot>>, Query<&Children>, Query<(&GlobalTransform, &Mesh3d)>, Res<Assets<Mesh>>),
 ) {
     let (inv, p) = &mut *q;
     inv.cooldown -= time.delta_secs();
@@ -431,43 +590,114 @@ fn fire(
     }
     inv.cooldown = s.fire_rate.unwrap_or(0.1);
 
-    let (cam_e, gt) = *cam;
+    let gt = *cam;
+    let (origin, aim_dir) = muzzle_basis(&gun, &kids, &gun_meshes, &mesh_assets, gt, p.aiming);
+    // SpreadX = max yaw, SpreadY = max pitch (GA_Fire_Base), full angles.
     let (sx, sy) = if p.aiming { (s.spread_aim_x, s.spread_aim_y) } else { (s.spread_hip_x, s.spread_hip_y) };
-    let (sx, sy) = (sx.unwrap_or(0.0).to_radians() * 0.5, sy.unwrap_or(0.0).to_radians() * 0.5);
+    let (sx, sy) = (sx.unwrap_or(0.0), sy.unwrap_or(0.0));
     let mut rng = rand::rng();
-    let origin = gt.translation();
     for _ in 0..s.pellet_count.unwrap_or(1.0) as u32 {
-        let jitter = Quat::from_euler(EulerRot::YXZ, rng.random_range(-sx..=sx), rng.random_range(-sy..=sy), 0.0);
-        let dir = gt.rotation() * jitter * Vec3::NEG_Z;
-        let filter = |e: Entity| e != cam_e;
-        let settings = MeshRayCastSettings::default().with_filter(&filter);
-        let hit = ray.cast_ray(Ray3d::new(origin, Dir3::new(dir).unwrap()), &settings).first().map(|(e, h)| (*e, h.point));
-        let end = hit.map(|(_, pt)| pt).unwrap_or(origin + dir * 200.0);
-        if let Some((e, _)) = hit
-            && let Ok(mut h) = targets.get_mut(e)
-        {
-            h.0 -= s.damage.unwrap_or(30.0);
-            if h.0 <= 0.0 {
-                cmd.entity(e).despawn();
+        let dir = random_in_elliptical_cone(aim_dir, sx, sy, &mut rng);
+        let hits: Vec<(Entity, Vec3, Vec3, f32)> = {
+            let filter = |e: Entity| targets.get(e).is_ok_and(|t| !t.3);
+            let settings = MeshRayCastSettings::default().with_filter(&filter).with_early_exit_test(&|_| false);
+            ray.cast_ray(Ray3d::new(origin, Dir3::new(dir).unwrap()), &settings)
+                .iter()
+                .filter(|(_, h)| h.distance <= FIRE_RANGE)
+                .map(|(e, h)| {
+                    let t = targets.get(*e).unwrap();
+                    // Damageable targets stop the bullet; marked surfaces use their table row.
+                    let absorb = match (&t.1, &t.2) {
+                        (Some(m), _) => surface_absorbance(m.0),
+                        (None, Some(_)) => 0.0,
+                        _ => DEFAULT_ABSORBANCE,
+                    };
+                    (*e, h.point, h.normal.normalize_or_zero(), absorb)
+                })
+                .collect()
+        };
+        let events = penetrate(&hits.iter().map(|h| (h.0, h.3)).collect::<Vec<_>>());
+        let mut end = origin + dir * 200.0;
+        for (i, mult) in &events {
+            let (e, pt, n, absorb) = hits[*i];
+            if let Ok((name, _, Some(mut hp), _)) = targets.get_mut(e) {
+                hp.0 -= s.damage.unwrap_or(30.0) * mult * name.map_or(1.0, |n| bone_multiplier(n.as_str()));
+                if hp.0 <= 0.0 {
+                    cmd.entity(e).despawn();
+                }
+            }
+            impact_fx(&mut cmd, &fx, pt, n);
+            if absorb * mult <= MIN_BULLET_MULT {
+                end = pt; // the trail stops where the bullet does
             }
         }
         let len = origin.distance(end);
         cmd.spawn((
-            Mesh3d(fx.0.clone()),
-            MeshMaterial3d(fx.1.clone()),
+            Mesh3d(fx.tracer.0.clone()),
+            MeshMaterial3d(fx.tracer.1.clone()),
             Transform::from_translation((origin + end) / 2.0).looking_at(end, Vec3::Y).with_scale(Vec3::new(1.0, 1.0, len)),
             Fading(0.04),
             crate::player::IgnoreTraces,
         ));
     }
-    // Muzzle flash
-    cmd.spawn((
-        PointLight { intensity: 200_000.0, color: Color::srgb(1.0, 0.8, 0.5), ..default() },
-        Transform::from_translation(origin + gt.forward() * 0.6),
-        Fading(0.05),
-    ));
+    // Muzzle flash + smoke
+    cmd.spawn((PointLight { intensity: 200_000.0, color: Color::srgb(1.0, 0.8, 0.5), ..default() }, Transform::from_translation(origin + aim_dir * 0.1), Fading(0.05)));
+    for _ in 0..3 {
+        let jitter = Vec3::new(rng.random_range(-0.1..0.1), rng.random_range(0.0..0.25), rng.random_range(-0.1..0.1));
+        puff(&mut cmd, &fx, origin, aim_dir * 0.6 + jitter, 0.0, 3.0, 0.9);
+    }
+    // Shell ejection (WEP.PullSliderLogic -> SpawnShell). Guns with a PullSlider notify in their Fire montage eject on
+    // that notify instead; ponytail: not ported (pump / bolt guns eject no shell here).
     let w = &inv.slots[cur];
+    let slider = w.anims["Fire"].to_string().contains("PullSlider");
+    if !slider {
+        let right = aim_dir.cross(Vec3::Y).normalize_or_zero();
+        let vel = right * rng.random_range(1.5..2.5) + Vec3::Y * rng.random_range(1.0..2.0) - aim_dir * 0.3;
+        cmd.spawn((
+            Mesh3d(fx.shell.0.clone()),
+            MeshMaterial3d(fx.shell.1.clone()),
+            Transform::from_translation(origin - aim_dir * 0.35 + right * 0.03).looking_to(right, Vec3::Y),
+            Particle { vel, gravity: 9.8, grow: 0.0 },
+            Fading(2.0),
+            crate::player::IgnoreTraces,
+        ));
+    }
     fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming, fire_rate: s.fire_rate.unwrap_or(0.1) });
+}
+
+fn puff(cmd: &mut Commands, fx: &FireFx, at: Vec3, vel: Vec3, gravity: f32, grow: f32, life: f32) {
+    cmd.spawn((
+        Mesh3d(fx.puff.0.clone()),
+        MeshMaterial3d(fx.puff.1.clone()),
+        Transform::from_translation(at),
+        Particle { vel, gravity, grow },
+        Fading(life),
+        crate::player::IgnoreTraces,
+    ));
+}
+
+/// SpawnImpactEffect placeholder: dark bullet-hole decal on the surface (long-lived) + a short dust puff.
+/// ponytail: the game's Decals_* textures / Niagara impacts aren't ported.
+fn impact_fx(cmd: &mut Commands, fx: &FireFx, pt: Vec3, n: Vec3) {
+    if n != Vec3::ZERO {
+        cmd.spawn((
+            Mesh3d(fx.decal.0.clone()),
+            MeshMaterial3d(fx.decal.1.clone()),
+            Transform::from_translation(pt + n * 0.002).with_rotation(Quat::from_rotation_arc(Vec3::Z, n)),
+            Fading(30.0),
+            crate::player::IgnoreTraces,
+        ));
+    }
+    puff(cmd, fx, pt, n * 0.6, 0.0, 2.0, 0.3);
+}
+
+fn particles(time: Res<Time>, mut q: Query<(&mut Transform, &mut Particle)>) {
+    let dt = time.delta_secs();
+    for (mut t, mut p) in &mut q {
+        p.vel.y -= p.gravity * dt;
+        t.translation += p.vel * dt;
+        t.scale += Vec3::splat(p.grow * dt);
+    }
 }
 
 fn log_montages(mut ev: MessageReader<MontageStarted>) {
@@ -487,6 +717,7 @@ fn fade(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Fading)>)
 
 #[cfg(test)]
 mod tests {
+    use bevy::math::Vec3;
     #[test]
     fn weapons_have_anim_data() {
         let w = super::load_weapons();
@@ -505,5 +736,49 @@ mod tests {
         assert_eq!(s["M4A1"].ammo_capacity, Some(30.0)); // inherited from GE_WeaponStat_Default
         assert_eq!(s["Mossberg"].pellet_count, Some(10.0));
         assert!(!s.contains_key("Default"));
+    }
+
+    #[test]
+    fn elliptical_spread_stays_in_ellipse_and_is_wider_in_yaw() {
+        let mut rng = rand::rng();
+        let (mut sh, mut sv) = (0.0f32, 0.0f32);
+        for _ in 0..20000 {
+            let d = super::random_in_elliptical_cone(Vec3::NEG_Z, 6.0, 2.0, &mut rng);
+            let (h, v) = (d.x.asin().to_degrees(), d.y.asin().to_degrees());
+            assert!((h / 6.0).powi(2) + (v / 2.0).powi(2) < 1.05, "{h} {v}");
+            sh += h * h;
+            sv += v * v;
+        }
+        // UE VRandCone: the half angle only nears the yaw limit close to theta = 90 deg, so the variance ratio is ~3, not 9.
+        assert!(sh > sv * 2.0, "yaw spread {sh} vs pitch {sv}");
+        assert_eq!(super::random_in_elliptical_cone(Vec3::NEG_Z, 0.0, 0.0, &mut rng), Vec3::NEG_Z);
+    }
+
+    #[test]
+    fn tactical_reload_returns_leftover_rounds() {
+        let mut m4 = super::load_weapons().into_iter().find(|w| w.name == "M4A1").unwrap();
+        m4.stats.tags.clear(); // every shipped gun is InfiniteMag; test the finite path
+        m4.ammo = 10;
+        m4.mags = vec![30, 30];
+        m4.reload_done();
+        assert_eq!((m4.ammo, m4.mags.clone()), (30, vec![30, 10]));
+        m4.ammo = 0; // empty reload discards nothing
+        m4.reload_done();
+        assert_eq!((m4.ammo, m4.mags.clone()), (30, vec![10]));
+        let mut inf = super::load_weapons().into_iter().find(|w| w.infinite_mags()).expect("an InfiniteMag gun");
+        let n = inf.mags.len();
+        inf.ammo = 0;
+        inf.reload_done();
+        assert_eq!(inf.mags.len(), n);
+    }
+
+    #[test]
+    fn penetration_and_bone_multipliers() {
+        // wood (0.6) x2: 1.0, 0.6, then 0.36 > 0.25 still hits, 0.216 stops.
+        let m: Vec<f32> = super::penetrate(&[(1, 0.6), (1, 0.6), (2, 0.6), (3, 0.6), (4, 0.6)]).iter().map(|h| h.1).collect();
+        assert_eq!(m.len(), 3);
+        assert!((m[1] - 0.6).abs() < 1e-6 && (m[2] - 0.36).abs() < 1e-6);
+        assert_eq!(super::penetrate(&[(1, 1.0), (2, 0.0)]).len(), 2);
+        assert_eq!((super::bone_multiplier("head"), super::bone_multiplier("spine_02"), super::bone_multiplier("spine_01"), super::bone_multiplier("hand_r")), (10.0, 4.0, 2.5, 1.0));
     }
 }

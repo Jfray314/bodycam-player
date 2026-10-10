@@ -91,7 +91,7 @@ fn load(mut cmd: Commands, assets: Res<AssetServer>) {
 #[derive(Component)]
 struct ArmsRoot;
 #[derive(Component)]
-struct GunRoot(&'static str);
+pub struct GunRoot(&'static str);
 
 /// Arms animation state: clip name -> graph node, and what's playing.
 #[derive(Component)]

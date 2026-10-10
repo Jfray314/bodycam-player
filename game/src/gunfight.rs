@@ -3,7 +3,7 @@
 //! F6 toggles it; BODYCAM_GUNFIGHT=1 starts it enabled. The player can shoot it (weapon::Health); it respawns after 3 s.
 use crate::player::{BodycamCamera, IgnoreTraces};
 use crate::status::{BulletFly, PlayerDamage, SurvivorStatus};
-use crate::weapon::{Fading, Health, TracerFx};
+use crate::weapon::{Fading, Health, FireFx};
 use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
 use bevy::prelude::*;
 use rand::Rng;
@@ -82,7 +82,7 @@ fn shoot(
     mut shooters: Query<(Entity, &mut Shooter, &mut Transform)>,
     ignore: Query<(), With<IgnoreTraces>>,
     mut ray: MeshRayCast,
-    fx: Res<TracerFx>,
+    fx: Res<FireFx>,
     mut dmg: MessageWriter<PlayerDamage>,
     mut whiz: MessageWriter<BulletFly>,
 ) {
@@ -137,8 +137,8 @@ fn shoot(
         }
         let end = muzzle + dir * if reaches { t + 6.0 } else { len };
         cmd.spawn((
-            Mesh3d(fx.0.clone()),
-            MeshMaterial3d(fx.1.clone()),
+            Mesh3d(fx.tracer.0.clone()),
+            MeshMaterial3d(fx.tracer.1.clone()),
             Transform::from_translation((muzzle + end) / 2.0).looking_at(end, Vec3::Y).with_scale(Vec3::new(1.0, 1.0, muzzle.distance(end))),
             Fading(0.06),
             IgnoreTraces,
