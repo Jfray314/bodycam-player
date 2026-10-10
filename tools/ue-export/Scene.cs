@@ -137,7 +137,8 @@ static class SceneExport
             for (int f = 0; f < sec.NumFaces; f++)
             {
                 uint[] tri = [lod.Indices[sec.FirstIndex + f * 3], lod.Indices[sec.FirstIndex + f * 3 + 1], lod.Indices[sec.FirstIndex + f * 3 + 2]];
-                (tri[1], tri[2]) = (tri[2], tri[1]); // handedness flip of the axis conversion reverses winding
+                // No winding swap: UE index order already gives CCW (glTF front) after the (y, z, -x) conversion. The swap
+                // made 99% of triangles disagree with their normals, so culling showed object insides (tools/fix_winding.py).
                 foreach (var vi in tri)
                 {
                     if (!map.TryGetValue(vi, out var ni))
