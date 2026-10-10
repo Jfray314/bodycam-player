@@ -208,8 +208,7 @@ local function open_file(tag)
     if not rec then print("[BodycamProbe] cannot open output dir " .. OUT) return false end
     local head = { "t,marker,cam_x,cam_y,cam_z,cam_pitch,cam_yaw,cam_roll,fov,pawn_x,pawn_y,pawn_z,vel_x,vel_y,vel_z,ctl_pitch,ctl_yaw,ctl_roll,crouched,falling" }
     for i, col in ipairs(columns) do head[i + 1] = (col.name:gsub(",", "_")) end
-    rec:write(table.concat(head, ","), "
-")
+    rec:write(table.concat(head, ","), "\n")
     return true
 end
 
