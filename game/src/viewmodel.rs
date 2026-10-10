@@ -369,7 +369,7 @@ pub struct StressAnim {
 }
 impl Default for StressAnim {
     fn default() -> Self {
-        StressAnim { subtle: 2.0, strong: 0.0 }
+        StressAnim { subtle: 0.0, strong: 0.0 }
     }
 }
 
@@ -387,11 +387,9 @@ fn stress_layers(
     mut players: Query<(&mut AnimationPlayer, &AnimLink)>,
 ) {
     let Some(inv) = inv else { return };
-    let mr = crate::status::map_range_clamped;
     let speed_cm = Vec2::new(p.vel.x, p.vel.z).length() * 100.0;
-    let sub_target = if p.aiming { 0.0 } else { mr(speed_cm, 0.0, 100.0, 0.1, 1.0) };
-    alpha.subtle = crate::status::finterp_to(alpha.subtle, sub_target, time.delta_secs(), 10.0);
-    alpha.strong = if p.aiming { mr(st.stress, 0.5, 1.0, 0.0, 1.0) } else { mr(st.stress, 0.0, 1.0, 0.0, 4.0) };
+    alpha.subtle = crate::status::stress_subtle_step(alpha.subtle, time.delta_secs(), speed_cm, p.aiming);
+    alpha.strong = crate::status::stress_strong(st.stress, p.aiming);
     let a = &inv.slots[inv.current].anims;
     let clip = |k: &str| a[k]["path"].as_str().map(clip_of);
     for (mut player, link) in &mut players {

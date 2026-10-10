@@ -242,8 +242,6 @@ pub struct Inventory {
     /// GA_Fire_Base FireStartTime of the current trigger pull and LastFireTime (previous pull's start), seconds.
     fire_start: Option<f32>,
     last_fire_start: f32,
-    /// AC_BodycamAnimationComponent.HandFatigue.
-    hand_fatigue: f32,
 }
 
 impl Inventory {
@@ -337,7 +335,7 @@ fn give_loadout(mut cmd: Commands, player: Single<Entity, With<Player>>, mut out
     // Dev: BODYCAM_START=<name> equips that gun first (gun audits).
     let start = std::env::var("BODYCAM_START").unwrap_or_else(|_| "M4A1".into());
     slots.sort_by_key(|w| (w.name != start, w.name != "M4A1", w.name != "Glock17", w.name.clone()));
-    let mut inv = Inventory { slots, current: 0, cooldown: 0.0, action: None, r_held: 0.0, fire_start: None, last_fire_start: 0.0, hand_fatigue: 0.0 };
+    let mut inv = Inventory { slots, current: 0, cooldown: 0.0, action: None, r_held: 0.0, fire_start: None, last_fire_start: 0.0 };
     let first = inv.slots[0].one("FirstEquip");
     inv.slots[0].equipped_once = true;
     inv.start(ActionKind::Draw, first, 0, &mut out);
@@ -553,7 +551,6 @@ fn fire(
     mut fired: MessageWriter<Fired>,
     mut dry: MessageWriter<DryFire>,
     mut regrip: MessageWriter<Regrip>,
-    mut shake: MessageWriter<HandShake>,
     (gun, kids, gun_meshes, mesh_assets): (Query<(Entity, &GlobalTransform), With<GunRoot>>, Query<&Children>, Query<(&GlobalTransform, &Mesh3d)>, Res<Assets<Mesh>>),
 ) {
     let (inv, p) = &mut *q;
@@ -591,13 +588,7 @@ fn fire(
     let cur = inv.current;
     inv.slots[cur].ammo -= 1;
     inv.fire_start.get_or_insert(now);
-    // AC.PlayHandFatigue native caller not found in the Blueprints; per-shot amount is a guess.
-    // ponytail: 0.5 per shot (> 10 -> shaking-hands montage after ~20 shots), real value lives in C++.
-    inv.hand_fatigue += 0.5;
-    if inv.hand_fatigue > 10.0 {
-        inv.hand_fatigue = 0.0;
-        shake.write(HandShake);
-    }
+    // ponytail: AC.PlayHandFatigue has no BP caller and HandFatigue stays 0 through every recorded firefight, so shooting adds none.
     inv.cooldown = s.fire_rate.unwrap_or(0.1);
 
     let gt = *cam;
