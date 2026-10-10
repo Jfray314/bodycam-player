@@ -186,10 +186,10 @@ local function read(col)
     return v
 end
 
--- F10: also record world transforms of viewmodel sockets via SkeletalMeshComponent.GetSocketTransform (one UFunction
--- call per socket per frame). Off by default: UFunction calls from the tick hook crashed an earlier probe version.
+-- Shift+F8: toggle recording world transforms of viewmodel sockets via SkeletalMeshComponent.GetSocketTransform (one UFunction
+-- call per socket per frame). On by default (no F10 on the user's keyboard); an earlier probe crashed on UFunction calls.
 local BONES = { "ik_hand_gun", "hand_r", "hand_l", "FP_Camera", "head" }
-local bones_on = false
+local bones_on = true
 local function bone_cols(out)
     local mesh = bones_on and pawn.Mesh
     for _, b in ipairs(BONES) do
@@ -275,6 +275,6 @@ end
 
 RegisterKeyBind(Key.F7, function() ExecuteInGameThread(function() pcall(dump_all) end) end)
 RegisterKeyBind(Key.F8, function() ExecuteInGameThread(toggle_record) end)
-RegisterKeyBind(Key.F10, function() bones_on = not bones_on print("[BodycamProbe] socket transforms " .. (bones_on and "on" or "off")) end)
+RegisterKeyBind(Key.F8, { ModifierKey.SHIFT }, function() bones_on = not bones_on print("[BodycamProbe] socket transforms " .. (bones_on and "on" or "off")) end)
 RegisterKeyBind(Key.F9, function() marker = marker + 1 print("[BodycamProbe] marker " .. marker) end)
-print("[BodycamProbe] loaded: F7 dump, F8 record, F9 marker, F10 socket transforms (world, UE cm)")
+print("[BodycamProbe] loaded: F7 dump, F8 record, F9 marker, Shift+F8 socket transforms on/off (default on)")
