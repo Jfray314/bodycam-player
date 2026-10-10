@@ -14,7 +14,14 @@ if ($Uninstall) {
     return
 }
 
-# 1. Download the latest experimental UE4SS release (the stable 3.0.1 doesn't support UE 5.5).
+# 1. UE4SS: the copy that already worked with Bodycam (earlier session's scratchpad), else download the latest
+#    experimental release (the stable 3.0.1 doesn't support UE 5.5).
+$known = "$env:TEMP\claude\C--code\3a7fb1bd-75d2-4042-bd63-4b6d8c3930f6\scratchpad\ue4ss"
+if (Test-Path "$known\dwmapi.dll") {
+    Copy-Item "$known\dwmapi.dll" $win64 -Force
+    Copy-Item "$known\ue4ss" $win64 -Recurse -Force
+    Write-Host "UE4SS copied from $known"
+} else {
 $rel = Invoke-RestMethod "https://api.github.com/repos/UE4SS-RE/RE-UE4SS/releases/tags/experimental-latest" -Headers @{ "User-Agent" = "bodycam-probe" }
 $asset = $rel.assets | Where-Object { $_.name -match '^UE4SS_v.*\.zip$' } | Select-Object -First 1
 if (-not $asset) { throw "no UE4SS_v*.zip asset in experimental-latest" }
@@ -22,6 +29,7 @@ $zip = Join-Path $env:TEMP $asset.name
 Write-Host "downloading $($asset.name) ($([math]::Round($asset.size / 1MB, 1)) MB)"
 Invoke-WebRequest $asset.browser_download_url -OutFile $zip
 Expand-Archive $zip -DestinationPath $win64 -Force
+}
 
 # 2. Install the mod next to UE4SS's own Mods folder (new layout: Win64\ue4ss\Mods, old: Win64\Mods).
 $mods = @((Join-Path $win64 "ue4ss\Mods"), (Join-Path $win64 "Mods")) | Where-Object { Test-Path $_ } | Select-Object -First 1
