@@ -54,8 +54,8 @@ pub struct AxisParams {
     pub speed: f32,
     pub smooth: f32,
     pub extra: f32,
+    /// Final gain: the table Scale, times the node's AdsScale pin while aiming.
     pub scale: f32,
-    pub ads_scale: f32,
 }
 
 #[derive(Clone, Copy, Default, Debug)]
@@ -66,22 +66,26 @@ pub struct AxisState {
     out: f32,
 }
 
-/// Node tuning: Scale is the input gain in the node's units; the BAS values assume UE's per-frame mouse input.
-// ponytail: GAIN is a guess so a 1-degree-per-frame flick gives ~1 cm / ~1 deg; tune against the real game.
-const GAIN: f32 = 0.2;
-const INPUT_CLAMP: f32 = 10.0; // node ClampMax default
+/// Node tuning: the spring output unit per unit of (scaled) input.
+// ponytail: GAIN is a guess (the SpringSway output isn't in the recordings, only its inputs); 0.2 / LOOK_IN keeps the
+// previous look feel now that the input is the real LookDeltaInput (0.4777 of the old degrees-per-60Hz-frame value).
+const GAIN: f32 = 0.2 / LOOK_IN;
+/// SpringSway ClampMax pin (ABP_Procedural_Sway json default 10); applied to the input.
+const INPUT_CLAMP: f32 = 10.0;
+/// ABP_Procedural_Sway LookDeltaInput = control rotation rate (deg/s) / 60 * this, one frame late (tools/probe_sway.py,
+/// corr 0.998 against the recordings).
+pub const LOOK_IN: f32 = 0.4777;
 
 impl AxisState {
-    /// `input` in degrees-per-60Hz-frame units (or normalized speed for move), `ads` 0..1, `hip_only` fades with ADS.
-    pub fn step(&mut self, p: &AxisParams, input: f32, ads: f32, dt: f32) -> f32 {
-        if p.scale == 0.0 && p.ads_scale == 0.0 {
+    /// `input` is the node InputValue (LookDeltaInput or a +-1 move axis).
+    pub fn step(&mut self, p: &AxisParams, input: f32, dt: f32) -> f32 {
+        if p.scale == 0.0 {
             self.out = 0.0;
             return 0.0;
         }
         // 1. smooth the raw input (SmoothDamping = FInterp speed)
         self.smoothed = finterp_to(self.smoothed, input.clamp(-INPUT_CLAMP, INPUT_CLAMP), dt, p.smooth);
-        let gain = (p.scale + (p.ads_scale - p.scale) * ads) * GAIN;
-        let target = self.smoothed * gain;
+        let target = self.smoothed * p.scale * GAIN;
         // 2. damped spring toward it: omega = speed*sqrt(stiffness), zeta = damping (1 = critically damped).
         // ponytail: guessed mapping of SpringStiffness/Damping/Speed onto omega/zeta; semi-implicit Euler, substepped.
         let omega = p.speed * p.stiffness.max(0.0).sqrt();
@@ -98,8 +102,14 @@ impl AxisState {
     }
 }
 
-fn axis_params(v: &Value, ads_only_hip: bool) -> [AxisParams; 3] {
-    let _ = ads_only_hip;
+/// MagnifiedADSScale (Y, Z) of the sampled M4A1 setup: the aim-pin multiplier of the position nodes.
+// ponytail: MagnifiedADSScale varies with the optic (and wobbles with the camera); the M4A1 iron-sight values are used for all.
+const MAGNIFIED: [f32; 3] = [1.0, 0.2923, 0.3951];
+/// AdsScale pins of the rotation nodes while aiming (x, y, z), constant in the recording.
+// ponytail: literals from the M4A1 recording; no table field matches them (tables hold -2/3/3).
+const ROT_ADS_PIN: [f32; 3] = [1.0, 0.5, 1.0];
+
+fn axis_params(v: &Value, aiming: bool, pins: [f32; 3]) -> [AxisParams; 3] {
     let g = |k: &str, i: usize| v[k][["x", "y", "z"][i]].as_f64().unwrap_or(0.0) as f32;
     std::array::from_fn(|i| AxisParams {
         stiffness: g("SpringStiffness", i),
@@ -107,12 +117,11 @@ fn axis_params(v: &Value, ads_only_hip: bool) -> [AxisParams; 3] {
         speed: g("SpringSpeed", i),
         smooth: g("SmoothDamping", i),
         extra: g("ExtraSmoothing", i),
-        scale: g("Scale", i),
-        ads_scale: if v.get("AdsScale").is_some() { g("AdsScale", i) } else { 0.0 },
+        scale: g("Scale", i) * if aiming { pins[i] } else { 1.0 },
     })
 }
 
-/// Spring bank for one BAS table (3 axes).
+/// Spring bank for one output (3 axes).
 #[derive(Default)]
 struct Bank {
     s: [AxisState; 3],
@@ -122,11 +131,11 @@ struct Bank {
 pub struct Sway {
     /// Camera-space (Bevy axes, metres) offset the arms root gets, already pivoted about SwayPivotOffset.
     pub offset: Transform,
-    look_pos: Bank,
-    look_rot: Bank,
-    hip_pos: Bank,
-    hip_rot: Bank,
-    move_pos: Bank,
+    pos: Bank,
+    rot: Bank,
+    mov: Bank,
+    /// LookDeltaInput lags the controller by one frame (the ABP updates before the controller).
+    prev_look: Vec2,
     weapon: String,
 }
 
@@ -142,23 +151,28 @@ pub fn ue_rot(roll: f32, pitch: f32, yaw: f32) -> Quat {
 const SENS_DEG: f32 = 0.0022 * 57.29578; // player.rs SENS (rad per count) in degrees
 const GRIP: Vec3 = Vec3::new(0.09, -0.22, -0.13);
 
-/// Pure spring-bank step used by the system and the tests. Inputs: look (yaw, pitch deg/frame) and move (fwd, right, 0..1).
-fn run(sw: &mut Sway, anims: &Value, look: Vec2, mv: Vec2, ads: f32, dt: f32) {
-    let get = |k: &str| axis_params(&anims[k], k.starts_with("Hip"));
-    let (lp, lr, hp, hr, mp) = (get("LookPositionSway"), get("LookRotationSway"), get("HipLookPositionSway"), get("HipLookRotationSway"), get("MovePositionSway"));
-    // Gun lags the view: turning right (+yaw input) pushes it left/down. Look input in degrees per 60 Hz frame.
-    let (yaw_in, pitch_in) = (look.x, look.y);
-    let hip = 1.0 - ads;
-    // Position vec (x fwd, y right, z up); ponytail: which look axis feeds which table axis is guessed from the BAS values.
-    let pos_in = [pitch_in, -yaw_in, -pitch_in];
-    // Rotation vec (x roll, y pitch, z yaw).
+fn g3(v: &Value, table: &str, field: &str, i: usize) -> f32 {
+    v[table][field][["x", "y", "z"][i]].as_f64().unwrap_or(0.0) as f32
+}
+
+/// Pure spring-bank step used by the system and the tests. Inputs: LookDeltaInput (yaw, pitch; already in node units, this
+/// frame's value) and the move axes (fwd, right; +-1). The node parameters switch instantly with IsAiming: aiming uses the
+/// Look* tables, hip the HipLook* tables, on the same springs (recording: node params flip on the key frame).
+fn run(sw: &mut Sway, anims: &Value, ldi: Vec2, mv: Vec2, aiming: bool, dt: f32) {
+    let (pos_t, rot_t) = if aiming { ("LookPositionSway", "LookRotationSway") } else { ("HipLookPositionSway", "HipLookRotationSway") };
+    let pos_pins = [1.0, g3(anims, pos_t, "AdsScale", 1) * MAGNIFIED[1], g3(anims, pos_t, "AdsScale", 2) * MAGNIFIED[2]];
+    let pp = axis_params(&anims[pos_t], aiming, pos_pins);
+    let rp = axis_params(&anims[rot_t], aiming, ROT_ADS_PIN);
+    let mp = axis_params(&anims["MovePositionSway"], aiming, [1.0; 3]);
+    let (yaw_in, pitch_in) = (ldi.x, ldi.y);
+    // Recorded node inputs: position y and rotation x/z take LookDeltaInput.X (yaw), position z and rotation y take .Y (pitch);
+    // position x has no look node. ponytail: output signs below are guessed (the node output isn't recorded).
+    let pos_in = [0.0, -yaw_in, -pitch_in];
     let rot_in = [-yaw_in, -pitch_in, -yaw_in];
     let mv_in = [mv.x, -mv.y, 0.0];
-    let step = |b: &mut Bank, p: &[AxisParams; 3], inp: [f32; 3], a: f32, w: f32| -> Vec3 {
-        Vec3::from_array(std::array::from_fn(|i| b.s[i].step(&p[i], inp[i], a, dt) * w))
-    };
-    let pos = step(&mut sw.look_pos, &lp, pos_in, ads, 1.0) + step(&mut sw.hip_pos, &hp, pos_in, 0.0, hip) + step(&mut sw.move_pos, &mp, mv_in, ads, 1.0);
-    let rot = step(&mut sw.look_rot, &lr, rot_in, ads, 1.0) + step(&mut sw.hip_rot, &hr, rot_in, 0.0, hip);
+    let step = |b: &mut Bank, p: &[AxisParams; 3], inp: [f32; 3]| -> Vec3 { Vec3::from_array(std::array::from_fn(|i| b.s[i].step(&p[i], inp[i], dt))) };
+    let pos = step(&mut sw.pos, &pp, pos_in) + step(&mut sw.mov, &mp, mv_in);
+    let rot = step(&mut sw.rot, &rp, rot_in);
     let pivot_ue = Vec3::new(anims["SwayPivotOffset"]["x"].as_f64().unwrap_or(0.0) as f32, anims["SwayPivotOffset"]["y"].as_f64().unwrap_or(0.0) as f32, anims["SwayPivotOffset"]["z"].as_f64().unwrap_or(0.0) as f32);
     let pivot = GRIP + ue_vec(pivot_ue);
     sw.offset = Transform::from_translation(ue_vec(pos) + pivot) * Transform::from_rotation(ue_rot(rot.x, rot.y, rot.z)) * Transform::from_translation(-pivot);
@@ -171,22 +185,23 @@ fn tick_sway(
     cursor: Single<&CursorOptions>,
     p: Single<&Player>,
     inv: Option<Single<&Inventory>>,
-    ads: Res<Ads>,
     mut sw: ResMut<Sway>,
 ) {
     let Some(inv) = inv else { return };
     let dt = time.delta_secs().max(1e-4);
     let d = (if cursor.grab_mode == CursorGrabMode::Locked { motion.delta } else { Vec2::ZERO }) + fake.0;
-    // counts/frame -> degrees per 60 Hz frame
-    let look = d * SENS_DEG / (dt * 60.0);
-    // Body-local velocity (Bevy x right, z back) normalized by sprint speed.
+    // counts/frame -> LookDeltaInput (degrees per 60 Hz frame * LOOK_IN), taken one frame late like the ABP
+    let look = d * SENS_DEG / (dt * 60.0) * LOOK_IN;
+    // Body-local velocity (Bevy x right, z back) -> move axes: the node inputs are ~+-1 whenever moving (saturate by 0.5 m/s).
     let local = Quat::from_rotation_y(p.yaw).inverse() * p.vel;
-    let mv = Vec2::new(-local.z, local.x) / 3.25;
+    let mv = (Vec2::new(-local.z, local.x) / 0.5).clamp(Vec2::splat(-1.0), Vec2::ONE);
     let anims = inv.slots[inv.current].anims.clone();
     if sw.weapon != inv.slots[inv.current].name {
         *sw = Sway { weapon: inv.slots[inv.current].name.to_string(), ..default() };
     }
-    run(&mut sw, &anims, look, mv, ads.alpha, dt);
+    let ldi = sw.prev_look;
+    sw.prev_look = look;
+    run(&mut sw, &anims, ldi, mv, p.aiming, dt);
 }
 
 // --- additive aim-in/out motions (AC_BodycamAnimationComponent.PlayAdditiveMotion / RefreshAdditiveMotion) ---
@@ -318,7 +333,7 @@ mod tests {
     use super::*;
 
     fn params() -> AxisParams {
-        AxisParams { stiffness: 0.6, damping: 0.6, speed: 10.0, smooth: 7.0, extra: 0.0, scale: 5.0, ads_scale: 0.0 }
+        AxisParams { stiffness: 0.6, damping: 0.6, speed: 10.0, smooth: 7.0, extra: 0.0, scale: 5.0 }
     }
 
     #[test]
@@ -327,38 +342,71 @@ mod tests {
         // steady input -> output converges to input * scale * GAIN, same sign
         let mut out = 0.0;
         for _ in 0..600 {
-            out = s.step(&p, 1.0, 0.0, 1.0 / 60.0);
+            out = s.step(&p, 1.0, 1.0 / 60.0);
         }
-        assert!((out - 5.0 * GAIN).abs() < 1e-2, "{out}");
+        assert!((out - 5.0 * GAIN).abs() < 1e-2 * GAIN, "{out}");
         // input released -> returns to zero
         for _ in 0..600 {
-            out = s.step(&p, 0.0, 0.0, 1.0 / 60.0);
+            out = s.step(&p, 0.0, 1.0 / 60.0);
         }
         assert!(out.abs() < 1e-3, "{out}");
         // negative input -> negative output
         let mut s = AxisState::default();
         for _ in 0..30 {
-            out = s.step(&p, -1.0, 0.0, 1.0 / 60.0);
+            out = s.step(&p, -1.0, 1.0 / 60.0);
         }
         assert!(out < 0.0);
     }
 
     #[test]
-    fn ads_scale_replaces_hip_scale() {
+    fn zero_scale_is_off() {
         let mut p = params();
-        p.ads_scale = 0.0;
+        p.scale = 0.0;
         let mut s = AxisState::default();
-        let mut out = 1.0;
-        for _ in 0..600 {
-            out = s.step(&p, 1.0, 1.0, 1.0 / 60.0);
-        }
-        assert!(out.abs() < 1e-3);
+        assert_eq!(s.step(&p, 1.0, 1.0 / 60.0), 0.0);
     }
 
     #[test]
     fn underdamped_overshoots() {
         let (mut s, p) = (AxisState::default(), params());
-        let peak = (0..300).map(|_| s.step(&p, 1.0, 0.0, 1.0 / 60.0)).fold(0.0f32, f32::max);
+        let peak = (0..300).map(|_| s.step(&p, 1.0, 1.0 / 60.0)).fold(0.0f32, f32::max);
         assert!(peak > 5.0 * GAIN * 1.01); // damping 0.6 -> overshoots
+    }
+
+    /// The node input, stepped with the control-rotation rate from the recordings, reproduces the recorded LookDeltaInput.X.
+    /// before = the previous model (degrees per 60 Hz frame, no lag), after = LOOK_IN with the one-frame lag.
+    #[test]
+    fn look_delta_input_matches_recording() {
+        let r: serde_json::Value = serde_json::from_str(include_str!("../../assets/sway_reference.json")).unwrap();
+        let (mut before, mut after, mut sig, mut n) = (0.0f32, 0.0f32, 0.0f32, 0);
+        for w in r["look_input"]["series_60hz"].as_array().unwrap() {
+            let col = |k: &str| -> Vec<f32> { w[k].as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect() };
+            let (yaw, ldi) = (col("ctl_yaw"), col("ldi_x"));
+            let mut prev = 0.0;
+            for i in 1..yaw.len() {
+                let per_frame = yaw[i] - yaw[i - 1]; // degrees per 60 Hz frame
+                before += (per_frame - ldi[i]).powi(2);
+                after += (prev * LOOK_IN - ldi[i]).powi(2);
+                sig += ldi[i].powi(2);
+                prev = per_frame;
+                n += 1;
+            }
+        }
+        let rms = |e: f32| (e / n as f32).sqrt();
+        eprintln!("LookDeltaInput.X rms: before {:.3}, after {:.3} (signal rms {:.3})", rms(before), rms(after), rms(sig));
+        assert!(rms(after) < 0.3 * rms(before) && rms(after) < 0.35 * rms(sig));
+    }
+
+    /// Tables switch with IsAiming on the same springs: toggling mid-flick keeps the state continuous.
+    #[test]
+    fn aiming_switches_params_not_state() {
+        let anims: Value = serde_json::from_str::<Value>(include_str!("../../assets/weapons/M4A1.json")).map(|v| v["anim_set"].clone()).unwrap();
+        let mut sw = Sway::default();
+        for _ in 0..30 {
+            run(&mut sw, &anims, Vec2::new(8.0, 0.0), Vec2::ZERO, false, 1.0 / 60.0);
+        }
+        let before = sw.offset.translation;
+        run(&mut sw, &anims, Vec2::new(8.0, 0.0), Vec2::ZERO, true, 1.0 / 60.0);
+        assert!(before.distance(sw.offset.translation) < 0.05, "{before} -> {}", sw.offset.translation);
     }
 }
