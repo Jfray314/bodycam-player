@@ -10,6 +10,7 @@ using CUE4Parse.UE4.Assets.Exports.Texture;
 using CUE4Parse.UE4.Objects.Core.Math;
 using CUE4Parse.UE4.Objects.UObject;
 using CUE4Parse_Conversion.Textures;
+using CUE4Parse.UE4.Assets.Objects;
 using SkiaSharp;
 
 // scene <umap>: static-mesh placements of a level and its always-loaded sublevels -> <out>/scene.glb (+ scene.json: player start).
@@ -57,6 +58,55 @@ static class SceneExport
         o[15] = 1; return o;
     }
 
+    // ---- lights ----
+    static readonly HashSet<string> LightTypes = ["PointLightComponent", "SpotLightComponent", "RectLightComponent", "DirectionalLightComponent", "SkyLightComponent"];
+    static string? Str(UObject c, string n)
+    {
+        for (UObject? o = c; o != null; o = o.Template?.Object?.Value)
+        { var p = o.Properties.FirstOrDefault(q => q.Name.Text == n); if (p != null) return p.Tag?.GenericValue?.ToString(); }
+        return null;
+    }
+    static object? LightRec(UObject c, double[] w, string owner, string level)
+    {
+        var t = c.ExportType.Replace("LightComponent", "").ToLowerInvariant(); // point spot rect directional sky
+        if (!c.GetOrDefault("bVisible", true) || !c.GetOrDefault("bAffectsWorld", true)) return null;
+        var col = c.GetOrDefault("LightColor", new FColor(255, 255, 255, 255));
+        var units = Str(c, "IntensityUnits") ?? "Unitless";
+        if (!c.GetOrDefault("bAutoActivate", true) || owner.StartsWith("WEP_C")) return null; // weapon-prop lights (muzzle flash), off by default
+        double dI = t switch { "directional" => 10, "sky" => 1, _ => units.Contains("Candelas") ? 8 : 5000 }; // UE 5.5: Candelas default is 8 cd, Unitless 5000
+        double R(string n, double d) => c.GetOrDefault(n, (float)d);
+        var fwd = new[] { w[0], w[4], w[8] }; double fl = Math.Sqrt(fwd[0] * fwd[0] + fwd[1] * fwd[1] + fwd[2] * fwd[2]); fwd = fwd.Select(v => v / fl).ToArray();
+        return new
+        {
+            kind = t, owner, level,
+            loc_cm = new[] { w[3], w[7], w[11] }, dir_ue = fwd, // dir = light's +X axis (UE space)
+            intensity = R("Intensity", dI), units,
+            color = new[] { (int)col.R, (int)col.G, (int)col.B },
+            atten_cm = R("AttenuationRadius", 1000),
+            src_radius = R("SourceRadius", 0), src_length = R("SourceLength", 0),
+            rect_w = R("SourceWidth", 64), rect_h = R("SourceHeight", 64),
+            inner_deg = R("InnerConeAngle", 0), outer_deg = R("OuterConeAngle", 44),
+            temp = c.GetOrDefault("bUseTemperature", false) ? R("Temperature", 6500) : 0,
+            shadows = c.GetOrDefault("CastShadows", true) && c.GetOrDefault("CastDynamicShadows", true),
+            mobility = Str(c, "Mobility") ?? "",
+            inv_sq = c.GetOrDefault("bUseInverseSquaredFalloff", true), falloff = R("LightFalloffExponent", 8),
+            name = c.Name,
+        };
+    }
+    static string? Str2(FStructFallback st, string n) => st.Properties.FirstOrDefault(q => q.Name.Text == n)?.Tag?.GenericValue?.ToString();
+    static object? PostRec(UObject e, string lvl)
+    {
+        var st = e.GetOrDefault<FStructFallback?>("Settings", null); if (st == null) return null;
+        double R(string n, double d) => st.GetOrDefault(n, (float)d);
+        return new
+        {
+            name = e.Name, unbound = e.GetOrDefault("bUnbound", true), priority = e.GetOrDefault("Priority", 0f),
+            ae_min = R("AutoExposureMinBrightness", 0), ae_max = R("AutoExposureMaxBrightness", 0), ae_bias = R("AutoExposureBias", 0),
+            ae_method = Str2(st, "AutoExposureMethod"), ae_speed_up = R("AutoExposureSpeedUp", 3), ae_speed_down = R("AutoExposureSpeedDown", 1),
+            bloom = R("BloomIntensity", 0.675), level = lvl,
+        };
+    }
+
     record Tex(string Name, byte[] Data, string Mime);
     class Mat { public string Name = ""; public int Tex = -1; public float[] Color = [0.6f, 0.6f, 0.6f, 1]; }
     class Prim { public byte[] Pos = [], Nrm = [], Uv = [], Idx = []; public int Verts, Indices, Mat; public float[] Min = [], Max = []; }
@@ -68,6 +118,8 @@ static class SceneExport
         var meshList = new List<List<Prim>>(); var meshIdx = new Dictionary<string, int>();
         var nodes = new List<float[]>(); var nodeMesh = new List<int>(); var nodeName = new List<string>();
         object? playerStart = null;
+        var lights = new List<object>(); var posts = new List<object>(); var lightKeys = new HashSet<string>(); var bpInst = new List<(UObject e, string lv)>();
+        bool lightsOnly = Environment.GetEnvironmentVariable("SCENE_LIGHTS_ONLY") == "1"; // write scene.json only, skip meshes/glb
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase); var todo = new Queue<string>(); todo.Enqueue(umap);
         int skipped = 0; var pending = new List<(UObject e, UStaticMesh sm, double[] w)>();
         while (todo.Count > 0)
@@ -83,7 +135,6 @@ static class SceneExport
                     if (e.ExportType == "LevelStreamingAlwaysLoaded")
                     {
                         var wa = e.GetOrDefault<FSoftObjectPath>("WorldAsset").AssetPathName.Text;
-                        if (wa.Contains("GlobalPostProcess")) continue;
                         todo.Enqueue("Bodycam/Content" + wa["/Game".Length..wa.LastIndexOf('.')]);
                     }
                     else if (e.ExportType == "PlayerStart" && playerStart == null)
@@ -93,6 +144,13 @@ static class SceneExport
                         playerStart = new { map = lv, loc_cm = new[] { w[3], w[7], w[11] }, yaw_deg = rot.Yaw };
                         Console.WriteLine("PlayerStart " + JsonSerializer.Serialize(playerStart));
                     }
+                    else if (LightTypes.Contains(e.ExportType))
+                    {
+                        var own = e.Outer?.Name.Text ?? ""; var r = LightRec(e, World(e), own, lv);
+                        if (r != null && lightKeys.Add(e.Name + "@" + own)) lights.Add(r);
+                    }
+                    else if (e.ExportType == "PostProcessVolume") { var r = PostRec(e, lv); if (r != null) posts.Add(r); }
+                    else if (e.ExportType.EndsWith("_C") && e.GetOrDefault<FPackageIndex?>("RootComponent", null) is { IsNull: false }) bpInst.Add((e, lv));
                     else if (e.ExportType is "StaticMeshComponent" or "InstancedStaticMeshComponent" or "HierarchicalInstancedStaticMeshComponent")
                     {
                         if (e.GetOrDefault("bHiddenInGame", false) || !e.GetOrDefault("bVisible", true) || !e.GetOrDefault("bRenderInMainPass", true)) { skipped++; continue; }
@@ -108,6 +166,35 @@ static class SceneExport
                 catch (Exception ex2) { Console.WriteLine($"  skip {e.Name}: {ex2.Message}"); skipped++; }
             }
         }
+        foreach (var (a, lv) in bpInst)
+        {
+            try
+            {
+                var rootW = World(a.GetOrDefault<FPackageIndex>("RootComponent").Load()!);
+                var seenN = new HashSet<string>();
+                for (var cls = a.Class; cls != null; cls = cls.Super)
+                {
+                    var pkgPath = cls.GetPathName(); pkgPath = pkgPath[..pkgPath.IndexOf('.')];
+                    if (pkgPath.StartsWith("/Script")) break;
+                    IEnumerable<UObject> bx; try { bx = provider.LoadPackage(pkgPath.TrimStart('/').Replace("Game/", "Bodycam/Content/")).GetExports().ToList(); } catch { break; }
+                    foreach (var c in bx.Where(x => LightTypes.Contains(x.ExportType)))
+                    {
+                        var nm = c.Name.Replace("_GEN_VARIABLE", ""); if (!seenN.Add(nm)) continue;
+                        if (lightKeys.Contains(c.Name + "@" + a.Name)) continue; // level already holds this instance's override
+                        // relative transform inside the BP: chain up to (excluding) the BP root, which the instance's world matrix replaces
+                        var rel = Local(c); var par = c.GetOrDefault<FPackageIndex?>("AttachParent", null); int d = 0;
+                        while (d++ < 16 && par != null && !par.IsNull && par.Load() is UObject pc && pc.GetOrDefault<FPackageIndex?>("AttachParent", null) is { IsNull: false }) { rel = Mul(Local(pc), rel); par = pc.GetOrDefault<FPackageIndex?>("AttachParent", null); }
+                        var r = LightRec(c, Mul(rootW, rel), a.Name + ":" + cls.Name, lv);
+                        if (r != null && lightKeys.Add(c.Name + "@" + a.Name)) lights.Add(r);
+                    }
+                }
+            }
+            catch (Exception e2) { Console.WriteLine($"  bp light fail {a.Name}: {e2.Message}"); }
+        }
+        if (playerStart != null) { var p0 = (double[])((dynamic)playerStart).loc_cm; lights.RemoveAll(l => { var q = (double[])((dynamic)l).loc_cm; return Math.Abs(q[0] - p0[0]) > 40000 || Math.Abs(q[1] - p0[1]) > 40000; }); } // drops the off-map loadout room (x = -6760 m)
+        Console.WriteLine("lights " + lights.Count + " " + string.Join(",", lights.GroupBy(l => ((dynamic)l).kind).Select(g => g.Key + "=" + g.Count())) + " post " + posts.Count);
+        var jo = new JsonSerializerOptions { WriteIndented = true };
+        if (lightsOnly) { File.WriteAllText(Path.Combine(outDir, "scene.json"), JsonSerializer.Serialize(new { umap, player_start = playerStart, lights, post = posts }, jo)); return; }
         var ps = (dynamic?)playerStart; double[]? c0 = ps == null ? null : (double[])ps.loc_cm;
         foreach (var (e, sm, w) in pending)
         {
@@ -119,7 +206,7 @@ static class SceneExport
         }
         Console.WriteLine($"meshes {meshList.Count} nodes {nodes.Count} materials {matList.Count} textures {texList.Count} skipped {skipped}");
         WriteGlb(Path.Combine(outDir, "scene.glb"), meshList, nodes, nodeMesh, nodeName, matList, texList);
-        File.WriteAllText(Path.Combine(outDir, "scene.json"), JsonSerializer.Serialize(new { umap, player_start = playerStart }, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(Path.Combine(outDir, "scene.json"), JsonSerializer.Serialize(new { umap, player_start = playerStart, lights, post = posts }, jo));
     }
 
     static List<Prim> BuildMesh(UStaticMesh sm, UObject comp, DefaultFileProvider provider, List<Tex> texList, Dictionary<string, int> texIdx, List<Mat> matList, Dictionary<string, int> matIdx)
