@@ -186,6 +186,27 @@ local function read(col)
     return v
 end
 
+-- F10: also record world transforms of viewmodel sockets via SkeletalMeshComponent.GetSocketTransform (one UFunction
+-- call per socket per frame). Off by default: UFunction calls from the tick hook crashed an earlier probe version.
+local BONES = { "ik_hand_gun", "hand_r", "hand_l", "FP_Camera", "head" }
+local bones_on = false
+local function bone_cols(out)
+    local mesh = bones_on and pawn.Mesh
+    for _, b in ipairs(BONES) do
+        local ok, t = false, nil
+        if mesh and mesh:IsValid() then ok, t = pcall(function() return mesh:GetSocketTransform(FName(b), 0) end) end
+        local vals = { "", "", "", "", "", "", "" }
+        if ok and t then
+            pcall(function()
+                local l, q = t.Translation, t.Rotation
+                vals = { string.format("%.3f", l.X), string.format("%.3f", l.Y), string.format("%.3f", l.Z),
+                    string.format("%.6f", q.X), string.format("%.6f", q.Y), string.format("%.6f", q.Z), string.format("%.6f", q.W) }
+            end)
+        end
+        for _, v in ipairs(vals) do out[#out + 1] = v end
+    end
+end
+
 local function sample()
     if not (pc:IsValid() and cm:IsValid() and pawn:IsValid() and root:IsValid() and mv:IsValid()) then return end
     local pov = cm.CameraCachePrivate.POV
@@ -200,6 +221,7 @@ local function sample()
         local ok, v = pcall(read, col)
         row[i + 1] = (ok and type(v) == "number") and string.format("%.5g", v) or ""
     end
+    bone_cols(row)
     rec:write(table.concat(row, ","), "\n")
 end
 
@@ -208,6 +230,9 @@ local function open_file(tag)
     if not rec then print("[BodycamProbe] cannot open output dir " .. OUT) return false end
     local head = { "t,marker,cam_x,cam_y,cam_z,cam_pitch,cam_yaw,cam_roll,fov,pawn_x,pawn_y,pawn_z,vel_x,vel_y,vel_z,ctl_pitch,ctl_yaw,ctl_roll,crouched,falling" }
     for i, col in ipairs(columns) do head[i + 1] = (col.name:gsub(",", "_")) end
+    for _, b in ipairs(BONES) do
+        for _, c in ipairs({ "x", "y", "z", "qx", "qy", "qz", "qw" }) do head[#head + 1] = "socket." .. b .. "." .. c end
+    end
     rec:write(table.concat(head, ","), "\n")
     return true
 end
@@ -250,5 +275,6 @@ end
 
 RegisterKeyBind(Key.F7, function() ExecuteInGameThread(function() pcall(dump_all) end) end)
 RegisterKeyBind(Key.F8, function() ExecuteInGameThread(toggle_record) end)
+RegisterKeyBind(Key.F10, function() bones_on = not bones_on print("[BodycamProbe] socket transforms " .. (bones_on and "on" or "off")) end)
 RegisterKeyBind(Key.F9, function() marker = marker + 1 print("[BodycamProbe] marker " .. marker) end)
-print("[BodycamProbe] loaded: F7 dump, F8 record, F9 marker")
+print("[BodycamProbe] loaded: F7 dump, F8 record, F9 marker, F10 socket transforms (world, UE cm)")
