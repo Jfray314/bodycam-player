@@ -572,6 +572,35 @@ mod tests {
         assert!(rms(after) < 0.75 * rms(before) && rms(after) < 0.75 * rms(sd));
     }
 
+    /// Headless: step `movement` in a minimal App (no window/render); walking reaches WALK, sprinting SPRINT, then stops.
+    #[test]
+    fn movement_speeds() {
+        use bevy::prelude::*;
+        use bevy::time::TimeUpdateStrategy;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(TimeUpdateStrategy::ManualDuration(std::time::Duration::from_millis(16)))
+            .init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<Assets<Mesh>>() // movement ray-casts the map (none here: flat ground)
+            .add_message::<super::Footstep>()
+            .add_systems(Update, super::movement);
+        let e = app.world_mut().spawn((super::Player { grounded: true, ..default() }, Transform::default())).id();
+        let run = |app: &mut App, keys: &[KeyCode], secs: f32| {
+            let mut k = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            k.reset_all();
+            keys.iter().for_each(|&c| k.press(c));
+            for _ in 0..(secs / 0.016) as i32 {
+                app.update();
+            }
+            app.world().get::<super::Player>(e).unwrap().vel.length()
+        };
+        app.update(); // first frame has dt 0
+        assert!((run(&mut app, &[KeyCode::KeyW], 3.0) - super::WALK).abs() < 0.01);
+        assert!((run(&mut app, &[KeyCode::KeyW, KeyCode::ShiftLeft], 3.0) - super::SPRINT).abs() < 0.01);
+        assert!(run(&mut app, &[], 1.0) < 0.01);
+        assert!(app.world().get::<Transform>(e).unwrap().translation.z < -5.0); // moved forward (-Z)
+    }
+
     #[test]
     fn fire_shake_loads() {
         let s: &super::FireShake = &super::FIRE_SHAKE;

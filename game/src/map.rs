@@ -19,6 +19,9 @@ fn root() -> String {
     std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into())
 }
 pub fn available() -> bool {
+    if crate::testmap::wanted() {
+        return false;
+    }
     let r = root();
     std::path::Path::new(&format!("{r}/maps/scene.glb")).exists() && std::path::Path::new(&format!("{r}/maps/scene.json")).exists()
 }

@@ -84,13 +84,14 @@ fn gun_model(anims: &serde_json::Value) -> Option<&'static str> {
 
 fn load(mut cmd: Commands, assets: Res<AssetServer>) {
     let names = ["M4A1", "Glock17", "Akm", "Deagle", "FAL", "Mossberg590", "Remington700", "Revolver", "SCAR-H", "SVD", "UZI", "MP9", "Vector", "MP5", "Benelli", "Crossbow", "Vaiga"];
-    let guns = names.iter().map(|n| (*n, assets.load(format!("models/guns/{n}.glb")))).collect();
+    // Only the default loadout is preloaded (guns are 40 MB glbs each: all 17 cost ~20 s); the rest load on first equip.
+    let guns = names[..2].iter().map(|n| (*n, assets.load(format!("models/guns/{n}.glb")))).collect();
     let arm_anims = names[2..].iter().map(|n| assets.load(format!("models/arms_anims/{n}.glb"))).collect();
     cmd.insert_resource(ViewmodelAssets { arms: assets.load("models/arms.glb"), guns, arm_anims });
 }
 
 #[derive(Component)]
-struct ArmsRoot;
+pub struct ArmsRoot;
 #[derive(Component)]
 pub struct GunRoot(&'static str);
 
@@ -214,7 +215,8 @@ struct AnimLink(Entity);
 /// Spawns the equipped gun under the arms' ik_hand_gun joint (identity), respawning on weapon change.
 fn attach_gun(
     mut cmd: Commands,
-    vm: Res<ViewmodelAssets>,
+    mut vm: ResMut<ViewmodelAssets>,
+    assets: Res<AssetServer>,
     gltfs: Res<Assets<Gltf>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     inv: Option<Single<&Inventory>>,
@@ -229,7 +231,8 @@ fn attach_gun(
         return;
     }
     let Some(hand) = joints.iter().find(|(e, n, _)| n.as_str() == "ik_hand_gun" && root_of(*e, &parents, &arms).is_some()).map(|j| j.0) else { return };
-    let Some(g) = vm.guns.get(want).and_then(|h| gltfs.get(h)) else { return };
+    let h = vm.guns.entry(want).or_insert_with(|| assets.load(format!("models/guns/{want}.glb")));
+    let Some(g) = gltfs.get(&*h) else { return };
     for (e, _) in &guns {
         cmd.entity(e).despawn();
     }

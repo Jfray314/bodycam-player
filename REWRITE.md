@@ -46,6 +46,21 @@ Default attachments (tools/attachments.py: assets/weapons/<Row>.json -> DT_NewSh
 Not exported: montages.
 
 
+## Fast iteration (test map, scripted shots, recordings)
+All times are **sim seconds after "viewmodel ready"** (arms + gun meshes spawned; logged as `viewmodel ready at N s real`), so no guessed load offsets. Code: `game/src/dev.rs`, `game/src/testmap.rs`.
+| Env | Effect |
+|---|---|
+| `BODYCAM_MAP=test` | tiny test map: 1 m grid floor (5 m lines darker), stripes + target boards at 5/10/25 m, wall ruler at 30 m, cover, stairs (visual only: flat-ground player), doorway |
+| `BODYCAM_AUTO="W@0:3,LMB@1:0.5"` | hold key/button at t for d s (keys LMB RMB Ctrl Shift 1-5 R J W A S D Q E Space) |
+| `BODYCAM_SHOTS="0.5,1,2"` + `BODYCAM_SCREENSHOT=shots/foo` | several numbered shots `shots/foo_1.png..` in ONE launch, then exit (`BODYCAM_SCREENSHOT=file.png` alone = one shot at `BODYCAM_SCREENSHOT_AT`, default 0.5) |
+| `BODYCAM_RECORD=dir:fps:secs` | frame sequence `dir/f_0001.png..` with a fixed sim step of 1/fps (deterministic, runs as fast as it renders) |
+| `BODYCAM_SPEED=N` | virtual-time multiplier (shot/auto times stay in sim time; high N gives big dt per frame) |
+| `BODYCAM_ASSETS=path` | assets-local override (needed in a worktree; `cargo test` too) |
+
+`tools/shots.sh [scenario...]` (idle walk sprint crouch aim hip_burst ads_burst lean lean_r reload swap swap_back) -> `shots/<scenario>_N.png`, one launch each, on the test map. `GAME=...` picks the exe.
+`cargo test -p game` includes headless tests (minimal App, no window), e.g. `player::tests::movement_speeds`.
+
+
 ## Source -> Rust map
 | Original | Rust | Status |
 |---|---|---|
