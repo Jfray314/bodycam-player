@@ -1,5 +1,5 @@
 """Shared Blender helpers: import ue-export output (PSK + PSA + material json) into the current scene."""
-import os, json
+import os, json, math
 import bpy
 import numpy as np
 import psa_scale
@@ -180,9 +180,12 @@ def attach_parts(arm, gun_dir):
         s = sockets.get(part["socket"].lower())
         bone = bones.get((s["bone"] if s else "root").lower()) or bones["root"]
         loc = mathutils.Vector((s["loc"][0], -s["loc"][1], s["loc"][2])) / 100 if s else mathutils.Vector()  # UE cm, Y mirrored like the PSK import
-        if s and any(abs(v) > 1e-3 for v in s["rot"]):
-            print("WARN socket rotation ignored", s["name"], s["rot"])
         S = mathutils.Matrix.Translation(loc)
+        if s:  # json rot = UE (Pitch, Yaw, Roll) degrees; R = Rz(yaw) Ry(pitch) Rx(-roll), conjugated by the Y mirror (cancels the rotated Revolver Root bone)
+            ry, rz, rx = (math.radians(v) for v in s["rot"])
+            Rue = mathutils.Matrix.Rotation(rz, 3, "Z") @ mathutils.Matrix.Rotation(ry, 3, "Y") @ mathutils.Matrix.Rotation(-rx, 3, "X")
+            F = mathutils.Matrix.Diagonal((1, -1, 1))
+            S = S @ (F @ Rue @ F).to_4x4()
         for m in meshes:
             mw = m.matrix_world.copy()
             for mod in [x for x in m.modifiers if x.type == "ARMATURE"]:
