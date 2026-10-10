@@ -334,7 +334,9 @@ fn load_weapons() -> Vec<Weapon> {
 fn give_loadout(mut cmd: Commands, player: Single<Entity, With<Player>>, mut out: MessageWriter<MontageStarted>) {
     let mut slots = load_weapons();
     // Default loadout: primary M4A1 + sidearm Glock17, then every other gun for testing.
-    slots.sort_by_key(|w| (w.name != "M4A1", w.name != "Glock17", w.name.clone()));
+    // Dev: BODYCAM_START=<name> equips that gun first (gun audits).
+    let start = std::env::var("BODYCAM_START").unwrap_or_else(|_| "M4A1".into());
+    slots.sort_by_key(|w| (w.name != start, w.name != "M4A1", w.name != "Glock17", w.name.clone()));
     let mut inv = Inventory { slots, current: 0, cooldown: 0.0, action: None, r_held: 0.0, fire_start: None, last_fire_start: 0.0, hand_fatigue: 0.0 };
     let first = inv.slots[0].one("FirstEquip");
     inv.slots[0].equipped_once = true;
@@ -648,12 +650,9 @@ fn fire(
             crate::player::IgnoreTraces,
         ));
     }
-    // Muzzle flash + smoke
+    // Muzzle flash
     cmd.spawn((PointLight { intensity: 200_000.0, color: Color::srgb(1.0, 0.8, 0.5), ..default() }, Transform::from_translation(origin + aim_dir * 0.1), Fading(0.05)));
-    for _ in 0..3 {
-        let jitter = Vec3::new(rng.random_range(-0.1..0.1), rng.random_range(0.0..0.25), rng.random_range(-0.1..0.1));
-        puff(&mut cmd, &fx, origin, aim_dir * 0.6 + jitter, 0.0, 3.0, 0.9);
-    }
+    // ponytail: muzzle smoke (Niagara) not ported; the sphere stand-in looked wrong.
     // Shell ejection (WEP.PullSliderLogic -> SpawnShell). Guns with a PullSlider notify in their Fire montage eject on
     // that notify instead; ponytail: not ported (pump / bolt guns eject no shell here).
     let w = &inv.slots[cur];

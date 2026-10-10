@@ -2,6 +2,7 @@
 import os, json
 import bpy
 import numpy as np
+import psa_scale
 
 BUILT = {}
 FACTORS = {}  # material name -> {roughnessFactor, metallicFactor}; applied to the glb JSON after export (Blender drops factors when a texture is linked)
@@ -29,9 +30,13 @@ def import_item(mesh_json, psas=(), name=None):
     meshes = [o for o in new if o.type == "MESH"]
     arm.name = name or os.path.splitext(os.path.basename(mesh_json))[0]
     bake_scale(arm, meshes)
+    psk = base + (".pskx" if os.path.exists(base + ".pskx") else ".psk")
     for p in psas:
         bpy.context.view_layer.objects.active = arm
-        r = bpy.ops.psa.import_all(filepath=os.path.abspath(p), translation_scale=0.01, fps_source="SCENE",
+        ratio = psa_scale.trans_ratio(psk, p)  # != 1 when the clip's translations aren't in PSK units (Remington700: 100x)
+        if ratio > 1.5:
+            print("PSA translation ratio", ratio, os.path.basename(p))
+        r = bpy.ops.psa.import_all(filepath=os.path.abspath(p), translation_scale=0.01 / ratio if ratio > 1.5 else 0.01, fps_source="SCENE",
                                    should_write_scale_keys=False, should_overwrite=True)
         if r != {"FINISHED"}:
             print("PSA FAIL", p, r)
@@ -85,8 +90,10 @@ def pick(tex, keys):
 
 
 def build_materials(meta, d, meshes):
-    for mdef in meta["materials"]:
+    for i, mdef in enumerate(meta["materials"]):
         old = [m for m in bpy.data.materials if m.name.split(".")[0] in (mdef["slot"], mdef.get("material")) and m not in BUILT.values() and not m.name.startswith("_old_")]
+        if not old:  # PSK material name != slot/MI name (guns.json material override, e.g. Glock17: PSK says M_Glock17_Shadow): match by slot index
+            old = [s.material for m in meshes for j, s in enumerate(m.material_slots) if j == i and s.material and s.material not in BUILT.values()]
         for o in old:
             o.name = "_old_" + o.name
         key = mdef.get("material") or mdef["slot"]

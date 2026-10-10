@@ -182,7 +182,8 @@ fn hook_players(
     graphs: Query<&AnimationGraphHandle>,
 ) {
     for e in &new {
-        let root = root_of(e, &parents, &arms).or_else(|| root_of(e, &parents, &guns));
+        // the gun is a descendant of the arms: check it first
+        let root = root_of(e, &parents, &guns).or_else(|| root_of(e, &parents, &arms));
         if let Some(r) = root
             && let Ok(g) = graphs.get(r)
         {

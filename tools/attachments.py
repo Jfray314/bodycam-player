@@ -11,6 +11,9 @@ weapons = os.path.join(here, "..", "assets", "weapons")
 rows = lambda f: json.load(open(root + f))["exports"][0]["properties"]["_rows"]
 shop, skins, wi = rows("DT_NewShopItem.json"), rows("Skins/DT_WeaponSkins.json"), rows("Gameplay/DT_WeaponItems.json")
 GUN_NAME = {"AK47": "Akm", "Mossberg": "Mossberg590", "SCAR": "SCAR-H", "Fostech": "Vaiga", "kriss_vector": "Vector", "BC5": "MP5", "DRAGUNOV": "SVD"}  # assets/weapons row file -> glb gun name
+norm = lambda k: k.lower().replace("_", " ").replace(" base ", " ")
+shop_n = {norm(k): v for k, v in shop.items()}  # default_attachments names have case/underscore typos ("UZI Magazine" vs "Uzi Magazine", "Remington700_base_Barrel_Short")
+wi_n = {norm(k): v for k, v in wi.items()}
 SKIP = ("Ammo", "Reticle", "Optic")
 asset = lambda p: ("Bodycam/Content/" + p[len("/Game/"):]).rsplit(".", 1)[0] if p.startswith("/Game/") else ""
 
@@ -20,11 +23,11 @@ for f in sorted(glob.glob(os.path.join(weapons, "*.json"))):
     d = json.load(open(f))
     e = {"receiver": None, "parts": []}
     for n in d.get("default_attachments", []):
-        s = shop.get(n)
+        s = shop.get(n) or shop_n.get(norm(n))
         sk = skins.get(s["AssociatedItemSkinRow"]["RowName"]) if s else None
         if not sk:
             continue
-        cls = (wi.get(sk["AssociatedGameplayRow"]["RowName"]) or {}).get("ItemClassID", "")
+        cls = (wi.get(sk["AssociatedGameplayRow"]["RowName"]) or wi_n.get(norm(sk["AssociatedGameplayRow"]["RowName"])) or {}).get("ItemClassID", "")
         if sk.get("SkeletalMesh") and not cls.startswith("Item.Attachment"):
             e["receiver"] = asset(sk["SkeletalMesh"])
         elif cls.startswith("Item.Attachment.") and sk.get("StaticMesh") and not cls.split(".")[-1].startswith(SKIP):
