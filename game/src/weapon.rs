@@ -602,6 +602,7 @@ fn fire(
 
     let gt = *cam;
     let (origin, aim_dir) = muzzle_basis(&gun, &kids, &gun_meshes, &mesh_assets, gt, p.aiming);
+    debug!("shot dir vs camera: yaw {:.2} pitch {:.2} deg", (aim_dir.cross(*gt.forward()).y).asin().to_degrees(), (aim_dir.y.asin() - gt.forward().y.asin()).to_degrees());
     // SpreadX = max yaw, SpreadY = max pitch (GA_Fire_Base), full angles.
     let (sx, sy) = if p.aiming { (s.spread_aim_x, s.spread_aim_y) } else { (s.spread_hip_x, s.spread_hip_y) };
     let (sx, sy) = (sx.unwrap_or(0.0), sy.unwrap_or(0.0));
