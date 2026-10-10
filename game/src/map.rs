@@ -10,7 +10,7 @@ pub struct MapPlugin;
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
         if available() {
-            app.add_systems(Startup, setup).add_systems(Update, settle);
+            app.add_systems(Startup, setup).add_systems(Update, (settle, shadow_nearest, apply_exposure));
         }
     }
 }
@@ -34,7 +34,46 @@ pub struct MapGeometry;
 #[derive(serde::Deserialize)]
 struct SceneInfo {
     player_start: Start,
+    #[serde(default)]
+    lights: Vec<UeLight>,
+    #[serde(default)]
+    post: Vec<UePost>,
 }
+/// One exported UE light component (units: cm, UE axes; see tools/ue-export/Scene.cs).
+#[derive(serde::Deserialize)]
+struct UeLight {
+    kind: String,
+    loc_cm: [f32; 3],
+    dir_ue: [f32; 3],
+    intensity: f32,
+    units: String,
+    color: [u8; 3],
+    atten_cm: f32,
+    src_radius: f32,
+    rect_w: f32,
+    rect_h: f32,
+    outer_deg: f32,
+    inner_deg: f32,
+    temp: f32,
+    shadows: bool,
+}
+#[derive(serde::Deserialize)]
+struct UePost {
+    ae_min: f32,
+    ae_max: f32,
+    level: String,
+}
+/// Auto-exposure range (EV) from the level's PostProcessVolume, applied to the camera by `apply_exposure`.
+#[derive(Resource)]
+struct MapExposure(f32, f32);
+/// Marks lights that may cast shadows when among the nearest `MAX_SHADOW_LIGHTS` to the camera.
+#[derive(Component)]
+struct ShadowCandidate;
+const MAX_SHADOW_LIGHTS: usize = 6;
+/// Offset between UE auto-exposure bounds and Bevy's log-luminance range (tuned by eye).
+const EXPOSURE_OFFSET: f32 = 0.0;
+/// Stand-in fill for Lumen indirect bounce (cd/m2); the level's skylight is mostly occluded indoors.
+const AMBIENT: f32 = 20.0;
 #[derive(serde::Deserialize)]
 struct Start {
     loc_cm: [f32; 3],
@@ -64,12 +103,113 @@ fn setup(mut cmd: Commands, assets: Res<AssetServer>, mut ambient: ResMut<Global
             player.0.vel = Vec3::ZERO;
             st.frames = 5;
         });
-    // The map's lights are not exported: a dim sun (shadowed, so interiors stay shaded) plus a strong ambient fill.
-    cmd.spawn((
-        DirectionalLight { illuminance: 10_000.0, shadow_maps_enabled: true, ..default() },
-        Transform::from_xyz(30.0, 60.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
-    ambient.brightness = 1200.0; // ponytail: interior lights not exported; grey-box levels keep auto exposure (and the unlit lens housing) sane
+    if info.lights.is_empty() {
+        // Fallback when scene.json has no lights: dim shadowed sun + strong ambient fill.
+        cmd.spawn((DirectionalLight { illuminance: 10_000.0, shadow_maps_enabled: true, ..default() }, Transform::from_xyz(30.0, 60.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y)));
+        ambient.brightness = 1200.0;
+    } else {
+        ambient.brightness = AMBIENT;
+        for l in &info.lights {
+            spawn_light(&mut cmd, l);
+        }
+        if let Some(p) = info.post.iter().find(|p| p.level.ends_with("GlobalPostProcess")) {
+            cmd.insert_resource(MapExposure(p.ae_min + EXPOSURE_OFFSET, p.ae_max + EXPOSURE_OFFSET));
+        }
+    }
+}
+
+/// UE intensity -> candela (point/spot/rect) or lux (directional). Unitless: 1/625 cd per unit (UE: default 5000 = 8 cd);
+/// Lumens: divided by the emission solid angle (sphere 4pi, spot cone, rect Lambert pi).
+fn candela(l: &UeLight) -> f32 {
+    use std::f32::consts::PI;
+    let outer = l.outer_deg.to_radians().clamp(0.01, 1.55);
+    if l.units.contains("Candelas") {
+        l.intensity
+    } else if l.units.contains("Lumens") {
+        l.intensity / match l.kind.as_str() { "spot" => 2.0 * PI * (1.0 - outer.cos()), "rect" => PI, _ => 4.0 * PI }
+    } else {
+        l.intensity / 625.0
+    }
+}
+
+/// Kelvin -> RGB tint (Tanner Helland approximation).
+fn kelvin(t: f32) -> [f32; 3] {
+    let t = t.clamp(1000.0, 15000.0) / 100.0;
+    let r = if t <= 66.0 { 255.0 } else { 329.7 * (t - 60.0).powf(-0.1332) };
+    let g = if t <= 66.0 { 99.47 * t.ln() - 161.12 } else { 288.1 * (t - 60.0).powf(-0.0755) };
+    let b = if t >= 66.0 { 255.0 } else if t <= 19.0 { 0.0 } else { 138.5 * (t - 10.0).ln() - 305.04 };
+    [r, g, b].map(|v| (v / 255.0).clamp(0.0, 1.0))
+}
+
+fn spawn_light(cmd: &mut Commands, l: &UeLight) {
+    use std::f32::consts::PI;
+    let pos = ue_to_bevy(l.loc_cm);
+    let fwd = ue_to_bevy(l.dir_ue).normalize_or(Vec3::NEG_Z);
+    let up = if fwd.y.abs() > 0.99 { Vec3::X } else { Vec3::Y };
+    let tf = Transform::from_translation(pos).looking_to(fwd, up);
+    let mut c = l.color.map(|v| (v as f32 / 255.0).powf(2.2));
+    if l.temp > 0.0 {
+        let k = kelvin(l.temp);
+        c = [c[0] * k[0].powf(2.2), c[1] * k[1].powf(2.2), c[2] * k[2].powf(2.2)];
+    }
+    let color = Color::linear_rgb(c[0], c[1], c[2]);
+    let cd = candela(l);
+    let range = (l.atten_cm * 0.01).max(0.5);
+    let radius = l.src_radius * 0.01;
+    // Bevy point/spot intensity is lumens = 4pi * candela.
+    let lm = cd * 4.0 * PI;
+    let e = match l.kind.as_str() {
+        "point" if cd > 0.0 => cmd.spawn((PointLight { color, intensity: lm, range, radius, shadow_maps_enabled: false, ..default() }, tf)).id(),
+        "spot" if cd > 0.0 => {
+            let outer = l.outer_deg.to_radians().clamp(0.02, 1.5);
+            cmd.spawn((SpotLight { color, intensity: lm, range, radius, outer_angle: outer, inner_angle: l.inner_deg.to_radians().clamp(0.0, outer * 0.95), shadow_maps_enabled: false, ..default() }, tf)).id()
+        }
+        "rect" if cd > 0.0 => {
+            let (w, h) = (l.rect_w * 0.01, l.rect_h * 0.01);
+            cmd.spawn((RectLight { color, intensity: cd * PI * (w * h).max(0.01), range, width: w, height: h }, tf)).id()
+        }
+        "directional" if l.intensity > 0.0 => {
+            cmd.spawn((DirectionalLight { color, illuminance: l.intensity, shadow_maps_enabled: l.shadows, ..default() }, tf));
+            return;
+        }
+        _ => return,
+    };
+    if l.shadows && matches!(l.kind.as_str(), "point" | "spot") {
+        cmd.entity(e).insert(ShadowCandidate);
+    }
+}
+
+/// Shadow maps only on the nearest few shadow-casting local lights (the shadow maps are the cost, not the lights).
+fn shadow_nearest(
+    cam: Query<&GlobalTransform, With<Camera3d>>,
+    mut points: Query<(Entity, &GlobalTransform, &mut PointLight), With<ShadowCandidate>>,
+    mut spots: Query<(Entity, &GlobalTransform, &mut SpotLight), With<ShadowCandidate>>,
+) {
+    let Some(p) = cam.iter().next().map(|t| t.translation()) else { return };
+    let mut d: Vec<(f32, Entity)> = points.iter().map(|(e, t, _)| (t.translation().distance_squared(p), e)).chain(spots.iter().map(|(e, t, _)| (t.translation().distance_squared(p), e))).collect();
+    d.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let on: Vec<Entity> = d.iter().take(MAX_SHADOW_LIGHTS).map(|x| x.1).collect();
+    for (e, _, mut l) in &mut points {
+        let v = on.contains(&e);
+        if l.shadow_maps_enabled != v {
+            l.shadow_maps_enabled = v;
+        }
+    }
+    for (e, _, mut l) in &mut spots {
+        let v = on.contains(&e);
+        if l.shadow_maps_enabled != v {
+            l.shadow_maps_enabled = v;
+        }
+    }
+}
+
+fn apply_exposure(ex: Option<Res<MapExposure>>, mut q: Query<&mut bevy::post_process::auto_exposure::AutoExposure>) {
+    let Some(ex) = ex else { return };
+    for mut ae in &mut q {
+        if *ae.range.start() != ex.0 || *ae.range.end() != ex.1 {
+            ae.range = ex.0..=ex.1;
+        }
+    }
 }
 
 fn settle(mut st: ResMut<MapState>) {
