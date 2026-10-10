@@ -369,17 +369,14 @@ pub struct StressAnim {
 }
 impl Default for StressAnim {
     fn default() -> Self {
-        StressAnim { subtle: 2.0, strong: 0.0 }
+        StressAnim { subtle: 0.0, strong: 0.0 }
     }
 }
 
 /// AC_BodycamAnimationComponent "Stress Tick" (matches the recordings: tools/probe_sway.py, subtle rms 0.013-0.018 of sd 0.26-0.34).
 /// `speed_cm` is VSize(GetVelocity), vertical part included.
 pub fn stress_tick(subtle: f32, speed_cm: f32, aiming: bool, stress: f32, dt: f32) -> (f32, f32) {
-    let mr = crate::status::map_range_clamped;
-    let sub_target = if aiming { 0.0 } else { mr(speed_cm, 0.0, 100.0, 0.1, 1.0) };
-    let strong = if aiming { mr(stress, 0.5, 1.0, 0.0, 1.0) } else { mr(stress, 0.0, 1.0, 0.0, 4.0) };
-    (crate::status::finterp_to(subtle, sub_target, dt, 10.0), strong)
+    (crate::status::stress_subtle_step(subtle, dt, speed_cm, aiming), crate::status::stress_strong(stress, aiming))
 }
 
 /// AC "Stress Tick" + the two BAS stress idle clips (StressedIdleSubtle loop, StressedIdleStrong) layered additively on the

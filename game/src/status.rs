@@ -1,5 +1,5 @@
-//! WW_SurvivorStatus (health / stamina / stress) and AC_BodycamCamera's out-of-breath state, ported from the
-//! decompiled Blueprints (extracted/bp/WW_SurvivorStatus.txt, AC_BodycamCamera.txt, GA_Character_Sprint.txt).
+//! WW_SurvivorStatus (health / stamina / stress), ported from the decompiled Blueprints and fitted to the bot-fight
+//! recordings (extracted/bp/WW_SurvivorStatus.txt; tools/probe_status.py -> assets/status_reference.json).
 //! In Bodycam "Stamina" is really fatigue: it rises while sprinting and only drives the breathing sound
 //! (canAccelerate is never set false, so it never blocks sprinting).
 use crate::player::Player;
@@ -11,32 +11,16 @@ pub struct SurvivorStatus {
     pub health_max: f32,
     pub stamina: f32,
     pub stress: f32,
-    /// AC_BodycamCamera.OutOfBreath (0..1), its target and the reset timer.
-    pub out_of_breath: f32,
-    target_out_of_breath: f32,
-    breath_reset_timer: Option<f32>,
-    tick: f32,
-    was_sprinting: bool,
+    /// Seconds into the 1 s "Update Survivor Stat" timer.
+    pub tick: f32,
 }
 
 impl Default for SurvivorStatus {
     fn default() -> Self {
         // Class defaults: Health 100, HealthMax 100, Stress 0.1, Stamina 0.
-        SurvivorStatus {
-            health: 100.0,
-            health_max: 100.0,
-            stamina: 0.0,
-            stress: 0.1,
-            out_of_breath: 0.0,
-            target_out_of_breath: 0.0,
-            breath_reset_timer: None,
-            tick: 0.0,
-            was_sprinting: false,
-        }
+        SurvivorStatus { health: 100.0, health_max: 100.0, stamina: 0.0, stress: 0.1, tick: 0.0 }
     }
 }
-
-const TIME_TO_RESET_BREATH: f32 = 3.0; // AC_BodycamCamera.TimeToResetBreath
 
 /// UE FMath::FInterpTo.
 pub fn finterp_to(current: f32, target: f32, dt: f32, speed: f32) -> f32 {
@@ -63,7 +47,36 @@ pub fn fire_stress(fire_rate: f32) -> f32 {
     map_range_clamped(fire_rate, 0.05, 0.8, 0.025, 0.35)
 }
 
+/// AC_BodycamAnimationComponent "Stress Tick" subtle alpha: FInterpTo(map(speed 0..100 cm/s -> 0.1..1), speed 10); 0 target while aiming.
+/// Fitted to the bot-fight recordings (tools/probe_status.py).
+pub fn stress_subtle_step(subtle: f32, dt: f32, speed_cm: f32, aiming: bool) -> f32 {
+    finterp_to(subtle, if aiming { 0.0 } else { map_range_clamped(speed_cm, 0.0, 100.0, 0.1, 1.0) }, dt, 10.0)
+}
+
+/// Strong alpha: aiming ? map(stress 0.5..1 -> 0..1) : map(stress 0..1 -> 0..4) (no interpolation).
+pub fn stress_strong(stress: f32, aiming: bool) -> f32 {
+    if aiming { map_range_clamped(stress, 0.5, 1.0, 0.0, 1.0) } else { map_range_clamped(stress, 0.0, 1.0, 0.0, 4.0) }
+}
+
 impl SurvivorStatus {
+    /// "Update Survivor Stat" looping 1 s timer: +2 health, then sprinting on ground (Gait 1, speed > 20) -> stamina +0.1,
+    /// otherwise stress -0.1 (clamped 0.1..1) and stamina -0.05. IncreaseStress itself is unclamped.
+    pub fn step(&mut self, dt: f32, sprinting_on_ground: bool) {
+        self.tick += dt;
+        while self.tick >= 1.0 {
+            self.tick -= 1.0;
+            if self.health < self.health_max {
+                self.health += 2.0;
+            }
+            if sprinting_on_ground {
+                self.stamina = (self.stamina + 0.1).clamp(0.0, 1.0);
+            } else {
+                self.stress = (self.stress - 0.1).clamp(0.1, 1.0);
+                self.stamina = (self.stamina - 0.05).clamp(0.0, 1.0);
+            }
+        }
+    }
+
     /// WW_SurvivorStatus.IncreaseStress: unclamped (only the 1 s decay clamps to 0.1..1).
     pub fn increase_stress(&mut self, d: f32) {
         self.stress += d;
@@ -122,42 +135,53 @@ fn stress_sources(
 }
 
 fn update(time: Res<Time>, p: Single<&Player>, mut s: ResMut<SurvivorStatus>) {
-    let dt = time.delta_secs();
     let speed_cm = Vec2::new(p.vel.x, p.vel.z).length() * 100.0;
-    // "Update Survivor Stat": looping 1 s timer started on BeginPlay.
-    s.tick += dt;
-    while s.tick >= 1.0 {
-        s.tick -= 1.0;
-        if s.health < s.health_max {
-            s.health += 2.0;
-        }
-        if p.grounded && speed_cm > 20.0 && p.sprinting {
-            s.stamina = (s.stamina + 0.1).clamp(0.0, 1.0);
-        } else {
-            s.stress = (s.stress - 0.1).clamp(0.1, 1.0);
-            s.stamina = (s.stamina - 0.05).clamp(0.0, 1.0);
-        }
-    }
-    // GA_Character_Sprint OnEndAbility -> AC_BodycamCamera.StartOutOfBreath.
-    if s.was_sprinting && !p.sprinting {
-        s.target_out_of_breath = 1.0;
-    }
-    s.was_sprinting = p.sprinting;
-    // UpdateOutOfBreath: FInterpTo 5; once near the target (> 0.2) arm a 3 s timer that calls StopOutOfBreath.
-    s.out_of_breath = finterp_to(s.out_of_breath, s.target_out_of_breath, dt, 5.0);
-    if let Some(t) = &mut s.breath_reset_timer {
-        *t -= dt;
-        if *t <= 0.0 {
-            s.breath_reset_timer = None;
-            s.target_out_of_breath = 0.0;
-        }
-    } else if (s.out_of_breath - s.target_out_of_breath).abs() <= 0.5 && s.out_of_breath > 0.2 {
-        s.breath_reset_timer = Some(TIME_TO_RESET_BREATH);
-    }
+    s.step(time.delta_secs(), p.grounded && speed_cm > 20.0 && p.sprinting);
+    // ponytail: AC_BodycamCamera.OutOfBreath is never advanced in the real game (UpdateOutOfBreath has no caller;
+    // OutOfBreath/Tremor/HandFatigue stay 0 in every recording), so nothing is ported.
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use serde_json::Value;
+
+    /// Replays the recorded inputs of the bot-fight recordings (assets/status_reference.json, from tools/probe_status.py)
+    /// through the status rules and compares against the recorded curves.
+    #[test]
+    fn replay_matches_bot_fight_recordings() {
+        let j: Value = serde_json::from_str(include_str!("../../assets/status_reference.json")).unwrap();
+        let col = |r: &Value, k: &str| r[k].as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect::<Vec<_>>();
+        for (name, r) in j["recordings"].as_object().unwrap() {
+            let (t, sp, aim) = (col(r, "t"), col(r, "speed_cm"), col(r, "aiming"));
+            let (shots, fr, dmg) = (col(r, "shots"), col(r, "fire_rate"), col(r, "damage"));
+            let exp: Vec<Vec<f32>> = ["stress", "health", "stamina", "subtle", "strong"].iter().map(|k| col(r, k)).collect();
+            let mut s = SurvivorStatus { health: exp[1][0], stress: exp[0][0], stamina: exp[2][0], tick: 1.0 - (r["first_tick"].as_f64().unwrap() as f32 - t[0]), ..default() };
+            let mut sub = exp[3][0];
+            let (mut se, mut worst) = ([0f32; 5], [0f32; 5]);
+            for i in 1..t.len() {
+                let dt = t[i] - t[i - 1];
+                s.step(dt, sp[i] > 150.0); // ponytail: sprint gait proxied by speed (walk 100/125, sprint 325)
+                if shots[i] > 0.0 {
+                    s.increase_stress(shots[i] * fire_stress(fr[i]));
+                }
+                s.health -= dmg[i];
+                sub = stress_subtle_step(sub, dt, sp[i], aim[i] > 0.5);
+                let got = [s.stress, s.health, s.stamina, sub, stress_strong(s.stress, aim[i] > 0.5)];
+                for k in 0..5 {
+                    let e = got[k] - exp[k][i];
+                    se[k] += e * e;
+                    worst[k] = worst[k].max(e.abs());
+                }
+            }
+            let n = t.len() as f32;
+            let rms: Vec<f32> = se.iter().map(|x| (x / n).sqrt()).collect();
+            println!("{name}: rms stress/health/stamina/subtle/strong = {rms:.4?} max = {worst:.3?}");
+            // tolerances: one 1 s tick landing a sample off costs 0.1 stress / 2 hp / 0.05-0.1 stamina for a frame or two
+            assert!(rms[0] < 0.03 && rms[1] < 1.0 && rms[2] < 0.03 && rms[3] < 0.05 && rms[4] < 0.12, "{name}: {rms:?}");
+        }
+    }
+
     #[test]
     fn finterp_matches_ue() {
         assert_eq!(super::finterp_to(0.0, 1.0, 0.1, 5.0), 0.5);
