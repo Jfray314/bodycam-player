@@ -71,7 +71,7 @@ pub struct BodycamPostFx {
 impl Default for BodycamPostFx {
     fn default() -> Self {
         Self {
-            distortion: 0.33, distortion_density: 1.0, ca: 0.0045, vignette: 0.5, aberration_fade_exponent: 1.6, // fitted by eye to in-game shots (rainbow fringe reaches mid-edges)
+            distortion: 0.33, distortion_density: 1.0, ca: 0.003, vignette: 0.4, aberration_fade_exponent: 2.0,
             edge_blur: 25.0 * 0.8, blur_fade_exponent: 10.0, sharpen: 0.0, // UE Sharpen default 0
             grain: 0.0, temporal_noise: 0.0, banding: 0.0, // FilmGrainIntensity 0
             dirt: 0.25, dirt_threshold: 4.0, dirt_gain: 0.6, exposure_bias: 0.0,
@@ -162,8 +162,7 @@ fn attach(
             base_color_texture: Some(assets.load("textures/LENS_VEIW_05.png")),
             // Texture is near-black (rgb ~1,2,3 /255) but auto exposure lifts the dim map ~5 EV, which blew its
             // faint blue tint up to bright blue corners. Black keeps only the shape (alpha); CA adds the rim colour.
-            // Alpha 0.7: in-game captures (user refs 2026-10-13) show only a soft dark smudge, never solid black corners.
-            base_color: Color::BLACK.with_alpha(0.7),
+            base_color: Color::BLACK,
             alpha_mode: AlphaMode::Blend,
             unlit: true,
             ..default()
@@ -184,8 +183,8 @@ struct BodycamBorders;
 
 /// Calibration: the cooked FishEye material graph is compiled away, so its UV mapping is unknown. Fitted to in-game
 /// captures, where the housing only shades the screen corners (the raw plane at 23 cm puts them deep in the black);
-/// 1.08 still left hard black blobs in the corners vs the user's in-game reference shots.
-const BORDERS_FIT: f32 = 1.25;
+/// 1.15: user in-game refs show the housing only as a dark arc in the extreme corners.
+const BORDERS_FIT: f32 = 1.15;
 
 /// SpringArmBodycamBorders: TargetArmLength 23 cm forward, CameraLagSpeed 50, CameraRotationLagSpeed 65
 /// (UE spring-arm lag = exponential interp toward the target each frame).

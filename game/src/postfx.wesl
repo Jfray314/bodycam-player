@@ -33,7 +33,11 @@ fn bil(uv: vec2<f32>) -> vec3<f32> {
     let b = textureLoad(tex, clamp(i + vec2<i32>(1, 0), vec2<i32>(0), mx), 0).rgb;
     let c = textureLoad(tex, clamp(i + vec2<i32>(0, 1), vec2<i32>(0), mx), 0).rgb;
     let d = textureLoad(tex, clamp(i + vec2<i32>(1, 1), vec2<i32>(0), mx), 0).rgb;
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    // Off-viewport: the warp overshoots ~0.065 (height units) at mid-sides and ~0.13 in the corners; in-game the sides
+    // stay (clamped, blurred) and only the corners go dark, so fade between the two.
+    let out = max(max(-uv, uv - 1.0), vec2<f32>(0.0)) * vec2<f32>(dims.x / dims.y, 1.0);
+    let fade = 1.0 - smoothstep(0.075, 0.15, length(out));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y) * fade;
 }
 
 fn vnoise(p: vec2<f32>) -> f32 {
@@ -92,14 +96,17 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let r2_edge = dot((uv_g - 0.5) * 2.0, (uv_g - 0.5) * 2.0) * 0.5; // for later effects
 
     // MI_PP_DiskBlur: blur radius * r^BlurFadeExponent (r = 1 at the frame edge mid-sides).
+    // r = 1 at mid-sides; capped at the full radius (uncapped x2 gave 40 px corner smears the user called tunnel vision).
     let redge = length((in.uv - 0.5) * 2.0);
-    let blur_px = fx.edge_blur * (dims.y / 1080.0) * min(pow(redge, fx.blur_fade_exponent), 2.0)
+    let blur_px = fx.edge_blur * (dims.y / 1080.0) * min(pow(redge, fx.blur_fade_exponent), 1.0)
         + fx.flash_amount * 22.0 + fx.explosion_shake * 10.0;
     let boff = blur_px / dims;
     var col = vec3<f32>(0.0);
-    const N = 16;
+    // Golden-angle disk, rotated per pixel: fixed taps ghosted into stair-steps at the 20 px corner radius.
+    const N = 24;
+    let rot = pcg3(vec3<u32>(vec2<u32>(in.position.xy), 9u)).x * 6.2832;
     for (var i = 0; i < N; i++) {
-        let a = f32(i) * 2.39996;
+        let a = f32(i) * 2.39996 + rot;
         let o = vec2<f32>(cos(a), sin(a)) * sqrt((f32(i) + 0.5) / f32(N)) * boff;
         col += vec3<f32>(bil(uv_r + o).r, bil(uv_g + o).g, bil(uv_b + o).b); // UE clamps off-viewport samples
     }
