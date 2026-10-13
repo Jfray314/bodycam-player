@@ -2,7 +2,7 @@
 //! system (near misses -> BulletFly +0.3, hits -> PlayerDamage) and the messy-shooting layers.
 //! F6 toggles it; BODYCAM_GUNFIGHT=1 starts it enabled. The player can shoot it (weapon::Health); it respawns after 3 s.
 use crate::player::{BodycamCamera, IgnoreTraces};
-use crate::status::{BulletFly, PlayerDamage, SurvivorStatus};
+use crate::status::{BulletFly, NearMiss, PlayerDamage, SurvivorStatus};
 use crate::weapon::{Fading, Health, FireFx};
 use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
 use bevy::prelude::*;
@@ -12,6 +12,8 @@ const SHOOTER_DIST: f32 = 13.0; // m in front of the player when it spawns
 const SPREAD_DEG: f32 = 2.5; // half-angle of the aim error cone
 const HIT_RADIUS: f32 = 0.3; // m, around the camera
 const WHIZ_RADIUS: f32 = 3.0; // m, closest approach that still counts as a near miss
+const MAX_WHIZZ_BY_RADIUS: f32 = 4.0; // m, GA_Fire_Base.MaxWhizzByRadius 400 cm: crack + whiz audio
+const SHOOTER_WEAPON: &str = "M4A1"; // sound set of the shooter's gun
 const DAMAGE: f32 = 8.0;
 
 #[derive(Resource)]
@@ -85,6 +87,7 @@ fn shoot(
     fx: Res<FireFx>,
     mut dmg: MessageWriter<PlayerDamage>,
     mut whiz: MessageWriter<BulletFly>,
+    mut near: MessageWriter<NearMiss>,
 ) {
     let now = time.elapsed_secs();
     if g.enabled {
@@ -129,6 +132,9 @@ fn shoot(
         let reaches = t > 0.0 && wall.is_none_or(|w| w > t - 0.1);
         let len = if reaches { t.max(0.5) } else { wall.unwrap_or(60.0) };
         if reaches {
+            if miss <= MAX_WHIZZ_BY_RADIUS {
+                near.write(NearMiss { row: SHOOTER_WEAPON.into(), origin_dist_cm: to.length() * 100.0, closest_dist_cm: miss * 100.0 });
+            }
             if miss < HIT_RADIUS {
                 dmg.write(PlayerDamage(DAMAGE));
             } else if miss < WHIZ_RADIUS {

@@ -99,10 +99,18 @@ pub struct BulletFly {
     pub distance_cm: f32,
 }
 
+/// GA_Fire_Base.CheckNearlyPlayer (player within MaxWhizzByRadius 400 cm of the bullet segment) -> AC_BodycamCamera.GettingShot.
+#[derive(Message)]
+pub struct NearMiss {
+    pub row: String,
+    pub origin_dist_cm: f32,
+    pub closest_dist_cm: f32,
+}
+
 pub struct StatusPlugin;
 impl Plugin for StatusPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SurvivorStatus>().add_message::<PlayerDamage>().add_message::<BulletFly>().add_systems(Update, (update, stress_sources));
+        app.init_resource::<SurvivorStatus>().add_message::<PlayerDamage>().add_message::<BulletFly>().add_message::<NearMiss>().add_systems(Update, (update, stress_sources));
     }
 }
 

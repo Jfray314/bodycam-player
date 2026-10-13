@@ -125,6 +125,14 @@ fn main() {
         let pkg = format!("/Game/{}", rel.to_string_lossy().replace('\\', "/"));
         if is_cue(&root, &pkg) { b.cue(&pkg) }
     }
+    // GoPro camera-adjust cues (plugin content, played by A_FP_GoPro_Adjust*_Montage notifies).
+    let gopro = "Plugins/BodycamAnimationFramework/Content/Animations/Gopro/Sound";
+    let mut gf = vec![];
+    walk(&root.join(gopro), &mut gf);
+    for f in gf {
+        let pkg = format!("/BodycamAnimationFramework/Animations/Gopro/Sound/{}", f.file_stem().unwrap().to_string_lossy());
+        if is_cue(&root, &pkg) { b.cue(&pkg) }
+    }
 
     // Weapon cosmetic sounds (DT_WeaponItems) by row name.
     let dt = load(&root, "/Game/BodycamCore/ItemsDefinition/Gameplay/DT_WeaponItems").expect("DT_WeaponItems");
