@@ -70,6 +70,8 @@ switch (cmd)
     case "animskel": // animskel <asset>... -> asset, skeleton, duration
         foreach (var a in args.Skip(4)) { try { var q = provider.LoadPackageObject<UAnimSequence>(a); Console.WriteLine($"{a}	{q.Skeleton?.Name}	{q.SequenceLength}"); } catch (Exception ex) { Console.WriteLine($"{a}	ERR {ex.Message}"); } }
         break;
+    case "tex": // tex <asset>... -> <outDir>/<Name>.png
+        foreach (var a in args.Skip(4)) if (provider.LoadPackageObject<UTexture2D>(a) is UTexture2D t) SaveTexture(t, outDir); break;
     case "all": ExportAll(args.Length > 4 ? args[4].Split(',') : null); break;
     case "props": // props <asset> -> every export's property list
         foreach (var e in provider.LoadPackage(args[4]).GetExports()) { Console.WriteLine("## " + e.Name + " : " + e.ExportType); foreach (var q in e.Properties) Console.WriteLine("  " + q.Name + " = " + q.Tag?.GenericValue); }

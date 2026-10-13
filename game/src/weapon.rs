@@ -276,30 +276,83 @@ pub struct Health(pub f32);
 #[derive(Component)]
 pub(crate) struct Fading(pub f32);
 
-/// Simple moving effect (smoke puff, ejected shell, impact dust): velocity, gravity, growth rate per second.
+/// Moving effect (smoke puff, impact dust/debris): velocity, gravity (m/s2), growth rate (scale/s), age/life, start alpha
+/// (material is per-particle so alpha can fade), camera-facing sprite or not.
 #[derive(Component)]
 struct Particle {
     vel: Vec3,
     gravity: f32,
     grow: f32,
+    age: f32,
+    life: f32,
+    alpha: f32,
+    mat: Option<Handle<StandardMaterial>>,
+    billboard: bool,
 }
 
-/// Placeholder meshes/materials for the fire effects (tracer, impact decal + dust, muzzle smoke, shell).
+/// Surface class of a hit: BallisticsVFX FXMaterialDataTable_GenericBullets rows by EPhysicalSurface.
+/// Default / SurfaceType2 / 50 = Concrete (Concrete_impact_Dyn + Decals_Concrete), 6/36/37/51 = Wood (Wood_impact_Dyn + Decals_Wood),
+/// 15/16 = Metal (MetalDull/Metal_impact_Dyn2 + Decals_Metal). Other rows fall back to concrete.
+#[derive(Clone, Copy)]
+enum Surf {
+    Concrete,
+    Metal,
+    Wood,
+}
+impl Surf {
+    fn of(surface: Option<u8>) -> Self {
+        match surface {
+            Some(15 | 16) => Surf::Metal,
+            Some(6 | 36 | 37 | 51) => Surf::Wood,
+            _ => Surf::Concrete,
+        }
+    }
+}
+
+/// Fire effects: tracer, per-surface bullet-hole decal (4 atlas quadrants each), smoke sprite, debris bit, shell.
 #[derive(Resource)]
 pub(crate) struct FireFx {
     pub tracer: (Handle<Mesh>, Handle<StandardMaterial>),
-    decal: (Handle<Mesh>, Handle<StandardMaterial>),
-    puff: (Handle<Mesh>, Handle<StandardMaterial>),
+    decals: [(Vec<Handle<Mesh>>, Handle<StandardMaterial>); 3],
+    quad: Handle<Mesh>,
+    smoke: Handle<Image>,
+    bit: Handle<Mesh>,
     shell: (Handle<Mesh>, Handle<StandardMaterial>),
+}
+
+/// Decal quad showing one quadrant of the 2x2 decal atlas (Decals/Textures/*_1: 512 px, 4 hole variants in RGBA).
+fn atlas_quad(meshes: &mut Assets<Mesh>, size: f32, qx: f32, qy: f32) -> Handle<Mesh> {
+    let mut m = Rectangle::new(size, size).mesh().build();
+    // Rectangle vertex order: +x+y, -x+y, -x-y, +x-y.
+    let uv: Vec<[f32; 2]> = [[1.0, 0.0], [0.0, 0.0], [0.0, 1.0], [1.0, 1.0]].iter().map(|u| [(qx + u[0]) * 0.5, (qy + u[1]) * 0.5]).collect();
+    m.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
+    meshes.add(m)
 }
 
 fn setup_fx(mut cmd: Commands, assets: Res<AssetServer>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
     let brass = mats.add(StandardMaterial { base_color: Color::srgb(0.78, 0.6, 0.3), metallic: 1.0, perceptual_roughness: 0.35, ..default() });
-    let mut mat = |c: Color, e: LinearRgba, a: AlphaMode| mats.add(StandardMaterial { base_color: c, emissive: e, unlit: true, alpha_mode: a, cull_mode: None, ..default() });
+    let tracer = mats.add(StandardMaterial { base_color: Color::srgb(1.0, 0.9, 0.5), emissive: LinearRgba::rgb(8.0, 6.0, 2.0), unlit: true, cull_mode: None, ..default() });
+    // DecalSize (5,5,5) cm half-extents in every FXMaterialData row -> 10 cm quad.
+    let mut decal = |tex: &str| {
+        let m = mats.add(StandardMaterial {
+            base_color_texture: Some(assets.load(format!("textures/fx/{tex}.png"))),
+            base_color: Color::srgb(0.22, 0.22, 0.22), // ponytail: unlit grey atlas looked like a light smear; darkened by eye
+            unlit: true,
+            alpha_mode: AlphaMode::Blend,
+            cull_mode: None,
+            ..default()
+        });
+        let quads = (0..4).map(|i| atlas_quad(&mut meshes, 0.10, (i % 2) as f32, (i / 2) as f32)).collect();
+        (quads, m)
+    };
+    let decals = [decal("decal_concrete"), decal("decal_metal"), decal("decal_wood")];
     cmd.insert_resource(FireFx {
-        tracer: (meshes.add(Cuboid::new(0.01, 0.01, 1.0)), mat(Color::srgb(1.0, 0.9, 0.5), LinearRgba::rgb(8.0, 6.0, 2.0), AlphaMode::Opaque)),
-        decal: (meshes.add(Circle::new(0.03)), mat(Color::srgba(0.04, 0.04, 0.04, 0.85), LinearRgba::BLACK, AlphaMode::Blend)),
-        puff: (meshes.add(Sphere::new(0.03)), mat(Color::srgba(0.7, 0.7, 0.7, 0.3), LinearRgba::BLACK, AlphaMode::Blend)),
+        tracer: (meshes.add(Cuboid::new(0.01, 0.01, 1.0)), tracer),
+        decals,
+        quad: meshes.add(Rectangle::new(1.0, 1.0)),
+        // whisp_One_512_8x8 frame (4,3): the smoke/dust sprite of the Dust emitters (Whisps_trans) and muzzle smoke.
+        smoke: assets.load("textures/fx/smoke.png"),
+        bit: meshes.add(Cuboid::new(0.012, 0.012, 0.012)),
         // SM_Shell_9mm_Empty (tools/shell_glb.py), the SpawnShell default mesh, in the gun frame.
         // Brass instead of the glb's material: Bevy 0.20 glb sub-assets load as GltfMaterial, not StandardMaterial.
         shell: (assets.load("models/shell.glb#Mesh0/Primitive0"), brass),
@@ -562,6 +615,7 @@ fn fire(
     mut ray: MeshRayCast,
     mut targets: Query<(Option<&Name>, Option<&SurfaceMat>, Option<&mut Health>, Has<crate::player::IgnoreTraces>)>,
     fx: Res<FireFx>,
+    mut mats: ResMut<Assets<StandardMaterial>>,
     mut fired: MessageWriter<Fired>,
     mut dry: MessageWriter<DryFire>,
     mut regrip: MessageWriter<Regrip>,
@@ -642,7 +696,8 @@ fn fire(
                     cmd.entity(e).despawn();
                 }
             }
-            impact_fx(&mut cmd, &fx, pt, n);
+            let surf = Surf::of(targets.get(e).ok().and_then(|t| t.1.map(|m| m.0)));
+            impact_fx(&mut cmd, &fx, &mut mats, surf, pt, n);
             if absorb * mult <= MIN_BULLET_MULT {
                 end = pt; // the trail stops where the bullet does
             }
@@ -656,9 +711,18 @@ fn fire(
             crate::player::IgnoreTraces,
         ));
     }
-    // Muzzle flash
-    cmd.spawn((PointLight { intensity: 200_000.0, color: Color::srgb(1.0, 0.8, 0.5), ..default() }, Transform::from_translation(origin + aim_dir * 0.1), Fading(0.05)));
-    // ponytail: muzzle smoke (Niagara) not ported; the sphere stand-in looked wrong.
+    // WEP.PointLight: orange (1800 K), visible for 1.5 frames (RetriggerableDelay(1.5 * WorldDeltaSeconds)) on SpawnFireParticles.
+    // UE places it 50 cm ahead of the gun; Intensity 40 cd there is not comparable to Bevy lumens (ponytail: 40k lm at 30 cm, tuned by eye: 200k at 50 cm blew the exposure out).
+    cmd.spawn((PointLight { intensity: 40_000.0, range: 6.0, color: Color::srgb(1.0, 0.55, 0.2), ..default() }, Transform::from_translation(origin + aim_dir * 0.3), Fading(time.delta_secs() * 1.5)));
+    // SpawnFireParticles: MuzzleSmoke ParticleSystem at BulletSpawnOrigin, scale = MapRange(Damage, 0..100 -> 0.1..2.0); skipped while aiming.
+    // ponytail: the system asset (cosmetic tag, default per skin) is not in the dump; two drifting smoke sprites stand in.
+    if !p.aiming {
+        let scale = crate::status::map_range_clamped(s.damage.unwrap_or(30.0), 0.0, 100.0, 0.1, 2.0);
+        for _ in 0..2 {
+            let v = aim_dir * rng.random_range(0.3..0.8) + Vec3::new(rng.random_range(-0.1..0.1), rng.random_range(0.2..0.5), rng.random_range(-0.1..0.1));
+            smoke(&mut cmd, &fx, &mut mats, origin + aim_dir * 0.05, v, 0.05 + 0.06 * scale, 1.0, 0.18, Color::srgb(0.75, 0.75, 0.75));
+        }
+    }
     // WEP.PullSliderLogic: on the shot, or on the Fire montage's PullSlider notify when Settings.bUsePullSliderNotify.
     let w = &inv.slots[cur];
     if w.anims["bUsePullSliderNotify"].as_bool().unwrap_or(false) {
@@ -671,38 +735,78 @@ fn fire(
     fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming, fire_rate: s.fire_rate.unwrap_or(0.1) });
 }
 
-fn puff(cmd: &mut Commands, fx: &FireFx, at: Vec3, vel: Vec3, gravity: f32, grow: f32, life: f32) {
+/// Camera-facing smoke sprite (whisp_One sheet): grows 1.5x its size per second, alpha fades from `alpha` over `life`.
+#[allow(clippy::too_many_arguments)]
+fn smoke(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial>, at: Vec3, vel: Vec3, size: f32, life: f32, alpha: f32, tint: Color) {
+    let mat = mats.add(StandardMaterial { base_color_texture: Some(fx.smoke.clone()), base_color: tint.with_alpha(alpha), unlit: true, alpha_mode: AlphaMode::Blend, cull_mode: None, ..default() });
     cmd.spawn((
-        Mesh3d(fx.puff.0.clone()),
-        MeshMaterial3d(fx.puff.1.clone()),
-        Transform::from_translation(at),
-        Particle { vel, gravity, grow },
+        Mesh3d(fx.quad.clone()),
+        MeshMaterial3d(mat.clone()),
+        Transform::from_translation(at).with_scale(Vec3::splat(size)),
+        Particle { vel, gravity: 0.0, grow: size * 1.5, age: 0.0, life, alpha, mat: Some(mat), billboard: true },
         Fading(life),
         crate::player::IgnoreTraces,
     ));
 }
 
-/// SpawnImpactEffect placeholder: dark bullet-hole decal on the surface (long-lived) + a short dust puff.
-/// ponytail: the game's Decals_* textures / Niagara impacts aren't ported.
-fn impact_fx(cmd: &mut Commands, fx: &FireFx, pt: Vec3, n: Vec3) {
-    if n != Vec3::ZERO {
+/// SpawnImpactEffect: Cubit_ImpactFX_Spawner picks the FXMaterialDataTable row by surface: decal (10 cm, random hole + roll) +
+/// the row's Concrete/Wood/Metal_impact_Dyn Cascade system. Its emitters (counts/velocities are in unparsed distributions, so
+/// the numbers below are ponytail: guesses): Dust x2 (whisp sprites), debris bits (gravity -1000 cm/s2 for concrete,
+/// Spattering -690), Metal adds Sparks (gravity -960 cm/s2, enabled only in the metal row).
+fn impact_fx(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial>, surf: Surf, pt: Vec3, n: Vec3) {
+    if n == Vec3::ZERO {
+        return;
+    }
+    let mut rng = rand::rng();
+    let (i, dust, bit_col) = match surf {
+        Surf::Concrete => (0, Color::srgb(0.62, 0.6, 0.57), Color::srgb(0.5, 0.48, 0.45)),
+        Surf::Metal => (1, Color::srgb(0.55, 0.55, 0.55), Color::srgb(0.9, 0.85, 0.7)),
+        Surf::Wood => (2, Color::srgb(0.55, 0.42, 0.28), Color::srgb(0.45, 0.3, 0.15)),
+    };
+    let (quads, dmat) = &fx.decals[i];
+    cmd.spawn((
+        Mesh3d(quads[rng.random_range(0..4)].clone()),
+        MeshMaterial3d(dmat.clone()),
+        // ponytail: decal life not in the dump (Cubit spawner lifespan unparsed); 30 s.
+        Transform::from_translation(pt + n * 0.003).with_rotation(Quat::from_rotation_arc(Vec3::Z, n) * Quat::from_rotation_z(rng.random_range(0.0..std::f32::consts::TAU))),
+        Fading(30.0),
+        crate::player::IgnoreTraces,
+    ));
+    let jitter = |rng: &mut rand::rngs::ThreadRng| Vec3::new(rng.random_range(-1.0..1.0), rng.random_range(-1.0..1.0), rng.random_range(-1.0..1.0));
+    for _ in 0..3 {
+        smoke(cmd, fx, mats, pt + n * 0.02, n * rng.random_range(0.2..0.6) + jitter(&mut rng) * 0.2, 0.06, 0.6, 0.45, dust);
+    }
+    let (count, speed, g) = match surf {
+        Surf::Metal => (8, 4.0, 9.6),
+        _ => (6, 2.5, 10.0),
+    };
+    for _ in 0..count {
+        let mat = mats.add(StandardMaterial { base_color: bit_col, emissive: if matches!(surf, Surf::Metal) { LinearRgba::rgb(6.0, 4.0, 1.5) } else { LinearRgba::BLACK }, unlit: matches!(surf, Surf::Metal), ..default() });
+        let life = rng.random_range(0.3..0.7);
         cmd.spawn((
-            Mesh3d(fx.decal.0.clone()),
-            MeshMaterial3d(fx.decal.1.clone()),
-            Transform::from_translation(pt + n * 0.002).with_rotation(Quat::from_rotation_arc(Vec3::Z, n)),
-            Fading(30.0),
+            Mesh3d(fx.bit.clone()),
+            MeshMaterial3d(mat),
+            Transform::from_translation(pt + n * 0.01),
+            Particle { vel: (n + jitter(&mut rng) * 0.7).normalize_or_zero() * speed * rng.random_range(0.4..1.0), gravity: g, grow: 0.0, age: 0.0, life, alpha: 1.0, mat: None, billboard: false },
+            Fading(life),
             crate::player::IgnoreTraces,
         ));
     }
-    puff(cmd, fx, pt, n * 0.6, 0.0, 2.0, 0.3);
 }
 
-fn particles(time: Res<Time>, mut q: Query<(&mut Transform, &mut Particle)>) {
+fn particles(time: Res<Time>, cam: Single<&GlobalTransform, With<BodycamCamera>>, mut mats: ResMut<Assets<StandardMaterial>>, mut q: Query<(&mut Transform, &mut Particle)>) {
     let dt = time.delta_secs();
     for (mut t, mut p) in &mut q {
         p.vel.y -= p.gravity * dt;
         t.translation += p.vel * dt;
         t.scale += Vec3::splat(p.grow * dt);
+        p.age += dt;
+        if p.billboard {
+            t.rotation = cam.rotation();
+        }
+        if let Some(mut m) = p.mat.as_ref().and_then(|h| mats.get_mut(h)) {
+            m.base_color.set_alpha(p.alpha * (1.0 - p.age / p.life).clamp(0.0, 1.0));
+        }
     }
 }
 
