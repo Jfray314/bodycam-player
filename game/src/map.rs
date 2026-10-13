@@ -2,6 +2,9 @@
 //! Falls back to the grey-box range in main.rs when the asset is missing.
 //! Collision: ray casts against the map's render meshes (no physics crate in the project).
 use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings, RayCastBackfaces, RayCastVisibility};
+use bevy::camera::Exposure;
+use bevy::curve::cubic_splines::LinearSpline;
+use bevy::post_process::auto_exposure::{AutoExposure, AutoExposureCompensationCurve};
 use bevy::prelude::*;
 use bevy::world_serialization::{WorldAssetRoot, WorldInstanceReady};
 use crate::player::Player;
@@ -66,17 +69,29 @@ struct UePost {
     ae_max: f32,
     level: String,
 }
-/// Auto-exposure range (EV) from the level's PostProcessVolume, applied to the camera by `apply_exposure`.
+/// Marks that the level supplies UE auto-exposure; `apply_exposure` configures the camera's AutoExposure from it.
 #[derive(Resource)]
-struct MapExposure(f32, f32);
+struct MapExposure(Handle<AutoExposureCompensationCurve>);
 /// Marks lights that may cast shadows when among the nearest `MAX_SHADOW_LIGHTS` to the camera.
 #[derive(Component)]
 struct ShadowCandidate;
 const MAX_SHADOW_LIGHTS: usize = 6;
-/// Offset between UE auto-exposure bounds and Bevy's log-luminance range (tuned by eye).
-const EXPOSURE_OFFSET: f32 = 0.0;
+/// UE auto exposure resolved over the three always-loaded unbound PostProcessVolumes (a higher priority only
+/// overrides properties whose bOverride_ flag is set): Lighting_test_2 (prio 20) min -7 / max -2 EV100, LowPercent 40;
+/// GlobalPostProcess (prio 10) speeds 13/13 (its -5.5/-1.5 are not overridden); LobbyB (prio 0) min -7. Histogram method.
+const UE_AE_MIN: f32 = -7.0;
+const UE_AE_MAX: f32 = -2.0;
+const UE_AE_SPEED: f32 = 13.0;
+/// Camera pre-exposure EV100 (Bevy scales the scene by 2^-ev100 / 1.2, the same formula UE uses); the AE ranges are shifted by it.
+const CAM_EV100: f32 = 4.0;
+/// Bevy log2 pre-exposed luminance = UE EV100 - this (UE EV100 = log2(L * 100 / 12.5) = log2(8 L)).
+const UE_TO_BEVY: f32 = 3.25 + CAM_EV100; // 3 + log2(1.2) = 3.263, rounded to 1/16 so the curve segments join exactly in f32
+/// Bevy's AE maps the average to 1.0; UE's maps it to middle grey.
+const MIDDLE_GREY: f32 = 0.18;
+/// Histogram span in UE EV100 (Bevy ignores pixels below and clamps those above).
+const UE_HIST: (f32, f32) = (-16.0, 4.0);
 /// Stand-in fill for Lumen indirect bounce (cd/m2); the level's skylight is mostly occluded indoors.
-const AMBIENT: f32 = 20.0;
+const AMBIENT: f32 = 0.2;
 #[derive(serde::Deserialize)]
 struct Start {
     loc_cm: [f32; 3],
@@ -88,7 +103,7 @@ fn ue_to_bevy(p: [f32; 3]) -> Vec3 {
     Vec3::new(p[1], p[2], -p[0]) * 0.01
 }
 
-fn setup(mut cmd: Commands, assets: Res<AssetServer>, mut ambient: ResMut<GlobalAmbientLight>) {
+fn setup(mut cmd: Commands, assets: Res<AssetServer>, mut ambient: ResMut<GlobalAmbientLight>, mut curves: ResMut<Assets<AutoExposureCompensationCurve>>) {
     let info: SceneInfo = serde_json::from_str(&std::fs::read_to_string(format!("{}/maps/scene.json", root())).expect("scene.json")).expect("scene.json parse");
     let start = ue_to_bevy(info.player_start.loc_cm);
     let yaw = -info.player_start.yaw_deg.to_radians();
@@ -115,9 +130,11 @@ fn setup(mut cmd: Commands, assets: Res<AssetServer>, mut ambient: ResMut<Global
         for l in &info.lights {
             spawn_light(&mut cmd, l);
         }
-        if let Some(p) = info.post.iter().find(|p| p.level.ends_with("GlobalPostProcess")) {
-            cmd.insert_resource(MapExposure(p.ae_min + EXPOSURE_OFFSET, p.ae_max + EXPOSURE_OFFSET));
-        }
+        // UE clamps the metered EV100 to [min, max]; Bevy has no clamp, so fold it into the compensation curve:
+        // target = -avg + c becomes -clamp(avg, lo, hi) + c, i.e. y(avg) = avg - clamp(avg) + c (the histogram itself spans all of UE_HIST).
+        let (x0, x1, lo, hi, c) = (UE_HIST.0 - UE_TO_BEVY, UE_HIST.1 - UE_TO_BEVY, UE_AE_MIN - UE_TO_BEVY, UE_AE_MAX - UE_TO_BEVY, (MIDDLE_GREY.log2() * 16.0).round() / 16.0);
+        let curve = AutoExposureCompensationCurve::from_curve(LinearSpline::new([vec2(x0, x0 - lo + c), vec2(lo, c), vec2(hi, c), vec2(x1, x1 - hi + c)])).expect("exposure curve");
+        cmd.insert_resource(MapExposure(curves.add(curve)));
     }
 }
 
@@ -206,12 +223,16 @@ fn shadow_nearest(
     }
 }
 
-fn apply_exposure(ex: Option<Res<MapExposure>>, mut q: Query<&mut bevy::post_process::auto_exposure::AutoExposure>) {
+fn apply_exposure(mut cmd: Commands, ex: Option<Res<MapExposure>>, mut q: Query<(Entity, &mut AutoExposure), Added<AutoExposure>>) {
     let Some(ex) = ex else { return };
-    for mut ae in &mut q {
-        if *ae.range.start() != ex.0 || *ae.range.end() != ex.1 {
-            ae.range = ex.0..=ex.1;
-        }
+    for (e, mut ae) in &mut q {
+        ae.range = UE_HIST.0 - UE_TO_BEVY..=UE_HIST.1 - UE_TO_BEVY;
+        ae.filter = 0.4..=0.9;
+        // Bevy's shader swaps the two speeds (brightening uses speed_darken); equal here anyway.
+        ae.speed_brighten = UE_AE_SPEED;
+        ae.speed_darken = UE_AE_SPEED;
+        ae.compensation_curve = ex.0.clone();
+        cmd.entity(e).insert(Exposure { ev100: CAM_EV100 });
     }
 }
 
