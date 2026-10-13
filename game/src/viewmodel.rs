@@ -573,14 +573,17 @@ fn root_of_entity(mut e: Entity, root: Entity, parents: &Query<&ChildOf>) -> boo
 /// Grip point (ik_hand_gun at hip idle, camera space) that BAS PoseOffset rotates about.
 const GRIP: Vec3 = Vec3::new(0.09, -0.22, -0.13);
 
-/// BAS ViewmodelOffsets.<key> (PoseOffset / ActionPoseOffset; UE cm, camera space) as a Bevy camera-space transform pivoting on the grip.
+/// BAS ViewmodelOffsets.<key> (PoseOffset / ActionPoseOffset; UE cm, mesh component space) as a Bevy camera-space transform
+/// pivoting on the grip. The FP mesh faces +Y (yaw -90): component (x, y, z) = camera (fwd y, right -x, up z). Measured:
+/// M4A1 hip gun (rec_1791908511) sits 10.2 cm forward, matching only with the 8 cm X offset to the left (as forward it was 18).
 fn pose_offset(anims: &serde_json::Value, key: &str) -> Transform {
     let o = &anims["ViewmodelOffsets"][key];
     let f = |v: &serde_json::Value, k: &str| v[k].as_f64().unwrap_or(0.0) as f32;
     let (t, r) = (&o["Translation"], &o["Rotation"]);
-    // UE (X fwd, Y right, Z up, left-handed) -> Bevy (-Z fwd, X right, Y up): p = (y, z, -x), q = (-y, -z, x, w).
-    let tr = Vec3::new(f(t, "y"), f(t, "z"), -f(t, "x")) * 0.01;
-    let rot = if r.is_object() { Quat::from_xyzw(-f(r, "y"), -f(r, "z"), f(r, "x"), f(r, "w")).normalize() } else { Quat::IDENTITY };
+    // component -> UE camera (y, -x, z), then UE (X fwd, Y right, Z up, left-handed) -> Bevy (-Z fwd, X right, Y up):
+    // p = (Y, Z, -X) = (-x, z, -y), q = (-Y, -Z, X, w) = (x, -z, y, w).
+    let tr = Vec3::new(-f(t, "x"), f(t, "z"), -f(t, "y")) * 0.01;
+    let rot = if r.is_object() { Quat::from_xyzw(f(r, "x"), -f(r, "z"), f(r, "y"), f(r, "w")).normalize() } else { Quat::IDENTITY };
     Transform::from_translation(tr + GRIP) * Transform::from_rotation(rot) * Transform::from_translation(-GRIP)
 }
 
