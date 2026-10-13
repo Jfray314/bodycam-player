@@ -122,14 +122,10 @@ impl AxisState {
     }
 }
 
-/// MagnifiedADSScale (Y, Z) of the sampled M4A1 setup: the aim-pin multiplier of the position nodes.
-// ponytail: MagnifiedADSScale varies with the optic (and wobbles with the camera); the M4A1 iron-sight values are used for all.
-const MAGNIFIED: [f32; 3] = [1.0, 0.2923, 0.3951];
-/// AdsScale pins of the rotation nodes while aiming (x, y, z), constant in the recording.
-// ponytail: literals from the M4A1 recording; no table field matches them (tables hold -2/3/3).
-const ROT_ADS_PIN: [f32; 3] = [1.0, 0.5, 1.0];
-
-fn axis_params(v: &Value, aiming: bool, pins: [f32; 3], gain: f32, first_order: bool) -> [AxisParams; 3] {
+/// The look nodes' AdsScale pins only apply through a magnified optic (node IsAiming = IsAiming && IsScopeCaptureActive,
+/// ABP_Procedural_Sway bytecode; pin = LookPositionSway.AdsScale * CurveVector_ADSSway(|smoothed yaw rate| / 120)).
+// ponytail: magnified optics aren't modelled, so aiming only switches the tables (iron sights / red dots = the recorded case).
+fn axis_params(v: &Value, gain: f32, first_order: bool) -> [AxisParams; 3] {
     let g = |k: &str, i: usize| v[k][["x", "y", "z"][i]].as_f64().unwrap_or(0.0) as f32;
     std::array::from_fn(|i| AxisParams {
         stiffness: g("SpringStiffness", i),
@@ -137,7 +133,7 @@ fn axis_params(v: &Value, aiming: bool, pins: [f32; 3], gain: f32, first_order: 
         speed: g("SpringSpeed", i),
         smooth: g("SmoothDamping", i),
         extra: g("ExtraSmoothing", i),
-        scale: g("Scale", i) * if aiming { pins[i] } else { 1.0 } * gain,
+        scale: g("Scale", i) * gain,
         first_order,
     })
 }
@@ -180,24 +176,19 @@ const SENS_DEG: f32 = 0.0022 * 57.29578; // player.rs SENS (rad per count) in de
 const PIVOT_HIP_UE: Vec3 = Vec3::new(10.6, 2.9, -28.5);
 const PIVOT_ADS_UE: Vec3 = Vec3::new(12.4, 0.2, -14.2);
 
-fn g3(v: &Value, table: &str, field: &str, i: usize) -> f32 {
-    v[table][field][["x", "y", "z"][i]].as_f64().unwrap_or(0.0) as f32
-}
-
 /// Pure spring-bank step used by the system and the tests. Inputs: LookDeltaInput (yaw + = turn right, pitch + = look up, UE
 /// signs; already in node units, this frame's value) and the move axes (fwd, right; +-1). The node parameters switch instantly with IsAiming: aiming uses the
 /// Look* tables, hip the HipLook* tables, on the same springs (recording: node params flip on the key frame).
 fn run(sw: &mut Sway, anims: &Value, ldi: Vec2, mv: Vec2, aiming: bool, dt: f32) {
     let (pos_t, rot_t) = if aiming { ("LookPositionSway", "LookRotationSway") } else { ("HipLookPositionSway", "HipLookRotationSway") };
-    let pos_pins = [1.0, g3(anims, pos_t, "AdsScale", 1) * MAGNIFIED[1], g3(anims, pos_t, "AdsScale", 2) * MAGNIFIED[2]];
-    let pp = axis_params(&anims[pos_t], aiming, pos_pins, GAIN_POS, false);
-    let rp = axis_params(&anims[rot_t], aiming, ROT_ADS_PIN, GAIN_ROT, false);
-    let mp = axis_params(&anims["MovePositionSway"], aiming, [1.0; 3], GAIN_MOVE, true);
+    let pp = axis_params(&anims[pos_t], GAIN_POS, false);
+    let rp = axis_params(&anims[rot_t], GAIN_ROT, false);
+    let mp = axis_params(&anims["MovePositionSway"], GAIN_MOVE, true);
     let (yaw_in, pitch_in) = (ldi.x, ldi.y);
     // Fitted to the recorded gun pose (signs per +1 input): position y -yaw, position z +pitch, rotation yaw +yaw, rotation pitch -pitch.
-    // Position x has no look node. ponytail: the roll (rotation x) sign is unobserved (ADS-only node, no look input while aiming).
+    // Position x has no look node. Roll (+ = cw) follows +yaw (rec_1791908511 ADS flicks, corr 0.82).
     let pos_in = [0.0, -yaw_in, pitch_in];
-    let rot_in = [-yaw_in, -pitch_in, yaw_in];
+    let rot_in = [yaw_in, -pitch_in, yaw_in];
     let mv_in = [mv.x, -mv.y, 0.0];
     let step = |b: &mut Bank, p: &[AxisParams; 3], inp: [f32; 3]| -> Vec3 { Vec3::from_array(std::array::from_fn(|i| b.s[i].step(&p[i], inp[i], dt))) };
     let pos = step(&mut sw.pos, &pp, pos_in) + step(&mut sw.mov, &mp, mv_in);
@@ -547,6 +538,40 @@ mod tests {
         eprintln!("look sway vs recorded gun pose rms: {pc:.3} cm ({:.3} cm signal), {rd:.3} deg ({:.3} deg signal); per axis pos {:?} rot {:?}",
             (psig / (3.0 * n)).sqrt(), (rsig / (3.0 * n)).sqrt(), pos.map(|v| (v / n).sqrt()), rot.map(|v| (v / n).sqrt()));
         assert!(pc < 0.9 * (psig / (3.0 * n)).sqrt() && rd < 0.9 * (rsig / (3.0 * n)).sqrt());
+    }
+
+    /// ADS look sway (M4A1 iron sights, assets/sway_reference.json gun.look_ads) stepped with the recorded node inputs vs the
+    /// recorded gun pose (pitch baseline and LowReadySway removed). Prints RMS (cm, deg).
+    #[test]
+    fn ads_look_sway_matches_recorded_gun_pose() {
+        let r: Value = serde_json::from_str(include_str!("../../assets/sway_reference.json")).unwrap();
+        let l = &r["gun"]["look_ads"];
+        let s = &l["series"];
+        let (t, ldx, ldy) = (col(&s["t"]), col(&s["ldi_x"]), col(&s["ldi_y"]));
+        let origin = Vec3::from_array(col(&l["gun_origin_ads_cm"]).try_into().unwrap());
+        let refs: Vec<Vec<f32>> = ["pos_x", "pos_y", "pos_z", "rot_roll", "rot_pitch", "rot_yaw"].iter().map(|k| col(&s["gun_ref"][*k])).collect();
+        let anims = m4a1();
+        let mut sw = Sway { alpha: 1.0, ..default() };
+        let (mut err, mut sig, mut n, mut xy, mut xx) = ([0f32; 6], [0f32; 6], 0f32, [0f32; 6], [0f32; 6]);
+        for i in 0..t.len() {
+            let dt = if i == 0 { 0.0138 } else { t[i] - t[i - 1] };
+            run(&mut sw, &anims, Vec2::new(ldx[i], ldy[i]), Vec2::ZERO, true, dt);
+            let (p, q) = gun_delta(&sw, origin);
+            for c in 0..6 {
+                let v = if c < 3 { p[c] } else { q[c - 3] };
+                err[c] += (v - refs[c][i]).powi(2);
+                sig[c] += refs[c][i].powi(2);
+                xy[c] += v * refs[c][i];
+                xx[c] += v * v;
+            }
+            n += 1.0;
+        }
+        let (e, s) = (err.map(|v| (v / n).sqrt()), sig.map(|v| (v / n).sqrt()));
+        let fit: [f32; 6] = std::array::from_fn(|c| xy[c] / xx[c].max(1e-9));
+        let corr: [f32; 6] = std::array::from_fn(|c| xy[c] / (xx[c] * sig[c]).sqrt().max(1e-9));
+        eprintln!("ads look sway rms per axis (pos x y z cm, rot roll pitch yaw deg): {e:.2?} vs signal {s:.2?}; best scale {fit:.2?} corr {corr:.2?}");
+        let tot = |a: [f32; 6]| a.iter().map(|v| v * v).sum::<f32>().sqrt();
+        assert!(tot(e) < 0.9 * tot(s));
     }
 
     /// Fast yaw lowers the gun (M4A1 LowerSway: curve -1 at |input| 4.56, AdsScale 25, Scale 8, InterpSpeed 5) and it recovers at rest.
