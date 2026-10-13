@@ -29,7 +29,7 @@ fn action_weight(kind: ActionKind) -> f32 {
     match kind {
         ActionKind::MagCheck | ActionKind::Inspect => 1.0,
         ActionKind::Reload => 0.43,
-        ActionKind::Holster | ActionKind::Draw => 0.0,
+        ActionKind::Holster | ActionKind::Draw | ActionKind::CameraAdjust => 0.0,
     }
 }
 

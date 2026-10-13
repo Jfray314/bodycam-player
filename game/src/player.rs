@@ -163,7 +163,7 @@ pub struct Player {
     smooth_yaw: f32,
     smooth_pitch: f32,
     /// UE Yaw(DeltaTime) = Look.X / dt / 50 (Look.X taken as degrees of yaw input this frame).
-    yaw_rate: f32,
+    pub yaw_rate: f32,
     /// IA_Move X (strafe, right +), Q/E held, and the Spring Camera roll (UE deg, cw +), see ROLL_SPEED.
     move_x: f32,
     lean_pressed: bool,

@@ -162,6 +162,8 @@ pub enum ActionKind {
     Inspect,
     Holster,
     Draw,
+    /// AC_BodycamCamera GoPro adjust montage (camadjust.rs); not an Inventory action.
+    CameraAdjust,
 }
 
 #[derive(Clone, Debug)]
