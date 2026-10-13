@@ -294,13 +294,15 @@ pub(crate) struct FireFx {
 }
 
 fn setup_fx(mut cmd: Commands, assets: Res<AssetServer>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
+    let brass = mats.add(StandardMaterial { base_color: Color::srgb(0.78, 0.6, 0.3), metallic: 1.0, perceptual_roughness: 0.35, ..default() });
     let mut mat = |c: Color, e: LinearRgba, a: AlphaMode| mats.add(StandardMaterial { base_color: c, emissive: e, unlit: true, alpha_mode: a, cull_mode: None, ..default() });
     cmd.insert_resource(FireFx {
         tracer: (meshes.add(Cuboid::new(0.01, 0.01, 1.0)), mat(Color::srgb(1.0, 0.9, 0.5), LinearRgba::rgb(8.0, 6.0, 2.0), AlphaMode::Opaque)),
         decal: (meshes.add(Circle::new(0.03)), mat(Color::srgba(0.04, 0.04, 0.04, 0.85), LinearRgba::BLACK, AlphaMode::Blend)),
         puff: (meshes.add(Sphere::new(0.03)), mat(Color::srgba(0.7, 0.7, 0.7, 0.3), LinearRgba::BLACK, AlphaMode::Blend)),
         // SM_Shell_9mm_Empty (tools/shell_glb.py), the SpawnShell default mesh, in the gun frame.
-        shell: (assets.load("models/shell.glb#Mesh0/Primitive0"), assets.load("models/shell.glb#Material0")),
+        // Brass instead of the glb's material: Bevy 0.20 glb sub-assets load as GltfMaterial, not StandardMaterial.
+        shell: (assets.load("models/shell.glb#Mesh0/Primitive0"), brass),
     });
 }
 
@@ -759,7 +761,9 @@ fn eject_shells(
     // UE cm (x, y, z) -> joint frame (x, -y, z) m.
     let to_joint = |v: Vec3| Vec3::new(v.x, -v.y, v.z) * 0.01;
     for _ in 0..due {
-        let vel = to_joint(Vec3::new(0.0, rng.random_range(50.0..75.0), rng.random_range(100.0..125.0)));
+        // WEP.SpawnShell spawns with the BulletSpawnOrigin rotation (X = bullet dir, Y = right, Z = up), so the Niagara
+        // velocity (0, 50..75, 100..125) cm/s is right + up. Gun joint frame: right = -X, up = +Z.
+        let vel = Vec3::new(-rng.random_range(50.0..75.0), 0.0, rng.random_range(100.0..125.0)) * 0.01;
         let spin = Vec3::new(rng.random_range(0.0..2.0), rng.random_range(0.0..2.0), rng.random_range(1.0..30.0));
         let mut t = jt.compute_transform();
         t.translation = jt.transform_point(to_joint(loc));
