@@ -29,7 +29,7 @@ fn action_weight(kind: ActionKind) -> f32 {
     match kind {
         ActionKind::MagCheck | ActionKind::Inspect => 1.0,
         ActionKind::Reload => 0.43,
-        ActionKind::Holster | ActionKind::Draw | ActionKind::CameraAdjust => 0.0,
+        ActionKind::Holster | ActionKind::Draw | ActionKind::CameraAdjust | ActionKind::FireOut => 0.0,
     }
 }
 
@@ -131,7 +131,7 @@ fn load(mut cmd: Commands, assets: Res<AssetServer>) {
 #[derive(Component)]
 pub struct ArmsRoot;
 #[derive(Component)]
-pub struct GunRoot(&'static str);
+pub struct GunRoot(pub(crate) &'static str);
 
 /// Arms animation state: clip name -> graph node, and what's playing.
 #[derive(Component, Default)]
@@ -334,7 +334,7 @@ fn play_events(
                 len: m.montage.length,
                 pitch: max * action_weight(m.kind),
                 on_arms: true,
-                action: true,
+                action: m.kind != ActionKind::FireOut,
                 blend_in: m.montage.blend_in,
                 blend_out: m.montage.blend_out,
             }
@@ -350,7 +350,8 @@ fn play_events(
         let clip = clip_of(path);
         let on_arms = !p.aiming || is_additive(&clip);
         let b = |k: &str, d: f64| fire["Character"][k].as_f64().unwrap_or(d) as f32;
-        starts.push(Start {
+        // Before the montages: FireOut (PullSliderLogic, same frame) must replace the Fire clip on the gun, not the reverse.
+        starts.insert(0, Start {
             on_arms,
             gun: fire["Weapon"]["path"].as_str().map(clip_of),
             len: b("length", 0.0),
@@ -598,7 +599,7 @@ fn follow_head(
     );
 }
 
-fn root_of_entity(mut e: Entity, root: Entity, parents: &Query<&ChildOf>) -> bool {
+pub(crate) fn root_of_entity(mut e: Entity, root: Entity, parents: &Query<&ChildOf>) -> bool {
     while let Ok(c) = parents.get(e) {
         e = c.parent();
         if e == root {

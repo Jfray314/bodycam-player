@@ -79,7 +79,8 @@ pub struct Montage {
 
 impl Montage {
     fn from(v: &Value) -> Option<Self> {
-        let c = v.get("Character").unwrap_or(v);
+        // Gun-only montages (FireOut) have no Character key; the gun-side clip stands in for it.
+        let c = v.get("Character").or_else(|| v.get("Weapon")).unwrap_or(v);
         Some(Montage {
             path: c.get("path")?.as_str()?.into(),
             length: c.get("length")?.as_f64()? as f32,
@@ -145,6 +146,10 @@ impl Weapon {
         }
         self.ammo = amount;
     }
+    /// First montage of a list key (Fire: the one the viewmodel plays).
+    fn one_of(&self, key: &str) -> Option<Montage> {
+        Montage::from(self.anims.get(key)?.get(0)?)
+    }
     fn one(&self, key: &str) -> Option<Montage> {
         Montage::from(self.anims.get(key)?)
     }
@@ -162,6 +167,8 @@ pub enum ActionKind {
     Inspect,
     Holster,
     Draw,
+    /// WEP.PullSliderLogic on the last round: gun-only FireOut montage (never an Inventory action).
+    FireOut,
     /// AC_BodycamCamera GoPro adjust montage (camadjust.rs); not an Inventory action.
     CameraAdjust,
 }
@@ -244,6 +251,8 @@ pub struct Inventory {
     /// GA_Fire_Base FireStartTime of the current trigger pull and LastFireTime (previous pull's start), seconds.
     fire_start: Option<f32>,
     last_fire_start: f32,
+    /// Seconds until each pending WEP.PullSliderLogic (0 = this shot; PullSlider notify time for bUsePullSliderNotify guns).
+    pull_slider: Vec<f32>,
 }
 
 impl Inventory {
@@ -284,13 +293,14 @@ pub(crate) struct FireFx {
     shell: (Handle<Mesh>, Handle<StandardMaterial>),
 }
 
-fn setup_fx(mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
+fn setup_fx(mut cmd: Commands, assets: Res<AssetServer>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
     let mut mat = |c: Color, e: LinearRgba, a: AlphaMode| mats.add(StandardMaterial { base_color: c, emissive: e, unlit: true, alpha_mode: a, cull_mode: None, ..default() });
     cmd.insert_resource(FireFx {
         tracer: (meshes.add(Cuboid::new(0.01, 0.01, 1.0)), mat(Color::srgb(1.0, 0.9, 0.5), LinearRgba::rgb(8.0, 6.0, 2.0), AlphaMode::Opaque)),
         decal: (meshes.add(Circle::new(0.03)), mat(Color::srgba(0.04, 0.04, 0.04, 0.85), LinearRgba::BLACK, AlphaMode::Blend)),
         puff: (meshes.add(Sphere::new(0.03)), mat(Color::srgba(0.7, 0.7, 0.7, 0.3), LinearRgba::BLACK, AlphaMode::Blend)),
-        shell: (meshes.add(Cuboid::new(0.005, 0.005, 0.02)), mat(Color::srgb(0.8, 0.6, 0.2), LinearRgba::BLACK, AlphaMode::Opaque)),
+        // SM_Shell_9mm_Empty (tools/shell_glb.py), the SpawnShell default mesh, in the gun frame.
+        shell: (assets.load("models/shell.glb#Mesh0/Primitive0"), assets.load("models/shell.glb#Material0")),
     });
 }
 
@@ -304,7 +314,7 @@ impl Plugin for WeaponPlugin {
             .add_message::<HandShake>()
             .add_systems(Startup, setup_fx)
             .add_systems(PostStartup, give_loadout)
-            .add_systems(Update, ((actions, swap, aim, fire, fade, particles).chain(), log_montages));
+            .add_systems(Update, ((actions, swap, aim, fire, eject_shells, fade, particles, shells).chain(), log_montages));
     }
 }
 
@@ -337,7 +347,7 @@ fn give_loadout(mut cmd: Commands, player: Single<Entity, With<Player>>, mut out
     // Dev: BODYCAM_START=<name> equips that gun first (gun audits).
     let start = std::env::var("BODYCAM_START").unwrap_or_else(|_| "M4A1".into());
     slots.sort_by_key(|w| (w.name != start, w.name != "M4A1", w.name != "Glock17", w.name.clone()));
-    let mut inv = Inventory { slots, current: 0, cooldown: 0.0, action: None, r_held: 0.0, fire_start: None, last_fire_start: 0.0 };
+    let mut inv = Inventory { slots, current: 0, cooldown: 0.0, action: None, r_held: 0.0, fire_start: None, last_fire_start: 0.0, pull_slider: vec![] };
     let first = inv.slots[0].one("FirstEquip");
     inv.slots[0].equipped_once = true;
     inv.start(ActionKind::Draw, first, 0, &mut out);
@@ -647,22 +657,15 @@ fn fire(
     // Muzzle flash
     cmd.spawn((PointLight { intensity: 200_000.0, color: Color::srgb(1.0, 0.8, 0.5), ..default() }, Transform::from_translation(origin + aim_dir * 0.1), Fading(0.05)));
     // ponytail: muzzle smoke (Niagara) not ported; the sphere stand-in looked wrong.
-    // Shell ejection (WEP.PullSliderLogic -> SpawnShell). Guns with a PullSlider notify in their Fire montage eject on
-    // that notify instead; ponytail: not ported (pump / bolt guns eject no shell here).
+    // WEP.PullSliderLogic: on the shot, or on the Fire montage's PullSlider notify when Settings.bUsePullSliderNotify.
     let w = &inv.slots[cur];
-    let slider = w.anims["Fire"].to_string().contains("PullSlider");
-    if !slider {
-        let right = aim_dir.cross(Vec3::Y).normalize_or_zero();
-        let vel = right * rng.random_range(1.5..2.5) + Vec3::Y * rng.random_range(1.0..2.0) - aim_dir * 0.3;
-        cmd.spawn((
-            Mesh3d(fx.shell.0.clone()),
-            MeshMaterial3d(fx.shell.1.clone()),
-            Transform::from_translation(origin - aim_dir * 0.35 + right * 0.03).looking_to(right, Vec3::Y),
-            Particle { vel, gravity: 9.8, grow: 0.0 },
-            Fading(2.0),
-            crate::player::IgnoreTraces,
-        ));
+    if w.anims["bUsePullSliderNotify"].as_bool().unwrap_or(false) {
+        let notifies = w.one_of("Fire").map(|m| m.notifies).unwrap_or_default();
+        inv.pull_slider.extend(notifies.iter().filter(|n| n.1 == "PullSlider_C").map(|n| n.0));
+    } else {
+        inv.pull_slider.push(0.0);
     }
+    let w = &inv.slots[cur];
     fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming, fire_rate: s.fire_rate.unwrap_or(0.1) });
 }
 
@@ -698,6 +701,114 @@ fn particles(time: Res<Time>, mut q: Query<(&mut Transform, &mut Particle)>) {
         p.vel.y -= p.gravity * dt;
         t.translation += p.vel * dt;
         t.scale += Vec3::splat(p.grow * dt);
+    }
+}
+
+/// Pistol_Eject Niagara shell (DT_Shell row Pistol, every gun): size 1.5, life 60 s, gravity -980 cm/s2.
+#[derive(Component)]
+struct Shell {
+    vel: Vec3,
+    spin: Vec3,
+    age: f32,
+}
+const SHELL_LIFE: f32 = 60.0;
+const SHELL_CAP: usize = 64;
+const EJECT_SOCKETS: &str = include_str!("../../assets/eject_sockets.json");
+
+/// WEP.PullSliderLogic -> SpawnShell: at the gun's Eject socket with Pistol_Eject velocity (0, 50..75, 100..125) cm/s in socket space;
+/// on the last round it also plays the gun-only FireOut montage.
+// ponytail: the DT_Shell casing sound (Shell_Pistol_Cue) is not in the audio bake, so shells land silently; spin read as rad/s.
+fn eject_shells(
+    mut cmd: Commands,
+    time: Res<Time>,
+    mut inv: Single<&mut Inventory>,
+    fx: Res<FireFx>,
+    guns: Query<(Entity, &GunRoot)>,
+    joints: Query<(Entity, &Name)>,
+    parents: Query<&ChildOf>,
+    globals: Query<&GlobalTransform>,
+    old: Query<(Entity, &Shell)>,
+    mut out: MessageWriter<MontageStarted>,
+) {
+    let dt = time.delta_secs();
+    for t in &mut inv.pull_slider {
+        *t -= dt;
+    }
+    let due = inv.pull_slider.iter().filter(|t| **t <= 0.0).count();
+    inv.pull_slider.retain(|t| *t > 0.0);
+    if due == 0 {
+        return;
+    }
+    let w = &inv.slots[inv.current];
+    if w.ammo == 0
+        && let Some(m) = w.one("FireOut")
+    {
+        out.write(MontageStarted { row: w.name.clone(), kind: ActionKind::FireOut, montage: m });
+    }
+    let Some((gun, g)) = guns.iter().next() else { return };
+    let sockets: HashMap<String, [f32; 3]> = serde_json::from_str(EJECT_SOCKETS).unwrap_or_default();
+    // Socket on the Root bone; guns without one (Glock17) carry it as a SOCKET_Eject bone.
+    let (bone, loc) = match sockets.get(g.0) {
+        Some(l) => ("root", Vec3::from(*l)),
+        None => ("socket_eject", Vec3::ZERO),
+    };
+    let Some(j) = joints.iter().find(|(e, n)| n.as_str().eq_ignore_ascii_case(bone) && crate::viewmodel::root_of_entity(*e, gun, &parents)) else { return };
+    let Ok(jt) = globals.get(j.0) else { return };
+    let mut rng = rand::rng();
+    let mut n = old.iter().count();
+    // UE cm (x, y, z) -> joint frame (x, -y, z) m.
+    let to_joint = |v: Vec3| Vec3::new(v.x, -v.y, v.z) * 0.01;
+    for _ in 0..due {
+        let vel = to_joint(Vec3::new(0.0, rng.random_range(50.0..75.0), rng.random_range(100.0..125.0)));
+        let spin = Vec3::new(rng.random_range(0.0..2.0), rng.random_range(0.0..2.0), rng.random_range(1.0..30.0));
+        let mut t = jt.compute_transform();
+        t.translation = jt.transform_point(to_joint(loc));
+        t.scale = Vec3::splat(1.5);
+        cmd.spawn((
+            Mesh3d(fx.shell.0.clone()),
+            MeshMaterial3d(fx.shell.1.clone()),
+            t,
+            Shell { vel: jt.rotation() * vel, spin, age: 0.0 },
+            crate::player::IgnoreTraces,
+        ));
+        n += 1;
+    }
+    // Cap: drop the oldest.
+    if n > SHELL_CAP {
+        let mut v: Vec<_> = old.iter().collect();
+        v.sort_by(|a, b| b.1.age.total_cmp(&a.1.age));
+        for (e, _) in v.into_iter().take(n - SHELL_CAP) {
+            cmd.entity(e).despawn();
+        }
+    }
+}
+
+/// Shell flight: gravity -980 cm/s2, spin, bounce on the floor (y = 0), despawn after SHELL_LIFE.
+fn shells(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Transform, &mut Shell)>) {
+    let dt = time.delta_secs();
+    for (e, mut t, mut s) in &mut q {
+        s.age += dt;
+        if s.age > SHELL_LIFE {
+            cmd.entity(e).despawn();
+            continue;
+        }
+        if s.vel == Vec3::ZERO {
+            continue; // settled
+        }
+        s.vel.y -= 9.8 * dt;
+        t.translation += s.vel * dt;
+        let spin = s.spin;
+        t.rotate_local(Quat::from_scaled_axis(spin * dt));
+        if t.translation.y < 0.005 {
+            t.translation.y = 0.005;
+            s.vel.y = -s.vel.y * 0.35;
+            s.vel.x *= 0.6;
+            s.vel.z *= 0.6;
+            s.spin *= 0.5;
+            if s.vel.length() < 0.15 {
+                s.vel = Vec3::ZERO;
+            }
+        }
     }
 }
 
