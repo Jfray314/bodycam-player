@@ -567,12 +567,14 @@ pub fn penetrate<T: Eq + std::hash::Hash + Copy>(hits: &[(T, f32)]) -> Vec<(usiz
     out
 }
 
-/// WEP.GetBulletSpawnOrigin / GetInitialFireDirection: origin = the gun's muzzle, yaw = gun yaw,
-/// pitch = gun pitch when aiming, else camera pitch. ponytail: no FireLocation socket in the exported gun
-/// glb; the barrel axis is the gun-local axis most aligned with the camera, the muzzle the far end of the
-/// gun meshes' bounds (centred on the gun) along it.
+/// WEP.GetBulletSpawnOrigin / GetInitialFireDirection: origin = BulletSpawnOrigin (WEP `Scene`, yaw 90 so its X is the
+/// barrel axis) snapped to the barrel part's FireLocation socket (assets/fire_sockets.json, tools/fire_sockets.py);
+/// yaw = barrel yaw, pitch = barrel pitch when aiming, else camera pitch. The barrel axis is the gun-local axis most
+/// aligned with the camera. Guns without a FireLocation (Crossbow) use the far end of the gun meshes' bounds.
 fn muzzle_basis(
-    gun: &Query<(Entity, &GlobalTransform), With<GunRoot>>,
+    gun: &Query<(Entity, &GlobalTransform, &GunRoot)>,
+    joints: &Query<(Entity, &Name, &GlobalTransform)>,
+    parents: &Query<&ChildOf>,
     kids: &Query<&Children>,
     meshes: &Query<(&GlobalTransform, &Mesh3d)>,
     assets: &Assets<Mesh>,
@@ -580,7 +582,7 @@ fn muzzle_basis(
     aiming: bool,
 ) -> (Vec3, Vec3) {
     let cam_fwd = cam.forward().as_vec3();
-    let Ok((root, rgt)) = gun.single() else { return (cam.translation(), cam_fwd) };
+    let Ok((root, rgt, model)) = gun.single() else { return (cam.translation(), cam_fwd) };
     let rot = rgt.rotation();
     let axis = [Vec3::X, Vec3::NEG_X, Vec3::Y, Vec3::NEG_Y, Vec3::Z, Vec3::NEG_Z]
         .into_iter()
@@ -600,7 +602,12 @@ fn muzzle_basis(
         }
     }
     let centre = if n > 0.0 { sum / n } else { rgt.translation() };
-    let origin = centre + gun_fwd * (if n > 0.0 { far } else { centre.dot(gun_fwd) } - centre.dot(gun_fwd));
+    let socket = FIRE_SOCKETS.with(|m| m.get(model.0).cloned());
+    let fire_loc = socket.and_then(|(bone, loc)| {
+        let (_, _, jt) = joints.iter().find(|(e, n, _)| n.as_str().eq_ignore_ascii_case(&bone) && crate::viewmodel::root_of_entity(*e, root, parents))?;
+        Some(jt.transform_point(Vec3::new(loc.x, -loc.y, loc.z) * 0.01)) // UE cm -> joint frame (x, -y, z) m
+    });
+    let origin = fire_loc.unwrap_or_else(|| centre + gun_fwd * (if n > 0.0 { far } else { centre.dot(gun_fwd) } - centre.dot(gun_fwd)));
     let yaw = (-gun_fwd.x).atan2(-gun_fwd.z);
     let pitch = if aiming { gun_fwd.y.clamp(-1.0, 1.0).asin() } else { cam_fwd.y.clamp(-1.0, 1.0).asin() };
     (origin, Vec3::new(-yaw.sin() * pitch.cos(), pitch.sin(), -yaw.cos() * pitch.cos()))
@@ -619,7 +626,8 @@ fn fire(
     mut fired: MessageWriter<Fired>,
     mut dry: MessageWriter<DryFire>,
     mut regrip: MessageWriter<Regrip>,
-    (gun, kids, gun_meshes, mesh_assets): (Query<(Entity, &GlobalTransform), With<GunRoot>>, Query<&Children>, Query<(&GlobalTransform, &Mesh3d)>, Res<Assets<Mesh>>),
+    (gun, kids, gun_meshes, mesh_assets): (Query<(Entity, &GlobalTransform, &GunRoot)>, Query<&Children>, Query<(&GlobalTransform, &Mesh3d)>, Res<Assets<Mesh>>),
+    (joints, parents): (Query<(Entity, &Name, &GlobalTransform)>, Query<&ChildOf>),
 ) {
     let (inv, p) = &mut *q;
     inv.cooldown -= time.delta_secs();
@@ -660,7 +668,7 @@ fn fire(
     inv.cooldown = s.fire_rate.unwrap_or(0.1);
 
     let gt = *cam;
-    let (origin, aim_dir) = muzzle_basis(&gun, &kids, &gun_meshes, &mesh_assets, gt, p.aiming);
+    let (origin, aim_dir) = muzzle_basis(&gun, &joints, &parents, &kids, &gun_meshes, &mesh_assets, gt, p.aiming);
     debug!("shot dir vs camera: yaw {:.2} pitch {:.2} deg", (aim_dir.cross(*gt.forward()).y).asin().to_degrees(), (aim_dir.y.asin() - gt.forward().y.asin()).to_degrees());
     // SpreadX = max yaw, SpreadY = max pitch (GA_Fire_Base), full angles.
     let (sx, sy) = if p.aiming { (s.spread_aim_x, s.spread_aim_y) } else { (s.spread_hip_x, s.spread_hip_y) };
@@ -702,14 +710,8 @@ fn fire(
                 end = pt; // the trail stops where the bullet does
             }
         }
-        let len = origin.distance(end);
-        cmd.spawn((
-            Mesh3d(fx.tracer.0.clone()),
-            MeshMaterial3d(fx.tracer.1.clone()),
-            Transform::from_translation((origin + end) / 2.0).looking_at(end, Vec3::Y).with_scale(Vec3::new(1.0, 1.0, len)),
-            Fading(0.04),
-            crate::player::IgnoreTraces,
-        ));
+        // No trail: GA_Fire_Base.SpawnTrailEffect -> GCN_FireTrail -> WEP.SpawnTrailEffect, whose body is empty in the shipped game.
+        let _ = end;
     }
     // WEP.PointLight: orange (1800 K), visible for 1.5 frames (RetriggerableDelay(1.5 * WorldDeltaSeconds)) on SpawnFireParticles.
     // UE places it 50 cm ahead of the gun; Intensity 40 cd there is not comparable to Bevy lumens (ponytail: 40k lm at 30 cm, tuned by eye: 200k at 50 cm blew the exposure out).
@@ -820,6 +822,14 @@ struct Shell {
 const SHELL_LIFE: f32 = 60.0;
 const SHELL_CAP: usize = 64;
 const EJECT_SOCKETS: &str = include_str!("../../assets/eject_sockets.json");
+
+thread_local! {
+    /// gun -> (bone, FireLocation UE cm), baked by tools/fire_sockets.py.
+    static FIRE_SOCKETS: HashMap<String, (String, Vec3)> = {
+        let raw: HashMap<String, (String, f32, f32, f32)> = serde_json::from_str(include_str!("../../assets/fire_sockets.json")).unwrap_or_default();
+        raw.into_iter().map(|(k, (b, x, y, z))| (k, (b, Vec3::new(x, y, z)))).collect()
+    };
+}
 
 /// WEP.PullSliderLogic -> SpawnShell: at the gun's Eject socket with Pistol_Eject velocity (0, 50..75, 100..125) cm/s in socket space;
 /// on the last round it also plays the gun-only FireOut montage.
