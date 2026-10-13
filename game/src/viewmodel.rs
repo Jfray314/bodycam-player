@@ -658,9 +658,15 @@ fn place_arms(
         }
         // AnimNode_Ads: shift the arms so the gun's AimPoint (last frame's pose, arms-root space) lands on the camera point.
         let mut post = post;
+        // Rotation too: rec_1791925656 has the same gun-in-camera rotation (within 0.1 deg) on 5 different guns, so the node
+        // squares the gun to the view. Gun joint axes (UE x, -y, z) -> camera: UE +Y (muzzle) = view forward, UE +Z = up.
         if let (Some(ap), Some(gt), Ok(rg)) = (gun_aim, gun_bone.and_then(|b| globals.get(b).ok()), globals.get(root)) {
-            let p = post.transform_point(rg.affine().inverse().transform_point3(gt.transform_point(ap)));
-            post = Transform::from_translation(-p * ads.alpha) * post;
+            let g = post.to_matrix() * rg.to_matrix().inverse() * gt.to_matrix();
+            let p = g.transform_point3(ap);
+            let target = Quat::from_mat3(&Mat3::from_cols(Vec3::NEG_X, Vec3::Z, Vec3::Y));
+            let (_, rot, _) = g.to_scale_rotation_translation();
+            let q = Quat::IDENTITY.slerp(target * rot.inverse(), ads.alpha);
+            post = Transform::from_translation(-p * ads.alpha) * Transform::from_translation(p) * Transform::from_rotation(q) * Transform::from_translation(-p) * post;
         }
         if let (Some(j), Ok(rg)) = (*gun_joint, globals.get(root))
             && let Ok(gg) = globals.get(j)
