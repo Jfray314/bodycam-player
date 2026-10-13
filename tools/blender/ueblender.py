@@ -177,7 +177,8 @@ def attach_parts(arm, gun_dir):
             print("PART MISSING", key)
             continue
         parm, meshes = import_item(pj, name="_part_" + key)
-        s = sockets.get(part["socket"].lower())
+        # Missing socket -> last word of the class leaf (AK "Long_Barrel" -> "Barrel"; parts at the root origin were 21 cm short).
+        s = sockets.get(part["socket"].lower()) or sockets.get(part["socket"].split("_")[-1].lower())
         bone = bones.get((s["bone"] if s else "root").lower()) or bones["root"]
         loc = mathutils.Vector((s["loc"][0], -s["loc"][1], s["loc"][2])) / 100 if s else mathutils.Vector()  # UE cm, Y mirrored like the PSK import
         S = mathutils.Matrix.Translation(loc)
