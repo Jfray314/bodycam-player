@@ -51,6 +51,8 @@ All times are **sim seconds after "viewmodel ready"** (arms + gun meshes spawned
 | Env | Effect |
 |---|---|
 | `BODYCAM_MAP=test` | tiny test map: 1 m grid floor (5 m lines darker), stripes + target boards at 5/10/25 m, wall ruler at 30 m, cover, stairs (visual only: flat-ground player), doorway |
+| `BODYCAM_MAP=grid` | big test grid (`game/src/grid.rs`, `bots.rs`): lobby with key board, shooting range (static 5/10/25/50 m, sliding + pop-up targets, respawn 4 s), obstacle course (step/jump walls, crate stairs, ramps, stairs, 1 m corridor, doorway), CQB block (rooms, doorways, windows, cover). Real collision: AABB/wedge list `grid::Colliders` (walls, step-up 0.5 m, ramps), also for bots. 6 CQB bots + 2 course guards: patrol, notice (range + cone + line of sight), burst fire with near-miss/whiz/damage (shared `gunfight::BotGun`), die when shot (head 10x), respawn 6 s |
+| grid keys | F1 lobby, F3 range, F4 course, F5 CQB (teleport); F7 bots hostile/passive; F10 respawn bots (F2 postfx, F6 gunfight). `BODYCAM_START=range\|course\|cqb` teleports at launch; `BODYCAM_AUTO` also takes F1 F3 F4 F5 F7 F10 |
 | `BODYCAM_AUTO="W@0:3,LMB@1:0.5"` | hold key/button at t for d s (keys LMB RMB Ctrl Shift 1-5 R J W A S D Q E Space) |
 | `BODYCAM_SHOTS="0.5,1,2"` + `BODYCAM_SCREENSHOT=shots/foo` | several numbered shots `shots/foo_1.png..` in ONE launch, then exit (`BODYCAM_SCREENSHOT=file.png` alone = one shot at `BODYCAM_SCREENSHOT_AT`, default 0.5) |
 | `BODYCAM_RECORD=dir:fps:secs` | frame sequence `dir/f_0001.png..` with a fixed sim step of 1/fps (deterministic, runs as fast as it renders) |

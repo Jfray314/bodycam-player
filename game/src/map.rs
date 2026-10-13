@@ -22,7 +22,7 @@ fn root() -> String {
     std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into())
 }
 pub fn available() -> bool {
-    if crate::testmap::wanted() {
+    if crate::testmap::wanted() || crate::grid::wanted() {
         return false;
     }
     let r = root();
