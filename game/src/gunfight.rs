@@ -5,6 +5,7 @@ use crate::player::{BodycamCamera, IgnoreTraces};
 use crate::status::{BulletFly, NearMiss, PlayerDamage, SurvivorStatus};
 use crate::weapon::{Fading, Health, FireFx};
 use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use rand::Rng;
 
@@ -78,16 +79,10 @@ fn spawn_shooter(
 fn shoot(
     time: Res<Time>,
     mut g: ResMut<Gunfight>,
-    mut cmd: Commands,
     status: Res<SurvivorStatus>,
     cam: Single<&GlobalTransform, With<BodycamCamera>>,
     mut shooters: Query<(Entity, &mut Shooter, &mut Transform)>,
-    ignore: Query<(), With<IgnoreTraces>>,
-    mut ray: MeshRayCast,
-    fx: Res<FireFx>,
-    mut dmg: MessageWriter<PlayerDamage>,
-    mut whiz: MessageWriter<BulletFly>,
-    mut near: MessageWriter<NearMiss>,
+    mut gun: BotGun,
 ) {
     let now = time.elapsed_secs();
     if g.enabled {
@@ -118,13 +113,41 @@ fn shoot(
         if s.burst_left == 0 {
             s.next_burst = now + rng.random_range(2.0..4.0);
         }
+        gun.fire(&[e], muzzle, target, SPREAD_DEG);
+    }
+}
+
+/// Shared AI gun (gunfight Shooter and grid bots): one shot from `muzzle` at `target` with a `spread_deg` aim-error cone.
+/// Near misses -> NearMiss/BulletFly, hits -> PlayerDamage, plus a tracer. `own` entities are skipped by the ray cast.
+#[derive(SystemParam)]
+pub struct BotGun<'w, 's> {
+    cmd: Commands<'w, 's>,
+    ignore: Query<'w, 's, (), With<IgnoreTraces>>,
+    ray: MeshRayCast<'w, 's>,
+    fx: Res<'w, FireFx>,
+    dmg: MessageWriter<'w, PlayerDamage>,
+    whiz: MessageWriter<'w, BulletFly>,
+    near: MessageWriter<'w, NearMiss>,
+}
+
+impl BotGun<'_, '_> {
+    /// Clear line from `from` to `to` (ignoring `own` and tracers)?
+    pub fn sees(&mut self, own: &[Entity], from: Vec3, to: Vec3) -> bool {
+        let Ok(dir) = Dir3::new(to - from) else { return true };
+        let filter = |x: Entity| !own.contains(&x) && !self.ignore.contains(x);
+        let settings = MeshRayCastSettings::default().with_filter(&filter);
+        self.ray.cast_ray(Ray3d::new(from, dir), &settings).first().is_none_or(|(_, h)| h.distance > from.distance(to) - 0.3)
+    }
+
+    pub fn fire(&mut self, own: &[Entity], muzzle: Vec3, target: Vec3, spread_deg: f32) {
+        let mut rng = rand::rng();
         // Aim at the camera with a random cone error.
         let aim = (target - muzzle).normalize();
-        let (a, r) = (rng.random_range(0.0..std::f32::consts::TAU), SPREAD_DEG.to_radians() * rng.random::<f32>().sqrt());
+        let (a, r) = (rng.random_range(0.0..std::f32::consts::TAU), spread_deg.to_radians() * rng.random::<f32>().sqrt());
         let dir = (Quat::from_rotation_arc(Vec3::NEG_Z, aim) * Quat::from_euler(EulerRot::ZXY, a, r, 0.0).mul_vec3(Vec3::NEG_Z)).normalize();
-        let filter = |x: Entity| x != e && !ignore.contains(x);
+        let filter = |x: Entity| !own.contains(&x) && !self.ignore.contains(x);
         let settings = MeshRayCastSettings::default().with_filter(&filter);
-        let wall = ray.cast_ray(Ray3d::new(muzzle, Dir3::new(dir).unwrap()), &settings).first().map(|(_, h)| h.distance);
+        let wall = self.ray.cast_ray(Ray3d::new(muzzle, Dir3::new(dir).unwrap()), &settings).first().map(|(_, h)| h.distance);
         // Closest approach to the player along the ray.
         let to = target - muzzle;
         let t = to.dot(dir);
@@ -133,18 +156,18 @@ fn shoot(
         let len = if reaches { t.max(0.5) } else { wall.unwrap_or(60.0) };
         if reaches {
             if miss <= MAX_WHIZZ_BY_RADIUS {
-                near.write(NearMiss { row: SHOOTER_WEAPON.into(), origin_dist_cm: to.length() * 100.0, closest_dist_cm: miss * 100.0 });
+                self.near.write(NearMiss { row: SHOOTER_WEAPON.into(), origin_dist_cm: to.length() * 100.0, closest_dist_cm: miss * 100.0 });
             }
             if miss < HIT_RADIUS {
-                dmg.write(PlayerDamage(DAMAGE));
+                self.dmg.write(PlayerDamage(DAMAGE));
             } else if miss < WHIZ_RADIUS {
-                whiz.write(BulletFly { distance_cm: miss * 100.0 });
+                self.whiz.write(BulletFly { distance_cm: miss * 100.0 });
             }
         }
         let end = muzzle + dir * if reaches { t + 6.0 } else { len };
-        cmd.spawn((
-            Mesh3d(fx.tracer.0.clone()),
-            MeshMaterial3d(fx.tracer.1.clone()),
+        self.cmd.spawn((
+            Mesh3d(self.fx.tracer.0.clone()),
+            MeshMaterial3d(self.fx.tracer.1.clone()),
             Transform::from_translation((muzzle + end) / 2.0).looking_at(end, Vec3::Y).with_scale(Vec3::new(1.0, 1.0, muzzle.distance(end))),
             Fading(0.06),
             IgnoreTraces,

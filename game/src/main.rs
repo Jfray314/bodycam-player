@@ -2,6 +2,8 @@ mod audio;
 mod camadjust;
 mod curve;
 mod dev;
+mod bots;
+mod grid;
 mod gunfight;
 mod testmap;
 mod hud;
@@ -24,7 +26,7 @@ fn main() {
             file_path: std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into()),
             ..default()
         }))
-        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, sway::SwayPlugin, recoil::RecoilPlugin, map::MapPlugin, gunfight::GunfightPlugin, camadjust::CamAdjustPlugin, dev::DevPlugin))
+        .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, sway::SwayPlugin, recoil::RecoilPlugin, map::MapPlugin, gunfight::GunfightPlugin, grid::GridPlugin, bots::BotsPlugin, camadjust::CamAdjustPlugin, dev::DevPlugin))
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
         .add_systems(Startup, test_range.run_if(|| !map::available()))
         .run();
@@ -32,7 +34,10 @@ fn main() {
 
 /// Indoor firing-range test room (walls, slatted skylight, crates, target stands) for judging the
 /// camera look against in-game screenshots. Not a port of any map.
-fn test_range(mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
+fn test_range(mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>, mut images: ResMut<Assets<Image>>) {
+    if grid::wanted() {
+        return grid::spawn(&mut cmd, &mut meshes, &mut mats, &mut images);
+    }
     if testmap::wanted() {
         return testmap::spawn(&mut cmd, &mut meshes, &mut mats);
     }

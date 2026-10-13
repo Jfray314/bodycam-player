@@ -1,0 +1,231 @@
+//! Test-grid bots (grid.rs): capsule humanoids that patrol a route, notice the player (range + view cone + line of sight), turn, fire
+//! bursts with spread (gunfight::BotGun: near misses, whiz, damage), strafe, die when shot (body 1x, head 10x via weapon::bone_multiplier)
+//! and respawn after a delay. F7 hostile/passive, F10 respawn all.
+// ponytail: no path finding - routes stay inside one room and a chasing bot only walks straight at the player; it slides on walls
+// (grid::Colliders push-out) and gets stuck behind them. Add a waypoint graph / navmesh if bots must clear rooms.
+use crate::grid::Colliders;
+use crate::gunfight::BotGun;
+use crate::player::BodycamCamera;
+use crate::weapon::Health;
+use bevy::prelude::*;
+use rand::Rng;
+
+const SIGHT: f32 = 70.0; // m
+const SPREAD_DEG: f32 = 3.0;
+const RESPAWN_DELAY: f32 = 6.0; // s after death
+const TURN: f32 = 5.0; // rad/s
+const REMEMBER: f32 = 3.0; // s a bot keeps facing the player after losing sight
+
+pub struct BotSpec {
+    /// Patrol waypoints (feet); the first is also the spawn point.
+    pub route: Vec<Vec3>,
+}
+
+#[derive(Resource)]
+struct Hostile(bool);
+
+struct Slot {
+    spec: BotSpec,
+    e: Option<Entity>,
+    timer: f32,
+}
+
+type Art = (Handle<Mesh>, Handle<StandardMaterial>);
+
+#[derive(Resource)]
+struct Bots {
+    slots: Vec<Slot>,
+    art: [Art; 3], // body, head, gun
+}
+
+#[derive(Component)]
+struct Bot {
+    route: Vec<Vec3>,
+    wp: usize,
+    wait: f32,
+    yaw: f32,
+    parts: [Entity; 3], // body, head, gun
+    los: bool,
+    los_t: f32,
+    aware: f32,
+    burst_left: u32,
+    next_shot: f32,
+    next_burst: f32,
+    strafe: f32,
+    strafe_t: f32,
+}
+
+pub fn setup(cmd: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut Assets<StandardMaterial>, specs: Vec<BotSpec>) {
+    let mut m = |r: f32, g: f32, b: f32| mats.add(StandardMaterial { base_color: Color::srgb(r, g, b), perceptual_roughness: 0.8, ..default() });
+    let art = [
+        (meshes.add(Capsule3d::new(0.22, 1.0)), m(0.7, 0.12, 0.1)),
+        (meshes.add(Sphere::new(0.13)), m(0.8, 0.6, 0.45)),
+        (meshes.add(Cuboid::new(0.06, 0.08, 0.5)), m(0.08, 0.08, 0.08)),
+    ];
+    cmd.insert_resource(Bots { slots: specs.into_iter().map(|spec| Slot { spec, e: None, timer: 0.0 }).collect(), art });
+    cmd.insert_resource(Hostile(true));
+}
+
+pub struct BotsPlugin;
+impl Plugin for BotsPlugin {
+    fn build(&self, app: &mut App) {
+        if crate::grid::wanted() {
+            app.add_systems(Update, (keys, lifecycle, think).chain().run_if(resource_exists::<Bots>));
+        }
+    }
+}
+
+fn keys(k: Res<ButtonInput<KeyCode>>, mut hostile: ResMut<Hostile>, mut bots: ResMut<Bots>, mut cmd: Commands) {
+    if k.just_pressed(KeyCode::F7) {
+        hostile.0 = !hostile.0;
+        info!("bots {}", if hostile.0 { "hostile" } else { "passive" });
+    }
+    if k.just_pressed(KeyCode::F10) {
+        info!("bots respawn");
+        for s in &mut bots.slots {
+            if let Some(e) = s.e.take() {
+                cmd.entity(e).despawn();
+            }
+            s.timer = 0.0;
+        }
+    }
+}
+
+/// A bot dies when its body or head entity is gone (the player's fire() despawns entities whose Health hits 0).
+fn lifecycle(time: Res<Time>, mut bots: ResMut<Bots>, mut cmd: Commands, alive: Query<&Bot>, parts: Query<(), With<Mesh3d>>) {
+    let art = bots.art.clone();
+    for s in &mut bots.slots {
+        if let Some(e) = s.e {
+            if alive.get(e).is_ok_and(|b| b.parts[..2].iter().all(|&p| parts.contains(p))) {
+                continue;
+            }
+            cmd.entity(e).despawn();
+            s.e = None;
+            s.timer = RESPAWN_DELAY;
+        }
+        s.timer -= time.delta_secs();
+        if s.timer > 0.0 {
+            continue;
+        }
+        let e = cmd.spawn((Transform::from_translation(s.spec.route[0]), Visibility::default())).id();
+        let mut ids = [Entity::PLACEHOLDER; 3];
+        cmd.entity(e).with_children(|c| {
+            ids[0] = c.spawn((Mesh3d(art[0].0.clone()), MeshMaterial3d(art[0].1.clone()), Health(100.0), Name::new("body"), Transform::from_xyz(0.0, 0.72, 0.0))).id();
+            ids[1] = c.spawn((Mesh3d(art[1].0.clone()), MeshMaterial3d(art[1].1.clone()), Health(100.0), Name::new("head"), Transform::from_xyz(0.0, 1.6, 0.0))).id();
+            ids[2] = c.spawn((Mesh3d(art[2].0.clone()), MeshMaterial3d(art[2].1.clone()), Transform::from_xyz(0.2, 1.1, -0.35))).id();
+        });
+        cmd.entity(e).insert(Bot {
+            route: s.spec.route.clone(),
+            wp: 1 % s.spec.route.len(),
+            wait: 0.0,
+            yaw: 0.0,
+            parts: ids,
+            los: false,
+            los_t: 0.0,
+            aware: 0.0,
+            burst_left: 0,
+            next_shot: 0.0,
+            next_burst: 0.0,
+            strafe: 0.0,
+            strafe_t: 0.0,
+        });
+        s.e = Some(e);
+        s.timer = RESPAWN_DELAY; // the Bot component shows up next frame; until then `alive` would read it as dead
+    }
+}
+
+fn think(
+    time: Res<Time>,
+    hostile: Res<Hostile>,
+    col: Res<Colliders>,
+    cam: Single<&GlobalTransform, With<BodycamCamera>>,
+    mut bots: Query<(Entity, &mut Bot, &mut Transform)>,
+    mut gun: BotGun,
+) {
+    let (dt, now) = (time.delta_secs(), time.elapsed_secs());
+    let target = cam.translation();
+    let mut rng = rand::rng();
+    for (e, mut b, mut tf) in &mut bots {
+        let own = [e, b.parts[0], b.parts[1], b.parts[2]];
+        let eye = tf.translation + Vec3::Y * 1.5;
+        let to = target - eye;
+        let flat = Vec2::new(to.x, to.z);
+        // Notice: range + view cone (or already aware / very close) + line of sight, re-checked 5x per second.
+        b.los_t -= dt;
+        if b.los_t <= 0.0 {
+            b.los_t = 0.2;
+            let in_view = to.length() < 6.0 || b.aware > 0.0 || tf.forward().dot(to.normalize_or_zero()) > 0.2;
+            let was = b.los;
+            b.los = hostile.0 && to.length() < SIGHT && in_view && gun.sees(&own, eye, target);
+            if b.los && !was {
+                b.next_burst = now + rng.random_range(0.4..0.9); // reaction time
+            }
+        }
+        if !hostile.0 {
+            b.los = false;
+        }
+        b.aware = if b.los { REMEMBER } else { b.aware - dt };
+        let engaged = hostile.0 && b.aware > 0.0;
+
+        // Move + face: engaged = face the player, close/back off to 6..18 m and strafe; otherwise patrol the route.
+        let mut dir = Vec2::ZERO;
+        let mut face = None;
+        if engaged {
+            let d = flat.normalize_or_zero();
+            face = Some(d);
+            b.strafe_t -= dt;
+            if b.strafe_t <= 0.0 {
+                b.strafe_t = rng.random_range(1.0..2.5);
+                b.strafe = rng.random_range(-1..=1) as f32;
+            }
+            let range = if flat.length() > 18.0 { 1.0 } else if flat.length() < 6.0 { -0.7 } else { 0.0 };
+            dir = d * range * 2.0 + Vec2::new(-d.y, d.x) * b.strafe * 1.5;
+        } else if b.wait > 0.0 {
+            b.wait -= dt;
+        } else {
+            let wp = b.route[b.wp];
+            let d = Vec2::new(wp.x - tf.translation.x, wp.z - tf.translation.z);
+            if d.length() < 0.3 {
+                b.wait = rng.random_range(1.0..3.0);
+                b.wp = (b.wp + 1) % b.route.len();
+            } else {
+                dir = d.normalize() * 1.1;
+                face = Some(d.normalize());
+            }
+        }
+        let mut pos = tf.translation + Vec3::new(dir.x, 0.0, dir.y) * dt;
+        let y = pos.y;
+        col.push_out(&mut pos, 0.3, y, None);
+        pos.y = col.ground(Vec2::new(pos.x, pos.z), pos.y);
+        tf.translation = pos;
+        let mut off = 0.0;
+        if let Some(f) = face {
+            use std::f32::consts::{PI, TAU};
+            off = ((-f.x).atan2(-f.y) - b.yaw + PI).rem_euclid(TAU) - PI;
+            b.yaw += off.clamp(-TURN * dt, TURN * dt);
+            tf.rotation = Quat::from_rotation_y(b.yaw);
+        }
+
+        // Fire bursts (3-6 rounds, 0.12 s apart) while the player is in sight and roughly in front.
+        if !(b.los && off.abs() < 0.3) {
+            continue;
+        }
+        if b.burst_left == 0 {
+            if now >= b.next_burst {
+                b.burst_left = rng.random_range(3..=6);
+                b.next_shot = now;
+            }
+            continue;
+        }
+        if now < b.next_shot {
+            continue;
+        }
+        b.next_shot = now + 0.12;
+        b.burst_left -= 1;
+        if b.burst_left == 0 {
+            b.next_burst = now + rng.random_range(1.5..3.5);
+        }
+        let muzzle = tf.translation + Vec3::Y * 1.2 + *tf.forward() * 0.7;
+        gun.fire(&own, muzzle, target, SPREAD_DEG);
+    }
+}

@@ -319,6 +319,7 @@ fn movement(
     map: Option<Res<crate::map::MapState>>,
     geo: Query<(), With<crate::map::MapGeometry>>,
     mut ray: bevy::picking::mesh_picking::ray_cast::MeshRayCast,
+    grid: Option<Res<crate::grid::Colliders>>,
 ) {
     let (p, tf) = &mut *q;
     if map.as_ref().is_some_and(|m| !m.ready()) {
@@ -363,8 +364,14 @@ fn movement(
     p.vel.y -= GRAVITY * dt;
     let before = tf.translation;
     tf.translation += p.vel * dt;
-    // Map level: ray-cast collision. Grey-box fallback: flat ground at y=0.
-    let on_ground = if map.is_some() {
+    // Map level: ray-cast collision. Test grid: AABB list (walls, steps, ramps). Grey-box fallback: flat ground at y=0.
+    let on_ground = if let Some(g) = &grid {
+        let mut pos = tf.translation;
+        let was = p.grounded;
+        let hit = g.collide(before.y, &mut pos, &mut p.vel, was);
+        tf.translation = pos;
+        hit
+    } else if map.is_some() {
         let mut pos = tf.translation;
         let was = p.grounded;
         let hit = crate::map::collide(&mut ray, &geo, before, &mut pos, &mut p.vel, was);
@@ -378,7 +385,7 @@ fn movement(
             p.since_land = 0.0;
             steps.write(Footstep { kind: StepKind::Land, stride_start: false });
         }
-        if map.is_none() {
+        if map.is_none() && grid.is_none() {
             tf.translation.y = 0.0;
         }
         p.vel.y = 0.0;
