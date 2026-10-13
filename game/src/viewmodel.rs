@@ -82,6 +82,35 @@ fn gun_model(anims: &serde_json::Value) -> Option<&'static str> {
     })
 }
 
+/// Receiver `AimPoint` socket (UE cm, gun Root bone space; assets-local/models/_work/guns/<gun>/<gun>.json). AnimNode_Ads (C++)
+/// puts it on the FP_Camera socket when aimed: rec_1791925656, 6 guns, all within 0.1 cm (position only; the rotation stays the pose's).
+/// Returns (bone, socket). A slide part with its own AimPoint wins: Glock17 = Slide socket (0, -6.53, -1.25) on `slide` +
+/// Glock17_Default_Slide AimPoint (0, -25, 2.92).
+// ponytail: receiver/slide sockets only; a mounted optic's AimPoint would override it (we mount no optics).
+fn aim_point(gun: &str) -> Option<(&'static str, Vec3)> {
+    if gun == "Glock17" {
+        return Some(("slide", Vec3::new(0.0, -31.53, 1.67)));
+    }
+    Some(("root", match gun {
+        "Akm" => Vec3::new(0.0, -5.32, 9.84),
+        "Benelli" => Vec3::new(0.0, 2.27, 7.37),
+        "Crossbow" => Vec3::new(0.0, -20.87, 10.98),
+        "Deagle" => Vec3::new(0.0, -25.0, 6.5),
+        "FAL" => Vec3::new(0.0, -9.0, 9.5),
+        "M4A1" => Vec3::new(0.1, -13.19, 13.86), // receiver (0, -14.99, 13.06) lands 1.8 cm aft / 0.8 cm low of the recorded (0.1, -11.6, 15.0)
+        "MP5" => Vec3::new(0.2, -16.14, 14.1),
+        "MP9" => Vec3::new(0.2, -17.0, 8.5),
+        "Mossberg590" => Vec3::new(0.1, -17.85, 1.5),
+        "Remington700" => Vec3::new(0.0, -27.0, 5.8),
+        "SCAR-H" => Vec3::new(0.0, -21.08, 13.14),
+        "SVD" => Vec3::new(-0.3, 0.0, 12.07),
+        "UZI" => Vec3::new(0.0, -19.48, 8.72),
+        "Vaiga" => Vec3::new(0.0, -8.37, 9.12),
+        "Vector" => Vec3::new(0.0, -11.0, 7.0),
+        _ => return None, // Revolver: socket is rotated on a rotated Root, not mapped yet
+    }))
+}
+
 fn load(mut cmd: Commands, assets: Res<AssetServer>) {
     let names = ["M4A1", "Glock17", "Akm", "Deagle", "FAL", "Mossberg590", "Remington700", "Revolver", "SCAR-H", "SVD", "UZI", "MP9", "Vector", "MP5", "Benelli", "Crossbow", "Vaiga"];
     // Only the default loadout is preloaded (guns are 40 MB glbs each: all 17 cost ~20 s); the rest load on first equip.
@@ -603,8 +632,17 @@ fn place_arms(
     globals: Query<&GlobalTransform>,
     mut gun_joint: Local<Option<Entity>>,
     mut action: Local<f32>,
+    guns: Query<(Entity, &GunRoot)>,
+    mut gun_bone: Local<Option<Entity>>,
 ) {
-    let (pose, act) = inv.map(|i| (pose_offset(&i.slots[i.current].anims, "PoseOffset"), pose_offset(&i.slots[i.current].anims, "ActionPoseOffset"))).unwrap_or_default();
+    let gun = guns.iter().next();
+    let aim_sock = gun.and_then(|(_, g)| aim_point(g.0));
+    if gun_bone.is_none_or(|b| globals.get(b).is_err() || !gun.is_some_and(|(g, _)| root_of_entity(b, g, &parents))) {
+        *gun_bone = gun.zip(aim_sock).and_then(|((g, _), (bone, _))| joints.iter().find(|(e, n)| n.as_str().eq_ignore_ascii_case(bone) && root_of_entity(*e, g, &parents)).map(|j| j.0));
+    }
+    // UE socket (x, y, z) cm -> joint frame (x, -y, z) m: the PSK import mirrors Y (as ueblender.attach_parts); verified by the sights centring.
+    let gun_aim = aim_sock.map(|(_, v)| Vec3::new(v.x, -v.y, v.z) * 0.01);
+    let (pose, act) =inv.map(|i| (pose_offset(&i.slots[i.current].anims, "PoseOffset"), pose_offset(&i.slots[i.current].anims, "ActionPoseOffset"))).unwrap_or_default();
     let hip = 1.0 - ads.alpha;
     let now = time.elapsed_secs();
     for (root, mut t, anim) in &mut arms {
@@ -617,6 +655,12 @@ fn place_arms(
         // Sway pivots on the live ik_hand_gun (last frame's pose, arms-root space -> the frame sway.offset applies in).
         if gun_joint.is_none_or(|j| globals.get(j).is_err()) {
             *gun_joint = joints.iter().find(|(e, n)| n.as_str() == "ik_hand_gun" && root_of_entity(*e, root, &parents)).map(|j| j.0);
+        }
+        // AnimNode_Ads: shift the arms so the gun's AimPoint (last frame's pose, arms-root space) lands on the camera point.
+        let mut post = post;
+        if let (Some(ap), Some(gt), Ok(rg)) = (gun_aim, gun_bone.and_then(|b| globals.get(b).ok()), globals.get(root)) {
+            let p = post.transform_point(rg.affine().inverse().transform_point3(gt.transform_point(ap)));
+            post = Transform::from_translation(-p * ads.alpha) * post;
         }
         if let (Some(j), Ok(rg)) = (*gun_joint, globals.get(root))
             && let Ok(gg) = globals.get(j)
