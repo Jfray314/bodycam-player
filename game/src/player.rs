@@ -206,7 +206,8 @@ const CTL_INPUT_SCALE: f32 = 2.5;
 /// offset returns to zero at Damping (rate/s) only once the trigger is released (measured: pitch climbs linearly
 /// through a held burst, then decays e^-15t; a semi click decays ~0.05 s after the shot). Player input against it
 /// (Compensation 0..1) is credited to the offset so the recovery doesn't pull past where the player corrected.
-/// ponytail: Compensation semantics from the PRAS docs only; no recording has mouse input during recoil.
+/// No Bodycam gun sets Compensation; 1 (full credit) is measured: rec_1791908511, M4A1 ADS burst of ~30 shots (~19 deg of offset)
+/// pulled down by hand ends 3 deg below the start, and releasing the trigger moves the view < 1 deg (0 credit would drop ~19 deg).
 #[derive(Default)]
 pub struct CtlRecoil {
     pending: Vec2,
@@ -521,6 +522,44 @@ fn bodycam_camera(time: Res<Time>, cm: Res<CameraMotion>, mut player: Single<&mu
 
 #[cfg(test)]
 mod tests {
+    /// Full compensation: pulling down against a held burst is credited, so releasing the trigger doesn't drop the view.
+    #[test]
+    fn compensated_burst_does_not_recover_past_the_pull() {
+        let c = crate::weapon::ControllerRecoil { horizontal: (0.0, 0.0), vertical: (0.25, 0.25), smoothing: 50.0, damping: 15.0, compensation: 1.0 };
+        let (mut r, mut rng, dt) = (super::CtlRecoil::default(), rand::rng(), 1.0 / 60.0);
+        let mut view = 0.0;
+        for f in 0..180 {
+            if f % 5 == 0 && f < 150 {
+                r.fire(&c, &mut rng);
+            }
+            let pull = if f < 150 { -0.25 * super::CTL_INPUT_SCALE / 5.0 } else { 0.0 }; // the player's hand matches the climb
+            view += r.tick(dt, glam_vec(0.0, pull), f < 150).y + pull;
+        }
+        let at_release = view;
+        for _ in 0..60 {
+            view += r.tick(dt, glam_vec(0.0, 0.0), false).y;
+        }
+        assert!((view - at_release).abs() < 0.5, "release moved the view {} deg", view - at_release);
+        // Without credit the release pulls back the whole ~19 deg climb.
+        let mut r0 = super::CtlRecoil::default();
+        let c0 = crate::weapon::ControllerRecoil { compensation: 0.0, ..c };
+        let (mut v0, mut at0) = (0.0, 0.0);
+        for f in 0..240 {
+            if f % 5 == 0 && f < 150 {
+                r0.fire(&c0, &mut rng);
+            }
+            let pull = if f < 150 { -0.25 * super::CTL_INPUT_SCALE / 5.0 } else { 0.0 };
+            v0 += r0.tick(dt, glam_vec(0.0, pull), f < 150).y + pull;
+            if f == 149 {
+                at0 = v0;
+            }
+        }
+        assert!(v0 - at0 < -10.0, "{}", v0 - at0);
+    }
+    fn glam_vec(x: f32, y: f32) -> bevy::math::Vec2 {
+        bevy::math::Vec2::new(x, y)
+    }
+
     #[test]
     fn camera_motion_loads() {
         let cm = super::CameraMotion::load();

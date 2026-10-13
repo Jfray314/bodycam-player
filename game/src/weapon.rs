@@ -192,7 +192,7 @@ impl ControllerRecoil {
         let r = |k: &str| (c[k]["x"].as_f64().unwrap_or(0.0) as f32, c[k]["y"].as_f64().unwrap_or(0.0) as f32);
         let (lo, hi) = r("HorizontalRecoilStep");
         let (vlo, vhi) = r("VerticalRecoilStep");
-        ControllerRecoil { horizontal: (lo.min(hi), lo.max(hi)), vertical: (vlo.min(vhi), vlo.max(vhi)), smoothing: r("RecoilSmoothing").1.max(1.0), damping: c["Damping"].as_f64().unwrap_or(0.0) as f32, compensation: c["Compensation"].as_f64().unwrap_or(0.0) as f32 }
+        ControllerRecoil { horizontal: (lo.min(hi), lo.max(hi)), vertical: (vlo.min(vhi), vlo.max(vhi)), smoothing: r("RecoilSmoothing").1.max(1.0), damping: c["Damping"].as_f64().unwrap_or(0.0) as f32, compensation: c["Compensation"].as_f64().unwrap_or(1.0) as f32 }
     }
 }
 
