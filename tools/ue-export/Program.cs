@@ -198,6 +198,19 @@ void ExportAll(string[]? only)
         }
         foreach (var k in wp) ExportAnim(Strip(k), $"guns/{name}/anims");
         foreach (var k in fp) ExportAnim(Strip(k), $"fp/{name}");
+        // Rows that reuse this anim set with their own receiver/parts (CZ-P-09, Kobra, M1911 on the Glock clips): own mesh + parts, same weapon clips.
+        foreach (var v in g.variants ?? [])
+        {
+            var va = attachments?.GetValueOrDefault(v);
+            if (va?.receiver == null) { Console.WriteLine($"NO MESH for variant {v}"); continue; }
+            Console.WriteLine($"== {v}: mesh {va.receiver} (variant of {name})");
+            ExportMesh(va.receiver, v, "guns");
+            foreach (var part in va.parts)
+            {
+                try { ExportMesh(part.mesh, part.row.Replace(' ', '_'), $"guns/{v}/parts"); } catch (Exception ex) { Console.WriteLine($"part fail {v}/{part.row}: {ex.Message}"); }
+            }
+            foreach (var k in wp) ExportAnim(Strip(k), $"guns/{v}/anims");
+        }
     }
     WriteCurves();
 }
@@ -217,6 +230,6 @@ List<(string path, string? skel)> ScanSkms()
 }
 class AttPart { public string row { get; set; } = ""; public string cls { get; set; } = ""; public string? socket { get; set; } public string mesh { get; set; } = ""; }
 class AttCfg { public string? receiver { get; set; } public List<AttPart> parts { get; set; } = new(); }
-class GunCfg { public string[]? materials { get; set; } public string? name { get; set; } public string? skm { get; set; } public string[]? extraDirs { get; set; } public bool? skip { get; set; } }
+class GunCfg { public string[]? materials { get; set; } public string? name { get; set; } public string? skm { get; set; } public string[]? extraDirs { get; set; } public bool? skip { get; set; } public string[]? variants { get; set; } }
 
 class ConSink : Serilog.Core.ILogEventSink { public void Emit(Serilog.Events.LogEvent e) => Console.Error.WriteLine($"[{e.Level}] {e.RenderMessage()} {e.Exception}"); }
