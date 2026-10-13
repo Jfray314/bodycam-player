@@ -108,7 +108,7 @@ static class SceneExport
     }
 
     record Tex(string Name, byte[] Data, string Mime);
-    class Mat { public string Name = ""; public int Tex = -1; public float[] Color = [0.6f, 0.6f, 0.6f, 1]; }
+    class Mat { public string Name = ""; public int Tex = -1; public float[] Color = [0.6f, 0.6f, 0.6f, 1]; public string Alpha = "OPAQUE"; }
     class Prim { public byte[] Pos = [], Nrm = [], Uv = [], Idx = []; public int Verts, Indices, Mat; public float[] Min = [], Max = []; }
 
     public static void Run(DefaultFileProvider provider, string outDir, string umap, double radiusCm)
@@ -219,6 +219,7 @@ static class SceneExport
         {
             var mref = over != null && sec.MaterialIndex < over.Length && !over[sec.MaterialIndex].IsNull ? over[sec.MaterialIndex].Load<UMaterialInterface>() : (sec.MaterialIndex < cm.Materials.Length ? cm.Materials[sec.MaterialIndex].Material?.Load<UMaterialInterface>() : null);
             int mat = GetMat(mref, texList, texIdx, matList, matIdx);
+            if (mat < 0) continue;
             // re-index vertices of this section
             var map = new Dictionary<uint, uint>(); var pos = new List<float>(); var nrm = new List<float>(); var uv = new List<float>(); var idx = new List<uint>();
             for (int f = 0; f < sec.NumFaces; f++)
@@ -248,7 +249,15 @@ static class SceneExport
     }
     static byte[] Bytes(List<float> f) => f.SelectMany(BitConverter.GetBytes).ToArray();
 
-    static readonly string[] Prefer = ["PM_Diffuse", "Diffuse", "BaseColor", "Base Color", "Albedo", "BaseColorMap", "Color", "Texture"];
+    // Albedo texture parameter names, best first. CUE4Parse's "PM_Diffuse" guess is only a last resort: it often lands on a
+    // tint/ID mask (TX_Trims_01a_M, IDMap...) whose R/G/B channels render as saturated red/green/purple.
+    static readonly string[] AlbedoKeys = ["Albedo", "albedo", "Base Color", "BaseColor", "BaseColorTexture", "BaseColour", "Diffuse", "Main_Albedo", "Albedo Map", "ColorMap", "AlbedoT", "BC", "CustomAlbedo",
+        "02 - Diffuse Texture", "Albedo_L1", "Albedo_1", "Top_LayerAlbedo", "Top Layer | BaseColorTexture", "Middle Layer | BaseColorTexture", "Tile A", "Texture", "RustAlbedoT", "AlbedoDamageT"];
+    // Colour parameters that multiply the albedo (or are the colour when there is no albedo texture). Tint masks (R/G/B/Alpha variants) are ignored.
+    static readonly string[] TintKeys = ["Albedo Color Tint (Base)", "Albedo Tint", "Albedo Color Tint", "Main_AlbedoTint", "BaseColor Tint", "BaseColour Tint", "Base Color Tint", "Tint Color", "Tint", "TintColor", "AlbedoColor",
+        "BaseColorFactor", "00 - Flat Colour", "Glass Color", "Base Color", "BaseColor", "Color"];
+    static readonly StreamWriter? MatDump = Environment.GetEnvironmentVariable("SCENE_MATDUMP") is { Length: > 0 } f ? new StreamWriter(f) { AutoFlush = true } : null; // debug: every material's cooked params as JSON lines
+    static bool MaskLike(string path) { var n = path.Split('/').Last().Split('.')[0].ToLowerInvariant(); return n.EndsWith("_m") || n.Contains("mask") || n.EndsWith("_id") || n.Contains("idmap"); }
     static int GetMat(UMaterialInterface? mi, List<Tex> texList, Dictionary<string, int> texIdx, List<Mat> matList, Dictionary<string, int> matIdx)
     {
         var key = mi?.GetPathName() ?? "";
@@ -259,11 +268,18 @@ static class SceneExport
             try
             {
                 var p = new CMaterialParams2(); mi.GetParams(p, EMaterialDepth.TopLayerOnly);
-                string? k = Prefer.FirstOrDefault(x => p.Textures.ContainsKey(x)) ?? p.Textures.Keys.FirstOrDefault(x => { var l = x.ToLowerInvariant(); return (l.Contains("diffuse") || l.Contains("basecolor") || l.Contains("albedo") || l.EndsWith("_d") || l.EndsWith("_bc")) && !l.Contains("normal"); });
+                if (MatDump != null) MatDump.WriteLine(JsonSerializer.Serialize(new { m.Name, path = key, blend = p.BlendMode.ToString(), shading = p.ShadingModel.ToString(), tex = p.Textures.ToDictionary(x => x.Key, x => x.Value.ToString()), col = p.Colors.ToDictionary(x => x.Key, x => new[] { x.Value.R, x.Value.G, x.Value.B, x.Value.A }), sc = p.Scalars }));
+                bool trans = p.BlendMode is EBlendMode.BLEND_Translucent or EBlendMode.BLEND_Additive or EBlendMode.BLEND_Modulate, masked = p.BlendMode == EBlendMode.BLEND_Masked;
+                if (trans && m.Name.Contains("Decal", StringComparison.OrdinalIgnoreCase)) return matIdx[key] = -1; // projected decals were static meshes in the map; opaque they cover the wall
+                string? k = AlbedoKeys.FirstOrDefault(x => p.Textures.ContainsKey(x))
+                    ?? p.Textures.Keys.FirstOrDefault(x => { var l = x.ToLowerInvariant(); return !x.StartsWith("PM_") && (l.Contains("albedo") || l.Contains("basecolor") || l.Contains("diffuse") || l.EndsWith("_d") || l.EndsWith("_bc") || l.EndsWith("_alb")) && !l.Contains("mask") && !l.Contains("normal") && !l.Contains("dust") && !l.Contains("damage"); })
+                    ?? (p.Textures.TryGetValue("PM_Diffuse", out var pm) && !MaskLike(pm.ToString() ?? "") ? "PM_Diffuse" : null);
                 if (k != null && p.Textures[k].Load<UTexture2D>() is UTexture2D t)
                 {
                     var tk = t.GetPathName();
-                    if (!texIdx.TryGetValue(tk, out var ti))
+                    var wantAlpha = masked || trans;
+                    var ck = tk + (wantAlpha ? "|a" : "");
+                    if (!texIdx.TryGetValue(ck, out var ti))
                     {
                         try
                         {
@@ -273,20 +289,27 @@ static class SceneExport
                             bmp.InstallPixels(new SKImageInfo(ct.Width, ct.Height, pf, SKAlphaType.Unpremul), h.AddrOfPinnedObject());
                             SKBitmap use = bmp;
                             if (Math.Max(bmp.Width, bmp.Height) > MaxTex) { var s = (float)MaxTex / Math.Max(bmp.Width, bmp.Height); use = bmp.Resize(new SKImageInfo(Math.Max(1, (int)(bmp.Width * s)), Math.Max(1, (int)(bmp.Height * s))), SKFilterQuality.Medium)!; }
+                            // keep alpha (PNG) only when the albedo really carries a cut-out / opacity (some are all-0 or all-255 and would vanish)
+                            bool png = false;
+                            if (wantAlpha) { int lo = 255, hi = 0; foreach (var px in use.Pixels) { lo = Math.Min(lo, px.Alpha); hi = Math.Max(hi, px.Alpha); } png = lo < 200 && hi > 200; }
                             using var img = SKImage.FromBitmap(use);
-                            using var data = img.Encode(SKEncodedImageFormat.Jpeg, 82);
-                            ti = texIdx[tk] = texList.Count; texList.Add(new Tex(t.Name, data.ToArray(), "image/jpeg")); h.Free();
+                            using var data = png ? img.Encode(SKEncodedImageFormat.Png, 100) : img.Encode(SKEncodedImageFormat.Jpeg, 82);
+                            ti = texIdx[ck] = texList.Count; texList.Add(new Tex(t.Name, data.ToArray(), png ? "image/png" : "image/jpeg")); h.Free();
                         }
-                        catch (Exception e) { Console.WriteLine("  tex fail " + t.Name + " " + e.Message); ti = texIdx[tk] = -1; }
+                        catch (Exception e) { Console.WriteLine("  tex fail " + t.Name + " " + e.Message); ti = texIdx[ck] = -1; }
                     }
+                    if (ti >= 0 && texList[ti].Mime == "image/png") m.Alpha = masked ? "MASK" : "BLEND";
                     m.Tex = ti;
                 }
-                foreach (var ck in new[] { "Color", "Tint", "BaseColor", "Base Color", "Diffuse Color" })
-                    if (p.Colors.TryGetValue(ck, out var c) && m.Tex < 0) { m.Color = [c.R, c.G, c.B, 1]; break; }
+                var tintKey = k == "Tile A" ? "Tile A tint" : TintKeys.FirstOrDefault(x => p.Colors.ContainsKey(x));
+                if (tintKey != null && p.Colors.TryGetValue(tintKey, out var c)) m.Color = [c.R, c.G, c.B, 1];
+                else if (m.Tex < 0) m.Color = [0.5f, 0.5f, 0.5f, 1];
+                else m.Color = [1, 1, 1, 1];
+                if (trans) { m.Alpha = "BLEND"; m.Color[3] = p.Scalars.TryGetValue("Opacity", out var op) ? Math.Clamp(op, 0.15f, 1f) : 0.4f; }
             }
             catch (Exception e) { Console.WriteLine("  mat fail " + m.Name + " " + e.Message); }
         }
-        return matIdx[key] = matList.Count == 0 && false ? 0 : AddMat(matList, m);
+        return matIdx[key] = AddMat(matList, m);
     }
     static int AddMat(List<Mat> l, Mat m) { l.Add(m); return l.Count - 1; }
 
@@ -307,9 +330,14 @@ static class SceneExport
         }
         var images = new List<object>(); var textures = new List<object>();
         foreach (var t in texs) { images.Add(new { bufferView = View(t.Data), mimeType = t.Mime, name = t.Name }); textures.Add(new { source = images.Count - 1 }); }
-        var gm = mats.Select(m => m.Tex >= 0
-            ? (object)new { name = m.Name, pbrMetallicRoughness = new { baseColorTexture = new { index = m.Tex }, metallicFactor = 0.0, roughnessFactor = 0.85 } }
-            : new { name = m.Name, pbrMetallicRoughness = new { baseColorFactor = m.Color, metallicFactor = 0.0, roughnessFactor = 0.85 } }).ToList();
+        var gm = mats.Select(m =>
+        {
+            var pbr = new Dictionary<string, object> { ["baseColorFactor"] = m.Color, ["metallicFactor"] = 0.0, ["roughnessFactor"] = 0.85 };
+            if (m.Tex >= 0) pbr["baseColorTexture"] = new { index = m.Tex };
+            var g = new Dictionary<string, object> { ["name"] = m.Name, ["pbrMetallicRoughness"] = pbr };
+            if (m.Alpha != "OPAQUE") { g["alphaMode"] = m.Alpha; if (m.Alpha == "MASK") g["alphaCutoff"] = 0.5; g["doubleSided"] = true; }
+            return g;
+        }).ToList();
         var gmeshes = meshes.Select((ps, i) => new
         {
             name = "m" + i,
