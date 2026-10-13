@@ -56,9 +56,18 @@ struct ViewmodelAssets {
     arm_anims: Vec<Handle<Gltf>>,
 }
 
-/// glb under models/guns for a weapon, from its BAS animation folder (e.g. Animations/M4a1/...).
-fn gun_model(anims: &serde_json::Value) -> Option<&'static str> {
-    let path = anims["Fire"][0]["Character"]["path"].as_str()?;
+/// glb under models/guns for a weapon: rows that reuse another gun's clips but have their own receiver (CZ-P-09, Kobra, M1911 on the
+/// Glock set) by row name, else from the BAS animation folder (e.g. Animations/M4a1/...). The gun-side clip folder wins over the arms
+/// one (the MP9 row fires the UZI arms clip but is the Mp9 model).
+fn gun_model(row: &str, anims: &serde_json::Value) -> Option<&'static str> {
+    match row {
+        "CZ-P-09" => return Some("CZ-P-09"),
+        "Kobra" => return Some("Kobra"),
+        "M1911" => return Some("M1911"),
+        _ => {}
+    }
+    let fire = &anims["Fire"][0];
+    let path = fire["Weapon"]["path"].as_str().or_else(|| fire["Character"]["path"].as_str())?;
     let folder = path.split("/Animations/").nth(1)?.split('/').next()?.to_ascii_lowercase();
     Some(match folder.as_str() {
         "m4a1" => "M4A1",
@@ -88,7 +97,7 @@ fn gun_model(anims: &serde_json::Value) -> Option<&'static str> {
 /// Glock17_Default_Slide AimPoint (0, -25, 2.92).
 // ponytail: receiver/slide sockets only; a mounted optic's AimPoint would override it (we mount no optics).
 fn aim_point(gun: &str) -> Option<(&'static str, Vec3)> {
-    if gun == "Glock17" {
+    if matches!(gun, "Glock17" | "CZ-P-09" | "Kobra" | "M1911") { // same Glock skeleton (identical slide node) so the same slide AimPoint
         return Some(("slide", Vec3::new(0.0, -31.53, 1.67)));
     }
     Some(("root", match gun {
@@ -255,7 +264,7 @@ fn attach_gun(
     guns: Query<(Entity, &GunRoot)>,
 ) {
     let Some(inv) = inv else { return };
-    let Some(want) = gun_model(&inv.slots[inv.current].anims) else { return };
+    let Some(want) = gun_model(&inv.slots[inv.current].name, &inv.slots[inv.current].anims) else { return };
     if guns.iter().any(|(_, g)| g.0 == want) {
         return;
     }
