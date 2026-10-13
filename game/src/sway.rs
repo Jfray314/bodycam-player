@@ -159,6 +159,8 @@ pub struct Sway {
     prev_look: Vec2,
     /// ADS alpha, only used to move the rotation pivot from the hip to the ADS gun origin.
     pub alpha: f32,
+    /// LowReadySway (UE cm), see `low_ready`.
+    low_ready: f32,
     weapon: String,
 }
 
@@ -230,6 +232,18 @@ fn tick_sway(
     sw.prev_look = look;
     sw.alpha = ads.alpha;
     run(&mut sw, &anims, ldi, mv, p.aiming, dt);
+    let lr = low_ready(sw.low_ready, &anims["LowerSway"], ldi.x, p.aiming, dt);
+    sw.low_ready = lr;
+    // ModifyBone VB ik_hand_gun, translation Z in component space (ALS mesh: yaw only -> world up) -> camera space.
+    sw.offset.translation += Vec3::new(0.0, p.pitch.cos(), -p.pitch.sin()) * lr * 0.01;
+}
+
+/// ABP_Procedural_Sway LowReadySway (UE cm, negative = gun drops): FInterpTo(Curve(|LookDeltaInput.X|) * (aiming ? AdsScale : Scale),
+/// InterpSpeed) from the BAS LowerSway settings. Decoded from the ABP bytecode; matches the recorded value to 0.07 cm rms.
+fn low_ready(cur: f32, ls: &Value, yaw_in: f32, aiming: bool, dt: f32) -> f32 {
+    let keys: Vec<Key> = serde_json::from_value(ls["Curve"]["curves"]["FloatCurve"].clone()).unwrap_or_default();
+    let f = |k: &str| ls[k].as_f64().unwrap_or(0.0) as f32;
+    finterp_to(cur, eval(&keys, yaw_in.abs()) * f(if aiming { "AdsScale" } else { "Scale" }), dt, f("InterpSpeed"))
 }
 
 // --- additive aim-in/out motions (AC_BodycamAnimationComponent.PlayAdditiveMotion / RefreshAdditiveMotion) ---
@@ -533,6 +547,18 @@ mod tests {
         eprintln!("look sway vs recorded gun pose rms: {pc:.3} cm ({:.3} cm signal), {rd:.3} deg ({:.3} deg signal); per axis pos {:?} rot {:?}",
             (psig / (3.0 * n)).sqrt(), (rsig / (3.0 * n)).sqrt(), pos.map(|v| (v / n).sqrt()), rot.map(|v| (v / n).sqrt()));
         assert!(pc < 0.9 * (psig / (3.0 * n)).sqrt() && rd < 0.9 * (rsig / (3.0 * n)).sqrt());
+    }
+
+    /// Fast yaw lowers the gun (M4A1 LowerSway: curve -1 at |input| 4.56, AdsScale 25, Scale 8, InterpSpeed 5) and it recovers at rest.
+    #[test]
+    fn low_ready_drops_on_fast_yaw() {
+        let ls = m4a1()["LowerSway"].clone();
+        let run_for = |mut v: f32, inp: f32, aim: bool, secs: f32| { for _ in 0..(secs * 60.0) as i32 { v = low_ready(v, &ls, inp, aim, 1.0 / 60.0); } v };
+        let ads = run_for(0.0, -6.0, true, 2.0);
+        assert!((ads + 25.0).abs() < 0.5, "{ads}");
+        assert!((run_for(0.0, 6.0, false, 2.0) + 8.0).abs() < 0.5);
+        assert!(run_for(ads, 0.0, true, 2.0).abs() < 0.5);
+        assert!(run_for(0.0, 1.0, true, 2.0).abs() < 1.0); // slow turns barely move it
     }
 
     /// Tables switch with IsAiming on the same springs: toggling mid-flick keeps the state continuous.

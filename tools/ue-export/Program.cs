@@ -23,6 +23,7 @@ Serilog.Log.Logger = new Serilog.LoggerConfiguration().MinimumLevel.Warning().Wr
 if (root.EndsWith("Paks", StringComparison.OrdinalIgnoreCase)) CUE4Parse.Compression.OodleHelper.Initialize();
 var provider = new DefaultFileProvider(root, SearchOption.AllDirectories, new VersionContainer(EGame.GAME_UE5_5), StringComparer.OrdinalIgnoreCase);
 provider.MappingsContainer = new FileUsmapTypeMappingsProvider(usmap);
+provider.ReadScriptData = true;
 provider.Initialize();
 provider.SubmitKey(new CUE4Parse.UE4.Objects.Core.Misc.FGuid(), new CUE4Parse.Encryption.Aes.FAesKey(new byte[32]));
 provider.LoadVirtualPaths();
