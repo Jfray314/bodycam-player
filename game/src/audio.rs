@@ -7,6 +7,7 @@
 //! entry bypassed in the cooked asset, so it is an identity and nothing is applied. The gun chain SE_Compressor_Guns
 //! (distortion + dynamics) is not implemented (see `GUN_CHAIN_GAP`).
 use crate::player::{Footstep, Player, StepKind};
+use crate::status::NearMiss;
 use crate::weapon::{DryFire, Fired, MontageStarted};
 use bevy::audio::{AudioSinkPlayback, Volume};
 use bevy::prelude::*;
@@ -334,7 +335,7 @@ impl Plugin for AudioPlugin {
             .insert_resource(Tremor(0.0))
             .init_resource::<Loops>()
             .add_systems(PostStartup, preload_player)
-            .add_systems(Update, (footsteps, weapon_sfx, montage_sfx, run_queue, aim_sfx, start_pending, preload_weapons, loops, selftest).chain());
+            .add_systems(Update, (footsteps, weapon_sfx, near_miss_sfx, montage_sfx, run_queue, aim_sfx, start_pending, preload_weapons, loops, selftest).chain());
     }
 }
 
@@ -385,7 +386,7 @@ fn trigger(cmd: &mut Commands, bank: &mut Bank, live: &mut Live, assets: &AssetS
     let mut ids = vec![];
     for v in &voices {
         let handle = load_wave(live, assets, &v.wave);
-        ids.push(cmd.spawn(Pending { wait: v.delay, handle, volume: v.volume, pitch: v.pitch }).id());
+        ids.push(cmd.spawn(Pending { wait: v.delay, handle, volume: v.volume * params.floats.get("PlayGain").copied().unwrap_or(1.0), pitch: v.pitch }).id());
     }
     live.groups.entry(cue.into()).or_default().push_back(ids);
     info!("audio: {cue} -> {} voice(s) [{}]", voices.len(), voices.iter().take(3).map(|v| format!("{} v{:.2} p{:.2} d{:.2}", v.wave.rsplit('/').next().unwrap(), v.volume, v.pitch, v.delay)).collect::<Vec<_>>().join(", "));
@@ -437,6 +438,19 @@ fn weapon_sfx(mut cmd: Commands, mut fired: MessageReader<Fired>, mut dry: Messa
     for (row, kind) in shots.collect::<Vec<_>>() {
         if let Some(c) = bank.weapon_cue(&row, kind).map(str::to_string) {
             trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &c, &Params::default(), MUZZLE_DIST_CM);
+        }
+    }
+}
+
+/// AC_BodycamCamera.GettingShot: the shooter weapon's BulletCrack at the muzzle and BulletWizz at the closest point, both volume 3.
+fn near_miss_sfx(mut cmd: Commands, mut ev: MessageReader<NearMiss>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>) {
+    let mut params = Params::default();
+    params.floats.insert("PlayGain", 3.0);
+    for m in ev.read() {
+        for (kind, dist) in [("BulletCrack", m.origin_dist_cm), ("BulletWizz", m.closest_dist_cm)] {
+            if let Some(c) = bank.weapon_cue(&m.row, kind).map(str::to_string) {
+                trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &c, &params, dist);
+            }
         }
     }
 }
@@ -649,6 +663,16 @@ mod tests {
         }
         // mechanical + close crack present at 50 cm
         assert!(v.iter().any(|s| s.wave.contains("m4_Close") || s.wave.contains("Close")));
+    }
+
+    #[test]
+    fn near_miss_cues_evaluate() {
+        let root = std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into());
+        let Some(mut bank) = Bank::load(std::path::Path::new(&root)) else { return };
+        for kind in ["BulletCrack", "BulletWizz"] {
+            let cue = bank.weapon_cue("M4A1", kind).expect(kind).to_string();
+            assert!(!bank.evaluate(&cue, &Params::default(), 300.0, &mut rand::rng()).is_empty(), "{kind}");
+        }
     }
 
     #[test]
