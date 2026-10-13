@@ -592,21 +592,35 @@ fn place_arms(
     inv: Option<Single<&Inventory>>,
     recoil: Res<crate::recoil::Recoil>,
     ads: Res<Ads>,
-    sway: Res<Sway>,
+    mut sway: ResMut<Sway>,
     aim: Res<AimOffset>,
-    mut arms: Query<(&mut Transform, &Anim), With<ArmsRoot>>,
+    mut arms: Query<(Entity, &mut Transform, &Anim), With<ArmsRoot>>,
+    joints: Query<(Entity, &Name)>,
+    parents: Query<&ChildOf>,
+    globals: Query<&GlobalTransform>,
+    mut gun_joint: Local<Option<Entity>>,
     mut action: Local<f32>,
 ) {
     let (pose, act) = inv.map(|i| (pose_offset(&i.slots[i.current].anims, "PoseOffset"), pose_offset(&i.slots[i.current].anims, "ActionPoseOffset"))).unwrap_or_default();
     let hip = 1.0 - ads.alpha;
     let now = time.elapsed_secs();
-    for (mut t, anim) in &mut arms {
+    for (root, mut t, anim) in &mut arms {
         // ponytail: ActionPoseOffset blend speed (8/s) is a guess; the real blend lives in the compiled ABP.
         *action = crate::status::finterp_to(*action, if now < anim.montage_until && anim.action { 1.0 } else { 0.0 }, time.delta_secs(), 8.0);
         let off = Transform { translation: pose.translation.lerp(act.translation, *action), rotation: pose.rotation.slerp(act.rotation, *action), ..default() };
         let off = Transform { translation: off.translation * hip, rotation: Quat::IDENTITY.slerp(off.rotation, hip), ..default() };
         let aim = Transform::from_translation(GRIP) * aim.0 * Transform::from_translation(-GRIP);
-        *t = p.view_base * recoil.offset * sway.offset * aim * off * Transform::from_translation(-FP_CAMERA_SOCKET);
+        let post = aim * off * Transform::from_translation(-FP_CAMERA_SOCKET);
+        // Sway pivots on the live ik_hand_gun (last frame's pose, arms-root space -> the frame sway.offset applies in).
+        if gun_joint.is_none_or(|j| globals.get(j).is_err()) {
+            *gun_joint = joints.iter().find(|(e, n)| n.as_str() == "ik_hand_gun" && root_of_entity(*e, root, &parents)).map(|j| j.0);
+        }
+        if let (Some(j), Ok(rg)) = (*gun_joint, globals.get(root))
+            && let Ok(gg) = globals.get(j)
+        {
+            sway.pivot = Some(post.transform_point(rg.affine().inverse().transform_point3(gg.translation())));
+        }
+        *t = p.view_base * recoil.offset * sway.offset * post;
     }
 }
 

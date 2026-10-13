@@ -315,19 +315,20 @@ if HAS_SOCKET:
     ads['note'] = 'alpha = sinusoidal(raw), raw moves linearly at AdsSpeed pin * sin_speed_over_pin: the gun origin reaches the ADS pose in ~0.35 s (the pin alone would give 0.43 s); BAS AimIn/AimOut additives are not played'
     ads['series'] = {lab: [{'t': np.round(t, 4).tolist(), 'progress': np.round(pr, 4).tolist()} for t, pr in allf[lab]] for lab in allf}
     gun['ads'] = ads
-    # 6d. ADS look sway (rec_1791908511: M4A1 iron sights held, slow then fast yaw flicks, 2-17 s at small view pitch). The look
+    # 6d. ADS look sway (rec_1791908511: M4A1 2-17 s / Glock17 39-61 s iron sights held, slow then fast yaw flicks, small view pitch). The look
     # nodes never enter their ADS mode here (node IsAiming = aiming && magnified optic), so the AdsScale pins are unused; the
     # tables still switch. pos_z has LowReadySway (ModifyBone, cm up) removed; every channel its pitch-angle baseline.
     if os.path.exists(os.path.join(PROBE, 'rec_1791908511.csv')):
-        r = load('rec_1791908511'); w = (r.t > 2) & (r.t < 17) & (r.g(S + 'IsAiming') == 1)
-        P, M = gun_cam(r); Pb = np.median(P[w], 0); dP, dR, _ = gun_delta(r)
-        dP[:, 2] -= r.g(S + 'LowReadySway'); pit = wrap(r.g('ctl_pitch')) / 90
-        ref = {}
-        for nm, y in (('pos_x', dP[:, 0]), ('pos_y', dP[:, 1]), ('pos_z', dP[:, 2]), ('rot_roll', dR[:, 0]), ('rot_pitch', dR[:, 1]), ('rot_yaw', dR[:, 2])):
-            X = poly_design([], pit); c = np.linalg.lstsq(X[w], y[w], rcond=None)[0]; ref[nm] = np.round((y - X @ c)[w], 3).tolist()
-        gun['look_ads'] = {'rec': 'rec_1791908511', 'gun_origin_ads_cm': [round(float(x), 3) for x in Pb],
-                           'series': {'t': np.round(r.t[w], 4).tolist(), 'ldi_x': np.round(r.g(S + 'AnimGraphNode_SpringSway_9.InputValue')[w], 3).tolist(),
-                                      'ldi_y': np.round(r.g(S + 'AnimGraphNode_SpringSway_7.InputValue')[w], 3).tolist(), 'gun_ref': ref}}
+        r = load('rec_1791908511'); dP0, dR, _ = gun_delta(r); P, M = gun_cam(r); pit = wrap(r.g('ctl_pitch')) / 90
+        dP = dP0.copy(); dP[:, 2] -= r.g(S + 'LowReadySway')
+        gun['look_ads'] = {}
+        for gname, (a, b) in (('M4A1', (2, 17)), ('Glock17', (39, 61))):
+            w = (r.t > a) & (r.t < b) & (r.g(S + 'IsAiming') == 1); ref = {}
+            for nm, y in (('pos_x', dP[:, 0]), ('pos_y', dP[:, 1]), ('pos_z', dP[:, 2]), ('rot_roll', dR[:, 0]), ('rot_pitch', dR[:, 1]), ('rot_yaw', dR[:, 2])):
+                X = poly_design([], pit); c = np.linalg.lstsq(X[w], y[w], rcond=None)[0]; ref[nm] = np.round((y - X @ c)[w], 3).tolist()
+            gun['look_ads'][gname] = {'rec': 'rec_1791908511', 'window_s': [a, b], 'gun_origin_ads_cm': [round(float(x), 3) for x in np.median(P[w], 0)],
+                                      'series': {'t': np.round(r.t[w], 4).tolist(), 'ldi_x': np.round(r.g(S + 'AnimGraphNode_SpringSway_9.InputValue')[w], 3).tolist(),
+                                                 'ldi_y': np.round(r.g(S + 'AnimGraphNode_SpringSway_7.InputValue')[w], 3).tolist(), 'gun_ref': ref}}
     out['gun'] = gun
 
 os.makedirs(os.path.dirname(OUT) or '.', exist_ok=True)

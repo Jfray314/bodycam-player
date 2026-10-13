@@ -67,8 +67,10 @@ pub struct AxisParams {
     /// Table SmoothDamping = node DampingSpeed: FInterp rate of the move (first-order) bank.
     pub smooth: f32,
     pub extra: f32,
-    /// Final gain in output units (cm / deg): the table Scale, times the node's AdsScale pin while aiming, times the fitted gain.
+    /// Table Scale (node units per input unit; the node clamps input * Scale to +-ClampMax).
     pub scale: f32,
+    /// Fitted output (cm / deg) per clamped node unit.
+    pub gain: f32,
     /// Move bank: output = FInterp(smooth) of the input (no spring).
     pub first_order: bool,
 }
@@ -80,17 +82,23 @@ pub struct AxisState {
     out: f32,
 }
 
-/// Fitted to the recorded camera-space gun pose (tools/probe_sway.py gun.look / gun.move, M4A1 hip): output (cm / deg) per
-/// unit of Scale * input, spring natural frequency, and damping ratio per table SpringDamping.
-// ponytail: SpringStiffness / SpringSpeed / SmoothDamping had no measurable effect on the hip look springs (omega 9-10.5 for
-// stiffness .7-1, speed 7-10), and there is no look input while aiming in the recordings, so the ADS tables use the same constants.
-const GAIN_POS: f32 = 0.55;
-const GAIN_ROT: f32 = 0.41;
+/// Fitted to the recorded camera-space gun pose (tools/probe_sway.py gun.look / gun.move / gun.look_ads; M4A1 hip, M4A1 and
+/// Glock17 ADS): output (cm / deg) per clamped node unit, spring natural frequency, and damping ratio per table SpringDamping.
+// ponytail: SpringStiffness / SpringSpeed / SmoothDamping had no measurable effect (sqrt-stiffness or speed-based omega fit worse
+// on hip + ADS together), so every table shares omega 10.
+const GAIN_POS: f32 = 1.8;
+const GAIN_ROT: f32 = 1.4;
 const GAIN_MOVE: f32 = 1.0;
+/// Look sway left after the AnimNode_Ads sight alignment (compiled C++), relative to hip: both guns of rec_1791908511 agree
+/// (M4A1 / Glock17 iron sights, tools/probe_sway.py gun.look_ads).
+// ponytail: measured as a constant factor on two iron-sight guns; the Ads node's real maths (and optics) may differ.
+const ADS_K_POS: f32 = 0.5;
+const ADS_K_ROT: f32 = 0.75;
 const OMEGA: f32 = 10.0;
 const ZETA_PER_DAMPING: f32 = 1.3;
-/// SpringSway ClampMax pin (ABP_Procedural_Sway json default 10); applied to the input.
-const INPUT_CLAMP: f32 = 10.0;
+/// SpringSway ClampMax pin (10 on every node); clamps input * Scale, not the input: fast flicks saturate (rec_1791908511:
+/// slow ADS sweeps and fast flicks need the same gain only with this clamp; normalised fit error .36 -> .31 over hip + ADS).
+const CLAMP_MAX: f32 = 10.0;
 /// ABP_Procedural_Sway LookDeltaInput = control rotation rate (deg/s) / 60 * this, one frame late (tools/probe_sway.py,
 /// corr 0.998 against the recordings).
 pub const LOOK_IN: f32 = 0.4777;
@@ -102,7 +110,7 @@ impl AxisState {
             self.out = 0.0;
             return 0.0;
         }
-        let target = input.clamp(-INPUT_CLAMP, INPUT_CLAMP) * p.scale;
+        let target = (input * p.scale).clamp(-CLAMP_MAX, CLAMP_MAX) * p.gain;
         if p.first_order {
             self.x = finterp_to(self.x, target, dt, p.smooth);
             self.out = self.x;
@@ -133,7 +141,8 @@ fn axis_params(v: &Value, gain: f32, first_order: bool) -> [AxisParams; 3] {
         speed: g("SpringSpeed", i),
         smooth: g("SmoothDamping", i),
         extra: g("ExtraSmoothing", i),
-        scale: g("Scale", i) * gain,
+        scale: g("Scale", i),
+        gain,
         first_order,
     })
 }
@@ -155,6 +164,9 @@ pub struct Sway {
     prev_look: Vec2,
     /// ADS alpha, only used to move the rotation pivot from the hip to the ADS gun origin.
     pub alpha: f32,
+    /// Live ik_hand_gun position in the frame `offset` applies in (Bevy camera space, m), set by viewmodel::place_arms.
+    /// The recorded sway rotates the gun about its own origin (no lever arm), wherever the pose/ADS puts it.
+    pub pivot: Option<Vec3>,
     /// LowReadySway (UE cm), see `low_ready`.
     low_ready: f32,
     weapon: String,
@@ -181,8 +193,9 @@ const PIVOT_ADS_UE: Vec3 = Vec3::new(12.4, 0.2, -14.2);
 /// Look* tables, hip the HipLook* tables, on the same springs (recording: node params flip on the key frame).
 fn run(sw: &mut Sway, anims: &Value, ldi: Vec2, mv: Vec2, aiming: bool, dt: f32) {
     let (pos_t, rot_t) = if aiming { ("LookPositionSway", "LookRotationSway") } else { ("HipLookPositionSway", "HipLookRotationSway") };
-    let pp = axis_params(&anims[pos_t], GAIN_POS, false);
-    let rp = axis_params(&anims[rot_t], GAIN_ROT, false);
+    let ads_k = |k: f32| 1.0 + (k - 1.0) * sw.alpha;
+    let pp = axis_params(&anims[pos_t], GAIN_POS * ads_k(ADS_K_POS), false);
+    let rp = axis_params(&anims[rot_t], GAIN_ROT * ads_k(ADS_K_ROT), false);
     let mp = axis_params(&anims["MovePositionSway"], GAIN_MOVE, true);
     let (yaw_in, pitch_in) = (ldi.x, ldi.y);
     // Fitted to the recorded gun pose (signs per +1 input): position y -yaw, position z +pitch, rotation yaw +yaw, rotation pitch -pitch.
@@ -193,7 +206,7 @@ fn run(sw: &mut Sway, anims: &Value, ldi: Vec2, mv: Vec2, aiming: bool, dt: f32)
     let step = |b: &mut Bank, p: &[AxisParams; 3], inp: [f32; 3]| -> Vec3 { Vec3::from_array(std::array::from_fn(|i| b.s[i].step(&p[i], inp[i], dt))) };
     let pos = step(&mut sw.pos, &pp, pos_in) + step(&mut sw.mov, &mp, mv_in);
     let rot = step(&mut sw.rot, &rp, rot_in);
-    let pivot = ue_vec(PIVOT_HIP_UE.lerp(PIVOT_ADS_UE, sw.alpha));
+    let pivot = sw.pivot.unwrap_or_else(|| ue_vec(PIVOT_HIP_UE.lerp(PIVOT_ADS_UE, sw.alpha)));
     sw.offset = Transform::from_translation(ue_vec(pos) + pivot) * Transform::from_rotation(ue_rot(rot.x, rot.y, rot.z)) * Transform::from_translation(-pivot);
 }
 
@@ -370,7 +383,7 @@ mod tests {
     use super::*;
 
     fn params() -> AxisParams {
-        AxisParams { stiffness: 0.6, damping: 0.6, speed: 10.0, smooth: 7.0, extra: 0.0, scale: 5.0, first_order: false }
+        AxisParams { stiffness: 0.6, damping: 0.6, speed: 10.0, smooth: 7.0, extra: 0.0, scale: 5.0, gain: 1.0, first_order: false }
     }
 
     #[test]
@@ -545,33 +558,35 @@ mod tests {
     #[test]
     fn ads_look_sway_matches_recorded_gun_pose() {
         let r: Value = serde_json::from_str(include_str!("../../assets/sway_reference.json")).unwrap();
-        let l = &r["gun"]["look_ads"];
-        let s = &l["series"];
-        let (t, ldx, ldy) = (col(&s["t"]), col(&s["ldi_x"]), col(&s["ldi_y"]));
-        let origin = Vec3::from_array(col(&l["gun_origin_ads_cm"]).try_into().unwrap());
-        let refs: Vec<Vec<f32>> = ["pos_x", "pos_y", "pos_z", "rot_roll", "rot_pitch", "rot_yaw"].iter().map(|k| col(&s["gun_ref"][*k])).collect();
-        let anims = m4a1();
-        let mut sw = Sway { alpha: 1.0, ..default() };
-        let (mut err, mut sig, mut n, mut xy, mut xx) = ([0f32; 6], [0f32; 6], 0f32, [0f32; 6], [0f32; 6]);
-        for i in 0..t.len() {
-            let dt = if i == 0 { 0.0138 } else { t[i] - t[i - 1] };
-            run(&mut sw, &anims, Vec2::new(ldx[i], ldy[i]), Vec2::ZERO, true, dt);
-            let (p, q) = gun_delta(&sw, origin);
-            for c in 0..6 {
-                let v = if c < 3 { p[c] } else { q[c - 3] };
-                err[c] += (v - refs[c][i]).powi(2);
-                sig[c] += refs[c][i].powi(2);
-                xy[c] += v * refs[c][i];
-                xx[c] += v * v;
-            }
-            n += 1.0;
-        }
-        let (e, s) = (err.map(|v| (v / n).sqrt()), sig.map(|v| (v / n).sqrt()));
-        let fit: [f32; 6] = std::array::from_fn(|c| xy[c] / xx[c].max(1e-9));
-        let corr: [f32; 6] = std::array::from_fn(|c| xy[c] / (xx[c] * sig[c]).sqrt().max(1e-9));
-        eprintln!("ads look sway rms per axis (pos x y z cm, rot roll pitch yaw deg): {e:.2?} vs signal {s:.2?}; best scale {fit:.2?} corr {corr:.2?}");
         let tot = |a: [f32; 6]| a.iter().map(|v| v * v).sum::<f32>().sqrt();
-        assert!(tot(e) < 0.9 * tot(s));
+        for (gun, json) in [("M4A1", include_str!("../../assets/weapons/M4A1.json")), ("Glock17", include_str!("../../assets/weapons/Glock17.json"))] {
+            let l = &r["gun"]["look_ads"][gun];
+            let s = &l["series"];
+            let (t, ldx, ldy) = (col(&s["t"]), col(&s["ldi_x"]), col(&s["ldi_y"]));
+            let origin = Vec3::from_array(col(&l["gun_origin_ads_cm"]).try_into().unwrap());
+            let refs: Vec<Vec<f32>> = ["pos_x", "pos_y", "pos_z", "rot_roll", "rot_pitch", "rot_yaw"].iter().map(|k| col(&s["gun_ref"][*k])).collect();
+            let anims = serde_json::from_str::<Value>(json).unwrap()["anim_set"].clone();
+            let mut sw = Sway { alpha: 1.0, pivot: Some(ue_vec(origin)), ..default() };
+            let (mut err, mut sig, mut n, mut xy, mut xx) = ([0f32; 6], [0f32; 6], 0f32, [0f32; 6], [0f32; 6]);
+            for i in 0..t.len() {
+                let dt = if i == 0 { 0.0138 } else { t[i] - t[i - 1] };
+                run(&mut sw, &anims, Vec2::new(ldx[i], ldy[i]), Vec2::ZERO, true, dt);
+                let (p, q) = gun_delta(&sw, origin);
+                for c in 0..6 {
+                    let v = if c < 3 { p[c] } else { q[c - 3] };
+                    err[c] += (v - refs[c][i]).powi(2);
+                    sig[c] += refs[c][i].powi(2);
+                    xy[c] += v * refs[c][i];
+                    xx[c] += v * v;
+                }
+                n += 1.0;
+            }
+            let (e, s) = (err.map(|v| (v / n).sqrt()), sig.map(|v| (v / n).sqrt()));
+            let fit: [f32; 6] = std::array::from_fn(|c| xy[c] / xx[c].max(1e-9));
+            let corr: [f32; 6] = std::array::from_fn(|c| xy[c] / (xx[c] * sig[c]).sqrt().max(1e-9));
+            eprintln!("{gun} ads look sway rms (pos x y z cm, rot roll pitch yaw deg): {e:.2?} vs signal {s:.2?}; best scale {fit:.2?} corr {corr:.2?}");
+            assert!(tot(e) < 0.7 * tot(s), "{gun}");
+        }
     }
 
     /// Fast yaw lowers the gun (M4A1 LowerSway: curve -1 at |input| 4.56, AdsScale 25, Scale 8, InterpSpeed 5) and it recovers at rest.
