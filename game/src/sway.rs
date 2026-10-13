@@ -204,7 +204,8 @@ fn run(sw: &mut Sway, anims: &Value, ldi: Vec2, mv: Vec2, aiming: bool, dt: f32)
     let rot_in = [yaw_in, -pitch_in, yaw_in];
     let mv_in = [mv.x, -mv.y, 0.0];
     let step = |b: &mut Bank, p: &[AxisParams; 3], inp: [f32; 3]| -> Vec3 { Vec3::from_array(std::array::from_fn(|i| b.s[i].step(&p[i], inp[i], dt))) };
-    let pos = step(&mut sw.pos, &pp, pos_in) + step(&mut sw.mov, &mp, mv_in);
+    // Move nodes (SpringSway 0..4) have Alpha = Weight * (1 - EnableADS curve): strafe/forward sway fades out while aiming.
+    let pos = step(&mut sw.pos, &pp, pos_in) + step(&mut sw.mov, &mp, mv_in) * (1.0 - sw.alpha);
     let rot = step(&mut sw.rot, &rp, rot_in);
     let pivot = sw.pivot.unwrap_or_else(|| ue_vec(PIVOT_HIP_UE.lerp(PIVOT_ADS_UE, sw.alpha)));
     sw.offset = Transform::from_translation(ue_vec(pos) + pivot) * Transform::from_rotation(ue_rot(rot.x, rot.y, rot.z)) * Transform::from_translation(-pivot);
