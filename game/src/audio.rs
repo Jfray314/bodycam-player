@@ -7,6 +7,7 @@
 //! entry bypassed in the cooked asset, so it is an identity and nothing is applied. The gun chain SE_Compressor_Guns
 //! (distortion + dynamics) is not implemented (see `GUN_CHAIN_GAP`).
 use crate::player::{Footstep, Player, StepKind};
+use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings, RayCastVisibility};
 use crate::status::NearMiss;
 use crate::weapon::{DryFire, Fired, MontageStarted, ShellLanded};
 use bevy::audio::{AudioSinkPlayback, Volume};
@@ -409,12 +410,19 @@ const FOLEY: [(&str, &str); 4] = [
 ];
 
 /// Original steps come from animation notifies; here from the gait phase (player.rs `Footstep`).
-fn footsteps(mut cmd: Commands, mut ev: MessageReader<Footstep>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>) {
+fn footsteps(mut cmd: Commands, mut ev: MessageReader<Footstep>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>, mut ray: MeshRayCast, player: Query<&GlobalTransform, With<Player>>, surf: Query<&crate::weapon::SurfaceMat>) {
     for f in ev.read() {
         let mut params = Params::default();
         params.ints.insert("FootstepType", f.kind as i32);
         params.bools.insert("Turning?", false);
-        if let Some(c) = bank.footstep_cue("SurfaceType_Default").map(str::to_string) {
+        // Surface under the feet (ALS: line trace down, PhysMat SurfaceType -> DT_Footstep_Player row); unmarked = Default.
+        let under = player.iter().next().and_then(|p| {
+            ray.cast_ray(Ray3d::new(p.translation() + Vec3::Y * 0.2, Dir3::NEG_Y), &MeshRayCastSettings::default().with_filter(&|e| surf.contains(e)).with_visibility(RayCastVisibility::Any))
+                .first()
+                .and_then(|(e, h)| (h.distance < 1.0).then(|| surf.get(*e).ok().map(|s| s.0)).flatten())
+        });
+        let key = under.map_or("SurfaceType_Default".to_string(), |n| format!("SurfaceType{n}"));
+        if let Some(c) = bank.footstep_cue(&key).map(str::to_string) {
             trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &c, &params, FOOT_DIST_CM);
         }
         if f.kind == StepKind::Land {

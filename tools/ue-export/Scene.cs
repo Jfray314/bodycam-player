@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using CUE4Parse.FileProvider;
 using CUE4Parse.UE4.Assets.Exports;
 using CUE4Parse.UE4.Assets.Exports.Material;
@@ -17,7 +18,8 @@ using SkiaSharp;
 // UE (cm, X fwd / Y right / Z up, left-handed) -> glTF/Bevy (m, Y up, -Z fwd): p' = (y, z, -x) * 0.01.
 static class SceneExport
 {
-    const int MaxTex = 512;
+    // Texture size cap (px): SCENE_MAXTEX overrides. 1024 keeps the whole map ~1.5 GB of GPU memory; 512 was the original cap.
+    static readonly int MaxTex = int.TryParse(Environment.GetEnvironmentVariable("SCENE_MAXTEX"), out var mt) ? mt : 1024;
     static double[] Basis(FVector loc, FRotator r, FVector s)
     {
         double rad = Math.PI / 180, p = r.Pitch * rad, y = r.Yaw * rad, ro = r.Roll * rad;
@@ -108,7 +110,24 @@ static class SceneExport
     }
 
     record Tex(string Name, byte[] Data, string Mime);
-    class Mat { public string Name = ""; public int Tex = -1; public float[] Color = [0.6f, 0.6f, 0.6f, 1]; public string Alpha = "OPAQUE"; }
+    // Emis = emissive colour (linear, UE emissive units), EmisTex = emissive texture, Surface = EPhysicalSurface index of the PhysMat (0 = default / none).
+    class Mat { public string Name = ""; public int Tex = -1; public float[] Color = [0.6f, 0.6f, 0.6f, 1]; public string Alpha = "OPAQUE"; public float[]? Emis; public int EmisTex = -1; public int Surface; }
+    static readonly Regex EmisKey = new("emiss", RegexOptions.IgnoreCase);
+    // PhysMat -> SurfaceType: MaterialInstance chain (PhysMaterial override or Parent) up to the Material.
+    static int PhysSurface(UMaterialInterface? mi)
+    {
+        UObject? o = mi;
+        for (int d = 0; o != null && d < 12; d++)
+        {
+            if (o.GetOrDefault<FPackageIndex?>("PhysMaterial", null) is { IsNull: false } pm && pm.Load() is UObject phys)
+            {
+                var s = Str(phys, "SurfaceType") ?? ""; var m = Regex.Match(s, @"SurfaceType(\d+)\s*$");
+                return m.Success ? int.Parse(m.Groups[1].Value) : 0;
+            }
+            o = o.GetOrDefault<FPackageIndex?>("Parent", null) is { IsNull: false } par ? par.Load() : null;
+        }
+        return 0;
+    }
     class Prim { public byte[] Pos = [], Nrm = [], Uv = [], Idx = []; public int Verts, Indices, Mat; public float[] Min = [], Max = []; }
 
     public static void Run(DefaultFileProvider provider, string outDir, string umap, double radiusCm)
@@ -205,8 +224,12 @@ static class SceneExport
             nodes.Add(Node(w)); nodeMesh.Add(mi); nodeName.Add(sm.Name);
         }
         Console.WriteLine($"meshes {meshList.Count} nodes {nodes.Count} materials {matList.Count} textures {texList.Count} skipped {skipped}");
-        WriteGlb(Path.Combine(outDir, "scene.glb"), meshList, nodes, nodeMesh, nodeName, matList, texList);
-        File.WriteAllText(Path.Combine(outDir, "scene.json"), JsonSerializer.Serialize(new { umap, player_start = playerStart, lights, post = posts }, jo));
+        // Unique glTF material names (Bevy's GltfMaterialName on each mesh entity is the key into scene.json "surfaces": name -> EPhysicalSurface index).
+        var surfaces = new SortedDictionary<string, int>(); var used = new HashSet<string>();
+        for (int i = 0; i < matList.Count; i++) { var n = matList[i].Name; if (!used.Add(n)) { n += "~" + i; used.Add(n); } matList[i].Name = n; if (matList[i].Surface != 0) surfaces[n] = matList[i].Surface; }
+        var sname = Environment.GetEnvironmentVariable("SCENE_NAME") ?? "scene";
+        WriteGlb(Path.Combine(outDir, sname + ".glb"), meshList, nodes, nodeMesh, nodeName, matList, texList);
+        File.WriteAllText(Path.Combine(outDir, sname + ".json"), JsonSerializer.Serialize(new { umap, player_start = playerStart, lights, post = posts, surfaces }, jo));
     }
 
     static List<Prim> BuildMesh(UStaticMesh sm, UObject comp, DefaultFileProvider provider, List<Tex> texList, Dictionary<string, int> texIdx, List<Mat> matList, Dictionary<string, int> matIdx)
@@ -258,6 +281,30 @@ static class SceneExport
         "BaseColorFactor", "00 - Flat Colour", "Glass Color", "Base Color", "BaseColor", "Color"];
     static readonly StreamWriter? MatDump = Environment.GetEnvironmentVariable("SCENE_MATDUMP") is { Length: > 0 } f ? new StreamWriter(f) { AutoFlush = true } : null; // debug: every material's cooked params as JSON lines
     static bool MaskLike(string path) { var n = path.Split('/').Last().Split('.')[0].ToLowerInvariant(); return n.EndsWith("_m") || n.Contains("mask") || n.EndsWith("_id") || n.Contains("idmap"); }
+    // Decode + resize to MaxTex + encode (JPEG, or PNG when the alpha channel really carries cut-outs) once per texture; returns the texList index or -1.
+    static int LoadTex(UTexture2D t, bool wantAlpha, List<Tex> texList, Dictionary<string, int> texIdx)
+    {
+        var ck = t.GetPathName() + (wantAlpha ? "|a" : "");
+        if (texIdx.TryGetValue(ck, out var ti)) return ti;
+        try
+        {
+            var ct = TextureDecoder.Decode(t, CUE4Parse.UE4.Assets.Exports.Texture.ETexturePlatform.DesktopMobile);
+            using var bmp = new SKBitmap(); var h = System.Runtime.InteropServices.GCHandle.Alloc(ct.Data, System.Runtime.InteropServices.GCHandleType.Pinned);
+            var pf = ct.PixelFormat == CUE4Parse.UE4.Assets.Exports.Texture.EPixelFormat.PF_B8G8R8A8 ? SKColorType.Bgra8888 : ct.PixelFormat == CUE4Parse.UE4.Assets.Exports.Texture.EPixelFormat.PF_R8G8B8A8 ? SKColorType.Rgba8888 : throw new Exception("pixfmt " + ct.PixelFormat);
+            bmp.InstallPixels(new SKImageInfo(ct.Width, ct.Height, pf, SKAlphaType.Unpremul), h.AddrOfPinnedObject());
+            SKBitmap use = bmp;
+            if (Math.Max(bmp.Width, bmp.Height) > MaxTex) { var s = (float)MaxTex / Math.Max(bmp.Width, bmp.Height); use = bmp.Resize(new SKImageInfo(Math.Max(1, (int)(bmp.Width * s)), Math.Max(1, (int)(bmp.Height * s))), SKFilterQuality.Medium)!; }
+            // keep alpha (PNG) only when the albedo really carries a cut-out / opacity (some are all-0 or all-255 and would vanish)
+            bool png = false;
+            if (wantAlpha) { int lo = 255, hi = 0; foreach (var px in use.Pixels) { lo = Math.Min(lo, px.Alpha); hi = Math.Max(hi, px.Alpha); } png = lo < 200 && hi > 200; }
+            using var img = SKImage.FromBitmap(use);
+            using var data = png ? img.Encode(SKEncodedImageFormat.Png, 100) : img.Encode(SKEncodedImageFormat.Jpeg, 85);
+            ti = texIdx[ck] = texList.Count; texList.Add(new Tex(t.Name, data.ToArray(), png ? "image/png" : "image/jpeg")); h.Free();
+            if (!ReferenceEquals(use, bmp)) use.Dispose();
+        }
+        catch (Exception e) { Console.WriteLine("  tex fail " + t.Name + " " + e.Message); ti = texIdx[ck] = -1; }
+        return ti;
+    }
     static int GetMat(UMaterialInterface? mi, List<Tex> texList, Dictionary<string, int> texIdx, List<Mat> matList, Dictionary<string, int> matIdx)
     {
         var key = mi?.GetPathName() ?? "";
@@ -276,31 +323,21 @@ static class SceneExport
                     ?? (p.Textures.TryGetValue("PM_Diffuse", out var pm) && !MaskLike(pm.ToString() ?? "") ? "PM_Diffuse" : null);
                 if (k != null && p.Textures[k].Load<UTexture2D>() is UTexture2D t)
                 {
-                    var tk = t.GetPathName();
-                    var wantAlpha = masked || trans;
-                    var ck = tk + (wantAlpha ? "|a" : "");
-                    if (!texIdx.TryGetValue(ck, out var ti))
-                    {
-                        try
-                        {
-                            var ct = TextureDecoder.Decode(t, CUE4Parse.UE4.Assets.Exports.Texture.ETexturePlatform.DesktopMobile);
-                            using var bmp = new SKBitmap(); var h = System.Runtime.InteropServices.GCHandle.Alloc(ct.Data, System.Runtime.InteropServices.GCHandleType.Pinned);
-                            var pf = ct.PixelFormat == CUE4Parse.UE4.Assets.Exports.Texture.EPixelFormat.PF_B8G8R8A8 ? SKColorType.Bgra8888 : ct.PixelFormat == CUE4Parse.UE4.Assets.Exports.Texture.EPixelFormat.PF_R8G8B8A8 ? SKColorType.Rgba8888 : throw new Exception("pixfmt " + ct.PixelFormat);
-                            bmp.InstallPixels(new SKImageInfo(ct.Width, ct.Height, pf, SKAlphaType.Unpremul), h.AddrOfPinnedObject());
-                            SKBitmap use = bmp;
-                            if (Math.Max(bmp.Width, bmp.Height) > MaxTex) { var s = (float)MaxTex / Math.Max(bmp.Width, bmp.Height); use = bmp.Resize(new SKImageInfo(Math.Max(1, (int)(bmp.Width * s)), Math.Max(1, (int)(bmp.Height * s))), SKFilterQuality.Medium)!; }
-                            // keep alpha (PNG) only when the albedo really carries a cut-out / opacity (some are all-0 or all-255 and would vanish)
-                            bool png = false;
-                            if (wantAlpha) { int lo = 255, hi = 0; foreach (var px in use.Pixels) { lo = Math.Min(lo, px.Alpha); hi = Math.Max(hi, px.Alpha); } png = lo < 200 && hi > 200; }
-                            using var img = SKImage.FromBitmap(use);
-                            using var data = png ? img.Encode(SKEncodedImageFormat.Png, 100) : img.Encode(SKEncodedImageFormat.Jpeg, 82);
-                            ti = texIdx[ck] = texList.Count; texList.Add(new Tex(t.Name, data.ToArray(), png ? "image/png" : "image/jpeg")); h.Free();
-                        }
-                        catch (Exception e) { Console.WriteLine("  tex fail " + t.Name + " " + e.Message); ti = texIdx[ck] = -1; }
-                    }
+                    var ti = LoadTex(t, masked || trans, texList, texIdx);
                     if (ti >= 0 && texList[ti].Mime == "image/png") m.Alpha = masked ? "MASK" : "BLEND";
                     m.Tex = ti;
                 }
+                // Emissive: colour parameter(s) x scalar intensity (light fixtures, screens, signs), optional emissive texture.
+                {
+                    var ek = p.Colors.Keys.FirstOrDefault(x => EmisKey.IsMatch(x) && !x.Contains("mask", StringComparison.OrdinalIgnoreCase));
+                    var es = p.Scalars.Where(x => EmisKey.IsMatch(x.Key) && (x.Key.Contains("intens", StringComparison.OrdinalIgnoreCase) || x.Key.Contains("power", StringComparison.OrdinalIgnoreCase) || x.Key.Contains("mult", StringComparison.OrdinalIgnoreCase) || x.Key.Contains("bright", StringComparison.OrdinalIgnoreCase))).Select(x => x.Value).DefaultIfEmpty(p.Scalars.Where(x => EmisKey.IsMatch(x.Key)).Select(x => x.Value).DefaultIfEmpty(1f).Max()).Max();
+                    var ekt = p.Textures.Keys.FirstOrDefault(x => EmisKey.IsMatch(x) && !x.Contains("mask", StringComparison.OrdinalIgnoreCase)) ?? p.Textures.Keys.FirstOrDefault(x => EmisKey.IsMatch(x));
+                    if (ekt != null && p.Textures[ekt].Load<UTexture2D>() is UTexture2D et) m.EmisTex = LoadTex(et, false, texList, texIdx);
+                    if (ek != null && p.Colors[ek] is { } ec && (ec.R + ec.G + ec.B) * es > 0.0001f) m.Emis = [ec.R * es, ec.G * es, ec.B * es];
+                    else if (m.EmisTex >= 0 && p.Scalars.Keys.Any(x => EmisKey.IsMatch(x)) && es > 0.0001f) m.Emis = [es, es, es]; // texture-only needs an explicit strength scalar (PM_Emissive defaults would light everything)
+                    if (m.Emis == null) m.EmisTex = -1;
+                }
+                m.Surface = PhysSurface(mi);
                 var tintKey = k == "Tile A" ? "Tile A tint" : TintKeys.FirstOrDefault(x => p.Colors.ContainsKey(x));
                 if (tintKey != null && p.Colors.TryGetValue(tintKey, out var c)) m.Color = [c.R, c.G, c.B, 1];
                 else if (m.Tex < 0) m.Color = [0.5f, 0.5f, 0.5f, 1];
@@ -335,6 +372,13 @@ static class SceneExport
             var pbr = new Dictionary<string, object> { ["baseColorFactor"] = m.Color, ["metallicFactor"] = 0.0, ["roughnessFactor"] = 0.85 };
             if (m.Tex >= 0) pbr["baseColorTexture"] = new { index = m.Tex };
             var g = new Dictionary<string, object> { ["name"] = m.Name, ["pbrMetallicRoughness"] = pbr };
+            if (m.Emis != null)
+            {
+                // glTF emissiveFactor is clamped to 0..1; the overshoot goes into KHR_materials_emissive_strength.
+                var mx = Math.Max(1f, m.Emis.Max()); g["emissiveFactor"] = m.Emis.Select(v => v / mx).ToArray();
+                if (mx > 1f) g["extensions"] = new Dictionary<string, object> { ["KHR_materials_emissive_strength"] = new { emissiveStrength = mx } };
+                if (m.EmisTex >= 0) g["emissiveTexture"] = new { index = m.EmisTex };
+            }
             if (m.Alpha != "OPAQUE") { g["alphaMode"] = m.Alpha; if (m.Alpha == "MASK") g["alphaCutoff"] = 0.5; g["doubleSided"] = true; }
             return g;
         }).ToList();
@@ -352,7 +396,7 @@ static class SceneExport
         {
             ["asset"] = new { version = "2.0", generator = "ue-export scene" },
             ["scene"] = 0, ["scenes"] = new[] { new { nodes = Enumerable.Range(0, gnodes.Count).ToArray() } },
-            ["nodes"] = gnodes, ["meshes"] = gmeshes, ["materials"] = gm, ["accessors"] = accs, ["bufferViews"] = views,
+            ["extensionsUsed"] = new[] { "KHR_materials_emissive_strength" }, ["nodes"] = gnodes, ["meshes"] = gmeshes, ["materials"] = gm, ["accessors"] = accs, ["bufferViews"] = views,
             ["buffers"] = new[] { new { byteLength = bin.Length } },
         };
         if (images.Count > 0) { root["images"] = images; root["textures"] = textures; }
