@@ -35,7 +35,7 @@ const LAND_HEAVY: f32 = 6.0;
 pub struct BodyPlugin;
 impl Plugin for BodyPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<BodyAnim>().init_resource::<ThirdPerson>().add_systems(Startup, |mut cmd: Commands, a: Res<AssetServer>| cmd.insert_resource(BodyAsset(a.load("models/body.glb"))))
+        app.add_plugins(crate::bodyik::IkPlugin).init_resource::<BodyAnim>().init_resource::<ThirdPerson>().add_systems(Startup, |mut cmd: Commands, a: Res<AssetServer>| cmd.insert_resource(BodyAsset(a.load("models/body.glb"))))
             .add_systems(Update, (spawn, prepare, light_layers, drive).chain())
             .add_systems(PostUpdate, (hide_bones.after(bevy::app::AnimationSystems), third_person_cam).before(bevy::transform::TransformSystems::Propagate));
     }
@@ -79,8 +79,10 @@ struct BodyAsset(Handle<Gltf>);
 /// `shadow`: the shadow-only copy (full body); otherwise the owner-visible one (no head/upper arms, no shadow).
 #[derive(Component)]
 pub struct BodyRoot {
-    shadow: bool,
+    pub(crate) shadow: bool,
     nodes: HashMap<String, AnimationNodeIndex>,
+    /// Bone name -> entity (filled by bodyik).
+    pub(crate) bones: HashMap<String, Entity>,
 }
 
 fn spawn(mut cmd: Commands, asset: Res<BodyAsset>, gltfs: Res<Assets<Gltf>>, mut graphs: ResMut<Assets<AnimationGraph>>, clips: Res<Assets<AnimationClip>>, mut st: ResMut<BodyAnim>, player: Single<Entity, With<Player>>, mut done: Local<bool>) {
@@ -95,7 +97,7 @@ fn spawn(mut cmd: Commands, asset: Res<BodyAsset>, gltfs: Res<Assets<Gltf>>, mut
     let graph = graphs.add(graph);
     for shadow in [false, true] {
         let mut e = cmd.spawn((
-            BodyRoot { shadow, nodes: nodes.clone() },
+            BodyRoot { shadow, nodes: nodes.clone(), bones: default() },
             WorldAssetRoot(g.scenes[0].clone()),
             AnimationGraphHandle(graph.clone()),
             Transform::default(),
@@ -160,7 +162,7 @@ fn light_layers(mut cmd: Commands, new: Query<Entity, Or<(Added<DirectionalLight
 // ponytail: normalised-time sync, not the ALS sync markers; no turn-in-place (the local player's actor rotation is the control
 // yaw: UpdateGroudedRotation IsLocallyControlled branch) and no Stop transitions.
 #[derive(Resource, Default)]
-struct BodyAnim {
+pub(crate) struct BodyAnim {
     w: HashMap<&'static str, f32>,
     dur: HashMap<String, f32>,
     phase: f32,
@@ -214,7 +216,7 @@ fn targets(grounded: bool, vy: f32, crouched: bool, gait: f32, speed: f32, a: f3
     (w, (speed / WALK_REF) * (1.0 - gait) + (speed / RUN_REF) * gait)
 }
 
-fn drive(
+pub(crate) fn drive(
     time: Res<Time>,
     player: Single<(&Player, &Transform)>,
     mut st: ResMut<BodyAnim>,
@@ -295,7 +297,7 @@ fn drive(
 
 /// HideBoneByName: collapse the bone (and, through the hierarchy, everything under it); then ALS spine rotation (aim pitch,
 /// shadow copy) and lean roll. Axes come from last frame's bone GlobalTransform (the pose is about to be propagated).
-fn hide_bones(
+pub(crate) fn hide_bones(
     player: Single<(&Player, &GlobalTransform)>,
     mut joints: Query<(Entity, &Name, &mut Transform, &GlobalTransform), With<AnimationTargetId>>,
     parents: Query<&ChildOf>,
