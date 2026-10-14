@@ -591,7 +591,13 @@ fn follow_head(
     }
     let montage = time.elapsed_secs() < anim.montage_until;
     if !montage && anim.current.is_some() {
-        *idle = Some(rel); // track the base loop's head so the montage delta starts from where the base pose was
+        // Low-pass the base loop's head (walk/sprint bob): the montage replaces the loop, so an instantaneous sample would
+        // offset the camera by a random bob phase (arm swinging in from above/below when reloading while moving).
+        let k = 1.0 - (-time.delta_secs() / 0.4).exp();
+        *idle = Some(match *idle {
+            Some(i) => Transform { translation: i.translation.lerp(rel.translation, k), rotation: i.rotation.slerp(rel.rotation, k), ..default() },
+            None => rel,
+        });
     }
     let Some(idle) = *idle else { return };
     *weight = crate::status::finterp_to(*weight, if montage { 1.0 } else { 0.0 }, time.delta_secs(), 1.0 / BLEND.as_secs_f32());
