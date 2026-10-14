@@ -653,7 +653,7 @@ fn actions(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, status: Res<crate::
 }
 
 /// GA_Character_SwapItem: holster the current weapon (cancelling reload/inspect), then draw the next.
-fn swap(keys: Res<ButtonInput<KeyCode>>, mut inv: Single<&mut Inventory>, mut wheel: MessageReader<MouseWheel>, mut out: MessageWriter<MontageStarted>) {
+fn swap(keys: Res<ButtonInput<KeyCode>>, perk: Res<crate::perks::Perk>, mut inv: Single<&mut Inventory>, mut wheel: MessageReader<MouseWheel>, mut out: MessageWriter<MontageStarted>) {
     let n = inv.slots.len();
     let mut next = inv.current;
     let digits = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6];
@@ -672,7 +672,7 @@ fn swap(keys: Res<ButtonInput<KeyCode>>, mut inv: Single<&mut Inventory>, mut wh
             }
         }
     }
-    let swapping = matches!(inv.action, Some(Action { kind: ActionKind::Holster | ActionKind::Draw, .. }));
+    let swapping = perk.locked() || matches!(inv.action, Some(Action { kind: ActionKind::Holster | ActionKind::Draw, .. }));
     if next != inv.current && !swapping {
         let m = inv.slots[inv.current].one("holster");
         let cur = inv.current;

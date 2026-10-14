@@ -70,6 +70,29 @@ pub fn toss_velocity(from: Vec3, to: Vec3, speed: f32) -> Option<Vec3> {
     Some((dir * ang.cos() + Vec3::Y * ang.sin()) * speed)
 }
 
+/// One radial blast (RadialDamageWithFalloff base x multiplier, Inner/Outer radius cm, falloff exponent).
+#[derive(Clone, Copy)]
+pub struct BlastSpec {
+    pub base: f32,
+    pub inner: f32,
+    pub outer: f32,
+    pub exp: f32,
+    pub flash: bool,
+}
+/// G67_C: (1.0, 350, 1000, 1.3) x GE_GrenadeStat_G67 Damage 200.
+pub const G67_BLAST: BlastSpec = BlastSpec { base: 200.0, inner: 350.0, outer: 1000.0, exp: 1.3, flash: false };
+/// Flash_C: (1.0, 250, 1000, 2.0) x GE_GrenadeStat_Flash Damage 50; the flash applies GE_Flashed instead.
+pub const FLASH_BLAST: BlastSpec = BlastSpec { base: 50.0, inner: 250.0, outer: 1000.0, exp: 2.0, flash: true };
+/// GA_ExplodePerk: ExplosionDamage 200, Inner 200, Outer 1000, exponent 2.0.
+pub const DRONE_BLAST: BlastSpec = BlastSpec { base: 200.0, inner: 200.0, outer: 1000.0, exp: 2.0, flash: false };
+
+/// Ask for a blast (grenade fuse, drone crash).
+#[derive(Message)]
+pub struct Detonate {
+    pub at: Vec3,
+    pub spec: BlastSpec,
+}
+
 #[derive(Default, PartialEq, Clone, Copy)]
 enum GState {
     #[default]
@@ -131,7 +154,7 @@ struct BlastMesh(Handle<Mesh>);
 pub struct ItemsPlugin;
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Items>().add_systems(Startup, |mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>| cmd.insert_resource(BlastMesh(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())))).add_systems(Update, (grenade_input, knife_input, projectiles, blasts, tag_meshes, drop_pickup).chain());
+        app.init_resource::<Items>().add_message::<Detonate>().add_systems(Startup, |mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>| cmd.insert_resource(BlastMesh(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())))).add_systems(Update, (grenade_input, knife_input, projectiles, detonate, blasts, tag_meshes, drop_pickup).chain());
     }
 }
 
@@ -253,29 +276,21 @@ fn grenade_input(
 /// Moves a thrown grenade: gravity + ray-swept bounce (Wep Body physics: restitution of PhysMat MetalDull, +1 linear damping per hit > 300 cm/s),
 /// fuse, explosion.
 // ponytail: rays against the scene meshes instead of a physics engine; no angular response, spin is cosmetic.
-#[allow(clippy::too_many_arguments)]
 fn projectiles(
     mut cmd: Commands,
     time: Res<Time>,
     mut q: Query<(Entity, &mut Transform, &mut Grenade)>,
     mut ray: MeshRayCast,
     ignore: Query<(), With<IgnoreTraces>>,
-    mut targets: Query<(Entity, &GlobalTransform, &mut Health)>,
-    cam: Single<&GlobalTransform, With<BodycamCamera>>,
-    mut boom: MessageWriter<Explosion>,
-    mut flash: MessageWriter<Flashbang>,
-    mut dmg: MessageWriter<PlayerDamage>,
-    assets: Res<AssetServer>,
-    blast: Res<BlastMesh>,
-    mut mats: ResMut<Assets<StandardMaterial>>,
+    targets: Query<(), With<Health>>,
+    mut out: MessageWriter<Detonate>,
 ) {
     let dt = time.delta_secs().min(0.05);
     for (e, mut tf, mut g) in &mut q {
         g.fuse -= dt;
         if g.fuse <= 0.0 {
-            let at = tf.translation;
+            out.write(Detonate { at: tf.translation, spec: if g.flash { FLASH_BLAST } else { G67_BLAST } });
             cmd.entity(e).despawn();
-            explode(&mut cmd, at, g.flash, &mut ray, &ignore, &mut targets, &cam, &mut boom, &mut flash, &mut dmg, &assets, &blast.0, &mut mats);
             continue;
         }
         if g.rest {
@@ -313,10 +328,30 @@ fn projectiles(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn detonate(
+    mut cmd: Commands,
+    mut ev: MessageReader<Detonate>,
+    mut ray: MeshRayCast,
+    ignore: Query<(), With<IgnoreTraces>>,
+    mut targets: Query<(Entity, &GlobalTransform, &mut Health)>,
+    cam: Single<&GlobalTransform, With<BodycamCamera>>,
+    mut boom: MessageWriter<Explosion>,
+    mut flash: MessageWriter<Flashbang>,
+    mut dmg: MessageWriter<PlayerDamage>,
+    assets: Res<AssetServer>,
+    blast: Res<BlastMesh>,
+    mut mats: ResMut<Assets<StandardMaterial>>,
+) {
+    for d in ev.read() {
+        explode(&mut cmd, d.at, d.spec, &mut ray, &ignore, &mut targets, &cam, &mut boom, &mut flash, &mut dmg, &assets, &blast.0, &mut mats);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn explode(
     cmd: &mut Commands,
     at: Vec3,
-    flash_gren: bool,
+    spec: BlastSpec,
     ray: &mut MeshRayCast,
     ignore: &Query<(), With<IgnoreTraces>>,
     targets: &mut Query<(Entity, &GlobalTransform, &mut Health)>,
@@ -328,9 +363,7 @@ fn explode(
     sphere: &Handle<Mesh>,
     mats: &mut Assets<StandardMaterial>,
 ) {
-    // G67_C: ApplyRadialDamageWithFalloff(1.0, Inner 350, Outer 1000, Exp 1.3) x GE_GrenadeStat_G67 Damage 200.
-    // Flash_C: (1.0, 250, 1000, 2.0), GE_GrenadeStat_Flash Damage 50 (flash grenade applies GE_Flashed 18 s instead).
-    let (base, inner, outer, exp) = if flash_gren { (50.0, 250.0, 1000.0, 2.0) } else { (200.0, 350.0, 1000.0, 1.3) };
+    let BlastSpec { base, inner, outer, exp, flash: flash_gren } = spec;
     let origin = at + Vec3::Y * 0.5; // BFL call uses ActorLocation + (0,0,50)
     let blocked = |ray: &mut MeshRayCast, to: Vec3, ignore: &Query<(), With<IgnoreTraces>>, targets: &Query<(Entity, &GlobalTransform, &mut Health)>| {
         let d = to - origin;
@@ -422,6 +455,7 @@ fn knife_input(
     mut inv: Single<&mut Inventory>,
     p: Single<&Player>,
     cam: Single<&GlobalTransform, With<BodycamCamera>>,
+    perk: Res<crate::perks::Perk>,
     mut cmd: Commands,
     mut targets: Query<(Entity, &GlobalTransform, &mut Health, Option<&Name>)>,
     mut ray: MeshRayCast,
@@ -429,6 +463,9 @@ fn knife_input(
     mut out: MessageWriter<MontageStarted>,
 ) {
     let dt = time.delta_secs();
+    if perk.locked() {
+        return;
+    }
     let cur = inv.current;
     let on_knife = cur == SLOT_MELEE && inv.slots.get(cur).is_some_and(|w| w.kind == ItemKind::Knife);
     let knife_slot = inv.slots.get(SLOT_MELEE).is_some_and(|w| w.kind == ItemKind::Knife);
@@ -502,11 +539,15 @@ fn drop_pickup(
     assets: Res<AssetServer>,
     mut inv: Single<&mut Inventory>,
     cam: Single<&GlobalTransform, With<BodycamCamera>>,
+    perk: Res<crate::perks::Perk>,
     mut pickups: Query<(Entity, &mut Transform, &mut Pickup)>,
     mut out: MessageWriter<MontageStarted>,
 ) {
     let dt = time.delta_secs();
     let cur = inv.current;
+    if perk.locked() {
+        return;
+    }
     if keys.just_pressed(KeyCode::KeyG) && !inv.busy() && matches!(inv.slots[cur].kind, ItemKind::Grenade | ItemKind::Knife) && inv.slots[cur].ammo > 0 {
         let row = inv.slots[cur].name.clone();
         inv.slots[cur].ammo = 0;

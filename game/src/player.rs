@@ -141,6 +141,8 @@ pub struct Player {
     pub grounded: bool,
     /// effects.rs death: input is ignored.
     pub dead: bool,
+    /// perks.rs: the camera is on the drone, the body ignores input.
+    pub locked: bool,
     pub crouched: bool,
     pub sprinting: bool,
     pub aiming: bool,
@@ -246,7 +248,7 @@ impl CtlRecoil {
 
 fn look(time: Res<Time>, motion: Res<AccumulatedMouseMotion>, mouse: Res<ButtonInput<MouseButton>>, cursor: Single<&CursorOptions>, mut q: Single<&mut Player>) {
     let p = &mut **q;
-    if p.dead {
+    if p.dead || p.locked {
         return;
     }
     let sens = SENS * crate::ui::settings::sens_mult(); // Settings > Game > Mouse Sensitivity
@@ -330,7 +332,7 @@ fn movement(
 ) {
     let (p, tf) = &mut *q;
     let none = ButtonInput::<KeyCode>::default();
-    let keys = if p.dead { &none } else { &*keys }; // dead: no input
+    let keys = if p.dead || p.locked { &none } else { &*keys }; // dead / piloting a perk: no input
     if map.as_ref().is_some_and(|m| !m.ready()) {
         return; // level still spawning: hold the player so they do not fall through unloaded geometry
     }
