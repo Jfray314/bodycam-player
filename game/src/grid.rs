@@ -89,6 +89,74 @@ impl Colliders {
         self.0.iter().filter(|b| p.cmpge(b.min).all() && p.cmple(b.max).all()).map(|b| b.top(p)).filter(|&t| t <= ref_y + STEP + 1e-3).fold(0.0, f32::max)
     }
 
+    /// Would a circle of radius `r` at `p` overlap a block taller than `ref_y` + STEP (what `push_out` would push out of)?
+    pub fn blocked(&self, p: Vec2, r: f32, ref_y: f32) -> bool {
+        self.0.iter().any(|b| {
+            let q = p.clamp(b.min, b.max);
+            (p - q).length_squared() < r * r && b.top(q) > ref_y + STEP + 1e-3
+        })
+    }
+
+    /// Grid A* (0.5 m cells, 8 neighbours, no corner cutting) from `from` (standing at `from_y`) to `to`, as waypoints excluding the start.
+    /// Walks ramps/stairs: a step is free while the next cell's blocks are no taller than the current height + STEP, and the height follows `ground`.
+    /// Empty = no route within the search budget; an unreachable goal gives the path to the closest cell reached.
+    /// ponytail: one-shot grid over the block list (no cache), capped at 6000 expansions; big maps want a prebuilt navmesh.
+    pub fn path(&self, from: Vec2, from_y: f32, to: Vec2, r: f32) -> Vec<Vec2> {
+        use std::cmp::Reverse;
+        use std::collections::{BinaryHeap, HashMap};
+        const CELL: f32 = 0.5;
+        let cell = |p: Vec2| ((p.x / CELL).round() as i32, (p.y / CELL).round() as i32);
+        let centre = |c: (i32, i32)| Vec2::new(c.0 as f32 * CELL, c.1 as f32 * CELL);
+        let (start, goal) = (cell(from), cell(to));
+        let h = |c: (i32, i32)| ((c.0 - goal.0).abs().max((c.1 - goal.1).abs()) as f32 + 0.414 * (c.0 - goal.0).abs().min((c.1 - goal.1).abs()) as f32) * CELL;
+        let key = |f: f32| (f * 1000.0) as u32;
+        let mut open = BinaryHeap::new();
+        let mut best: HashMap<(i32, i32), (f32, f32, (i32, i32))> = HashMap::new(); // cell -> (g, height, parent)
+        best.insert(start, (0.0, from_y, start));
+        open.push(Reverse((key(h(start)), start)));
+        let (mut closest, mut closest_h) = (start, h(start));
+        let mut expanded = 0;
+        while let Some(Reverse((_, c))) = open.pop() {
+            if c == goal {
+                closest = c;
+                break;
+            }
+            expanded += 1;
+            if expanded > 6000 {
+                break;
+            }
+            let (g, y, _) = best[&c];
+            if h(c) < closest_h {
+                (closest, closest_h) = (c, h(c));
+            }
+            for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)] {
+                let n = (c.0 + dx, c.1 + dz);
+                let p = centre(n);
+                if self.blocked(p, r, y) || (dx != 0 && dz != 0 && (self.blocked(centre((c.0 + dx, c.1)), r, y) || self.blocked(centre((c.0, c.1 + dz)), r, y))) {
+                    continue;
+                }
+                let ng = g + if dx != 0 && dz != 0 { 1.414 * CELL } else { CELL };
+                if best.get(&n).is_some_and(|b| b.0 <= ng) {
+                    continue;
+                }
+                best.insert(n, (ng, self.ground(p, y), c));
+                open.push(Reverse((key(ng + h(n)), n)));
+            }
+        }
+        let mut out = vec![];
+        let mut c = closest;
+        while c != start {
+            out.push(centre(c));
+            c = best[&c].2;
+        }
+        out.reverse();
+        // The exact goal replaces the last cell centre when that cell is the goal cell.
+        if closest == goal && let Some(l) = out.last_mut() {
+            *l = to;
+        }
+        out
+    }
+
     /// Player step: walls push out, then snap to the ground (falling lands on it, a grounded player sticks down 0.25 m for stairs/ramps).
     pub fn collide(&self, old_y: f32, pos: &mut Vec3, vel: &mut Vec3, grounded: bool) -> bool {
         let ref_y = pos.y.max(old_y);
@@ -616,5 +684,23 @@ mod tests {
         assert!(c.collide(0.0, &mut pos, &mut Vec3::ZERO, true) && (pos.y - 0.25).abs() < 1e-4);
         let mut pos = Vec3::new(0.0, 1.5, 0.5);
         assert!(c.collide(1.6, &mut pos, &mut Vec3::new(0.0, -3.0, 0.0), false) && (pos.y - 2.0).abs() < 1e-4);
+    }
+
+    fn wall(min: Vec2, max: Vec2, h: f32) -> Block {
+        Block { min, max, h0: h, h1: h, along_z: false }
+    }
+
+    #[test]
+    fn path_goes_around_walls_and_over_steps() {
+        // Wall along x = 5 from z -10..10 with a gap at z 3..5: the route must pass through the gap.
+        let c = Colliders(vec![wall(Vec2::new(4.8, -10.0), Vec2::new(5.2, 3.0), 3.0), wall(Vec2::new(4.8, 5.0), Vec2::new(5.2, 10.0), 3.0)]);
+        let p = c.path(Vec2::new(0.0, 0.0), 0.0, Vec2::new(10.0, 0.0), 0.3);
+        assert!(p.last().is_some_and(|l| l.distance(Vec2::new(10.0, 0.0)) < 1e-3));
+        assert!(p.iter().any(|w| (w.x - 5.0).abs() < 0.6 && w.y > 3.0 && w.y < 5.0), "{p:?}");
+        // A 1 m high crate (> STEP) is walked around, a 0.3 m one over.
+        let c = Colliders(vec![wall(Vec2::new(4.0, -0.4), Vec2::new(6.0, 0.4), 1.0)]);
+        assert!(c.path(Vec2::new(0.0, 0.0), 0.0, Vec2::new(10.0, 0.0), 0.3).iter().any(|w| w.y.abs() > 0.5));
+        let c = Colliders(vec![wall(Vec2::new(4.0, -0.4), Vec2::new(6.0, 0.4), 0.3)]);
+        assert!(c.path(Vec2::new(0.0, 0.0), 0.0, Vec2::new(10.0, 0.0), 0.3).iter().all(|w| w.y.abs() < 0.1));
     }
 }
