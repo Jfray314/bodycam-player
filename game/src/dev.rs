@@ -4,6 +4,7 @@
 //!   BODYCAM_SCREENSHOT=path[.png]   one shot at BODYCAM_SCREENSHOT_AT (default 0.5), then exit
 //!   BODYCAM_SHOTS="0.5,1,2"         numbered shots <prefix>_1.png.. (prefix = BODYCAM_SCREENSHOT minus .png, default shots/shot), then exit
 //!   BODYCAM_RECORD=dir:fps:secs     frame sequence dir/f_0001.png.. at a fixed sim step of 1/fps, then exit
+//!   BODYCAM_POS=x:z:yaw_deg         place the player after start (yaw 0 = -Z)
 //!   BODYCAM_SPEED=N                 virtual time speed multiplier
 use crate::viewmodel::{ArmsRoot, GunRoot};
 use bevy::prelude::*;
@@ -25,6 +26,16 @@ impl Plugin for DevPlugin {
         app.init_resource::<Ready>().add_systems(PreUpdate, (mark_ready, autotest.after(bevy::input::InputSystems)).chain()).add_systems(Update, shots);
         if let Some(deg) = env("BODYCAM_PITCH").and_then(|v| v.parse::<f32>().ok()) { // look up/down for screenshots (legs, shadow)
             app.add_systems(PreUpdate, move |mut p: Single<&mut crate::player::Player>| p.pitch = deg.to_radians());
+        }
+        if let Some(v) = env("BODYCAM_POS") { // x:z:yaw_deg spawn override (after the map's own start)
+            let n: Vec<f32> = v.split(':').filter_map(|x| x.parse().ok()).collect();
+            app.add_systems(Update, move |mut f: Local<u32>, mut p: Single<(&mut crate::player::Player, &mut Transform)>| {
+                *f += 1;
+                if *f == 5 && n.len() >= 2 {
+                    p.1.translation = Vec3::new(n[0], 0.0, n[1]);
+                    p.0.yaw = n.get(2).copied().unwrap_or(0.0).to_radians();
+                }
+            });
         }
         if let Some(s) = env("BODYCAM_SPEED").and_then(|v| v.parse::<f32>().ok()) {
             app.add_systems(Startup, move |mut t: ResMut<Time<Virtual>>| {

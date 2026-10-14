@@ -14,7 +14,6 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
 use std::collections::HashMap;
-use std::time::Duration;
 
 const SHADOW_LAYER: usize = 1;
 const HIDDEN_BONES: [&str; 3] = ["head", "upperarm_l", "upperarm_r"];
@@ -29,13 +28,48 @@ const LEAN_ROLL_DEG: f32 = 18.0;
 const WALK_REF: f32 = 1.65;
 const RUN_REF: f32 = 3.75;
 const CROUCH_REF: f32 = 1.5;
+/// Fall speed (m/s) for any landing animation / the heavy one.
+const LAND_MIN: f32 = 2.5;
+const LAND_HEAVY: f32 = 6.0;
 
 pub struct BodyPlugin;
 impl Plugin for BodyPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, |mut cmd: Commands, a: Res<AssetServer>| cmd.insert_resource(BodyAsset(a.load("models/body.glb"))))
+        app.add_plugins(crate::bodyik::IkPlugin).init_resource::<BodyAnim>().init_resource::<ThirdPerson>().add_systems(Startup, |mut cmd: Commands, a: Res<AssetServer>| cmd.insert_resource(BodyAsset(a.load("models/body.glb"))))
             .add_systems(Update, (spawn, prepare, light_layers, drive).chain())
-            .add_systems(PostUpdate, hide_bones.after(bevy::app::AnimationSystems).before(bevy::transform::TransformSystems::Propagate));
+            .add_systems(PostUpdate, (hide_bones.after(bevy::app::AnimationSystems), third_person_cam).before(bevy::transform::TransformSystems::Propagate));
+    }
+}
+
+/// Debug third-person orbit view (F8 toggles; BODYCAM_3P="dist:yaw_deg:height" starts it): camera orbits the player, the owner
+/// body copy shows its head and arms. For checking the body as a third-person model.
+#[derive(Resource)]
+pub struct ThirdPerson {
+    pub on: bool,
+    dist: f32,
+    yaw: f32,
+    height: f32,
+}
+impl Default for ThirdPerson {
+    fn default() -> Self {
+        let v: Vec<f32> = std::env::var("BODYCAM_3P").unwrap_or_default().split(':').filter_map(|x| x.parse().ok()).collect();
+        Self { on: !v.is_empty(), dist: v.first().copied().unwrap_or(2.5), yaw: v.get(1).copied().unwrap_or(150.0).to_radians(), height: v.get(2).copied().unwrap_or(1.3) }
+    }
+}
+
+fn third_person_cam(keys: Res<ButtonInput<KeyCode>>, mut tp: ResMut<ThirdPerson>, mut cam: Single<&mut Transform, With<crate::player::BodycamCamera>>) {
+    if keys.just_pressed(KeyCode::F8) {
+        tp.on = !tp.on;
+    }
+    if keys.pressed(KeyCode::Comma) {
+        tp.yaw -= 0.03;
+    }
+    if keys.pressed(KeyCode::Period) {
+        tp.yaw += 0.03;
+    }
+    if tp.on {
+        // player space: -Z forward, so yaw 0 = camera in front looking back? yaw 180 = behind.
+        **cam = Transform::from_xyz(tp.yaw.sin() * tp.dist, tp.height, -tp.yaw.cos() * tp.dist).looking_at(Vec3::new(0.0, 0.9, 0.0), Vec3::Y);
     }
 }
 
@@ -45,12 +79,13 @@ struct BodyAsset(Handle<Gltf>);
 /// `shadow`: the shadow-only copy (full body); otherwise the owner-visible one (no head/upper arms, no shadow).
 #[derive(Component)]
 pub struct BodyRoot {
-    shadow: bool,
+    pub(crate) shadow: bool,
     nodes: HashMap<String, AnimationNodeIndex>,
-    current: String,
+    /// Bone name -> entity (filled by bodyik).
+    pub(crate) bones: HashMap<String, Entity>,
 }
 
-fn spawn(mut cmd: Commands, asset: Res<BodyAsset>, gltfs: Res<Assets<Gltf>>, mut graphs: ResMut<Assets<AnimationGraph>>, player: Single<Entity, With<Player>>, mut done: Local<bool>) {
+fn spawn(mut cmd: Commands, asset: Res<BodyAsset>, gltfs: Res<Assets<Gltf>>, mut graphs: ResMut<Assets<AnimationGraph>>, clips: Res<Assets<AnimationClip>>, mut st: ResMut<BodyAnim>, player: Single<Entity, With<Player>>, mut done: Local<bool>) {
     if *done {
         return;
     }
@@ -58,10 +93,11 @@ fn spawn(mut cmd: Commands, asset: Res<BodyAsset>, gltfs: Res<Assets<Gltf>>, mut
     *done = true;
     let mut graph = AnimationGraph::new();
     let nodes: HashMap<String, AnimationNodeIndex> = g.named_animations.iter().map(|(n, c)| (n.to_string(), graph.add_clip(c.clone(), 1.0, graph.root))).collect();
+    st.dur = g.named_animations.iter().map(|(n, c)| (n.to_string(), clips.get(c).map_or(1.0, |c| c.duration().max(0.01)))).collect();
     let graph = graphs.add(graph);
     for shadow in [false, true] {
         let mut e = cmd.spawn((
-            BodyRoot { shadow, nodes: nodes.clone(), current: String::new() },
+            BodyRoot { shadow, nodes: nodes.clone(), bones: default() },
             WorldAssetRoot(g.scenes[0].clone()),
             AnimationGraphHandle(graph.clone()),
             Transform::default(),
@@ -107,7 +143,7 @@ fn prepare(
         if let Some(r) = root_of(e, &parents, &roots)
             && let Ok(g) = graphs.get(r)
         {
-            cmd.entity(e).insert((g.clone(), AnimationTransitions::new()));
+            cmd.entity(e).insert(g.clone());
         }
     }
 }
@@ -119,21 +155,117 @@ fn light_layers(mut cmd: Commands, new: Query<Entity, Or<(Added<DirectionalLight
     }
 }
 
-/// ALS locomotion: clip by stance, gait and local move direction (N walk/run F, LF, RF, LB, RB, B; crouch F/L/R/B), in-air
-/// jump/fall loops, rate by speed.
-// ponytail: nearest-direction clip with a 0.2 s crossfade (no ALS sync-marker blending, so feet can skip on a direction
-// change); no turn-in-place, landing additive or stop transitions.
-fn drive(
+/// ALS-style locomotion blend. Every clip plays at once with a smoothed weight (the ALS CycleBlending / BlendListBy* graph):
+/// ground = two nearest move directions of the walk/run (gait blend) or crouch set, idle pose, jump/fall loop in the air,
+/// land overlay after a fall. The loops share one normalised phase (every clip seeks phase * its length), which stands in for
+/// the ALS foot sync markers; the phase rate is CalculateStandingPlayRate (speed over the gait's animated speed, lerped by gait).
+// ponytail: normalised-time sync, not the ALS sync markers; no turn-in-place (the local player's actor rotation is the control
+// yaw: UpdateGroudedRotation IsLocallyControlled branch) and no Stop transitions.
+#[derive(Resource, Default)]
+pub(crate) struct BodyAnim {
+    w: HashMap<&'static str, f32>,
+    dur: HashMap<String, f32>,
+    phase: f32,
+    gait: f32,
+    land_t: f32,
+    land_heavy: bool,
+    was_air: bool,
+    fall: f32,
+}
+
+type Dirs = [(&'static str, f32)];
+const WALK: &Dirs = &[("ALS_N_Walk_LB", -130.0), ("ALS_N_Walk_LF", -50.0), ("ALS_N_Walk_F", 0.0), ("ALS_N_Walk_RF", 50.0), ("ALS_N_Walk_RB", 130.0), ("ALS_N_Walk_B", 180.0)];
+const RUN: &Dirs = &[("ALS_N_Run_LB", -130.0), ("ALS_N_Run_LF", -50.0), ("ALS_N_Run_F", 0.0), ("ALS_N_Run_RF", 50.0), ("ALS_N_Run_RB", 130.0), ("ALS_N_Run_B", 180.0)];
+const CROUCH: &Dirs = &[("ALS_CLF_Walk_L", -90.0), ("ALS_CLF_Walk_F", 0.0), ("ALS_CLF_Walk_R", 90.0), ("ALS_CLF_Walk_B", 180.0)];
+const AIR: [&str; 2] = ["ALS_N_JumpLoop", "ALS_N_FallLoop"];
+const BLEND_RATE: f32 = 9.0;
+
+/// Adds `scale` split between the two set entries bracketing `a` (degrees, 0 = forward, +right; set sorted ascending, cyclic).
+fn dir_weights(set: &Dirs, a: f32, scale: f32, out: &mut Vec<(&'static str, f32)>) {
+    let n = set.len();
+    for i in 0..n {
+        let lo = set[i].1;
+        let hi = if i + 1 < n { set[i + 1].1 } else { set[0].1 + 360.0 };
+        let aa = if a < lo { a + 360.0 } else { a };
+        if aa >= lo && aa < hi {
+            let t = (aa - lo) / (hi - lo);
+            out.push((set[i].0, scale * (1.0 - t)));
+            out.push((set[(i + 1) % n].0, scale * t));
+            return;
+        }
+    }
+}
+
+/// Target clip weights (sum 1 without the land overlay) and the phase play rate.
+fn targets(grounded: bool, vy: f32, crouched: bool, gait: f32, speed: f32, a: f32) -> (Vec<(&'static str, f32)>, f32) {
+    let mut w = Vec::new();
+    if !grounded {
+        w.push((AIR[(vy <= 0.0) as usize], 1.0));
+        return (w, 1.0);
+    }
+    let m = ((speed - 0.1) / 0.3).clamp(0.0, 1.0); // idle <-> move
+    w.push((if crouched { "ALS_CLF_Pose" } else { "ALS_N_Pose" }, 1.0 - m));
+    if m > 0.0 {
+        if crouched {
+            dir_weights(CROUCH, a, m, &mut w);
+            return (w, speed / CROUCH_REF);
+        }
+        dir_weights(WALK, a, m * (1.0 - gait), &mut w);
+        dir_weights(RUN, a, m * gait, &mut w);
+    }
+    (w, (speed / WALK_REF) * (1.0 - gait) + (speed / RUN_REF) * gait)
+}
+
+pub(crate) fn drive(
+    time: Res<Time>,
     player: Single<(&Player, &Transform)>,
-    mut roots: Query<(Entity, &mut BodyRoot)>,
-    mut players: Query<(Entity, &mut AnimationPlayer, &mut AnimationTransitions)>,
+    mut st: ResMut<BodyAnim>,
+    roots: Query<&BodyRoot>,
+    mut players: Query<(Entity, &mut AnimationPlayer)>,
     parents: Query<&ChildOf>,
 ) {
+    let dt = time.delta_secs().min(0.1);
     let (p, tf) = *player;
     let local = tf.rotation.inverse() * Vec3::new(p.vel.x, 0.0, p.vel.z);
     let speed = local.length();
-    let (clip, rate) = pick_clip(p.grounded, p.vel.y, p.crouched, p.sprinting, speed, (-local.z).atan2(local.x).to_degrees());
-    for (pe, mut ap, mut tr) in &mut players {
+    st.gait += ((p.sprinting as i32 as f32) - st.gait) * (1.0 - (-dt * 6.0).exp());
+    // Land overlay: the fall speed seen while airborne decides light/heavy (ALS Land_Light/Land_Heavy).
+    if !p.grounded {
+        st.was_air = true;
+        st.fall = st.fall.min(p.vel.y);
+    } else if st.was_air {
+        st.was_air = false;
+        if st.fall < -LAND_MIN {
+            st.land_t = 0.0;
+            st.land_heavy = st.fall < -LAND_HEAVY;
+        }
+        st.fall = 0.0;
+    }
+    st.land_t += dt;
+    let land_clip = if st.land_heavy && st.dur.contains_key("ALS_N_Land_Heavy") { "ALS_N_Land_Heavy" } else { "ALS_N_Land_Light" };
+    let land_dur = st.dur.get(land_clip).copied().unwrap_or(0.5);
+    let land = if st.land_t < land_dur { (st.land_t / 0.06).min(1.0) * ((land_dur - st.land_t) / 0.25).min(1.0) } else { 0.0 };
+
+    let (tg, rate) = targets(p.grounded, p.vel.y, p.crouched, st.gait, speed, local.x.atan2(-local.z).to_degrees());
+    for (n, _) in &tg {
+        st.w.entry(n).or_insert(0.0);
+    }
+    let k = 1.0 - (-dt * BLEND_RATE).exp();
+    for (n, w) in st.w.iter_mut() {
+        let t = tg.iter().filter(|(c, _)| c == n).map(|c| c.1).sum::<f32>();
+        *w += (t - *w) * k;
+    }
+    // Shared phase: rate / blended loop length over the moving clips.
+    let (mut dsum, mut wsum) = (0.0, 0.0);
+    for (n, w) in st.w.iter().filter(|(n, _)| n.contains("Walk") || n.contains("Run")) {
+        dsum += w * st.dur.get(*n).copied().unwrap_or(1.0);
+        wsum += w;
+    }
+    if wsum > 0.01 {
+        st.phase = (st.phase + dt * rate.clamp(0.0, 3.0) * wsum / dsum).rem_euclid(1.0);
+    }
+    let (phase, land_t) = (st.phase, st.land_t);
+    for (pe, mut ap) in &mut players {
         let mut e = pe;
         let root = loop {
             if roots.contains(e) {
@@ -144,62 +276,40 @@ fn drive(
                 Err(_) => break None,
             }
         };
-        let Some((_, mut r)) = root.and_then(|r| roots.get_mut(r).ok()) else { continue };
-        let Some(&node) = r.nodes.get(clip) else { continue };
-        if r.current != clip {
-            tr.play(&mut ap, node, Duration::from_millis(200)).repeat();
-            r.current = clip.into();
+        let Some(r) = root.and_then(|r| roots.get(r).ok()) else { continue };
+        for (name, &node) in &r.nodes {
+            let is_land = name.starts_with("ALS_N_Land");
+            let w = if is_land { if name == land_clip { land } else { 0.0 } } else { st.w.get(name.as_str()).copied().unwrap_or(0.0) * (1.0 - land) };
+            if ap.animation_mut(node).is_none() {
+                ap.play(node).repeat().set_weight(0.0);
+            }
+            let a = ap.animation_mut(node).unwrap();
+            a.set_weight(w);
+            let dur = st.dur.get(name).copied().unwrap_or(1.0);
+            if name.contains("Walk") || name.contains("Run") {
+                a.set_speed(0.0).set_seek_time(phase * dur);
+            } else if is_land {
+                a.set_speed(0.0).set_seek_time(land_t.min(dur));
+            }
         }
-        if let Some(a) = ap.animation_mut(node) {
-            a.set_speed(rate.clamp(0.3, 2.0));
-        }
     }
-}
-
-/// `heading`: move direction in degrees, 90 = forward, 0 = right, 180 = left, -90 = back.
-fn pick_clip(grounded: bool, vy: f32, crouched: bool, sprinting: bool, speed: f32, heading: f32) -> (&'static str, f32) {
-    if !grounded {
-        return (if vy > 0.0 { "ALS_N_JumpLoop" } else { "ALS_N_FallLoop" }, 1.0);
-    }
-    if speed < 0.15 {
-        return (if crouched { "ALS_CLF_Pose" } else { "ALS_N_Pose" }, 1.0);
-    }
-    // Angle from forward: 0 = forward, +90 = right, -90 = left, +-180 = back.
-    let a = 90.0 - heading;
-    let a = (a + 180.0).rem_euclid(360.0) - 180.0;
-    if crouched {
-        let c = match a {
-            a if a.abs() <= 45.0 => "ALS_CLF_Walk_F",
-            a if a.abs() >= 135.0 => "ALS_CLF_Walk_B",
-            a if a > 0.0 => "ALS_CLF_Walk_R",
-            _ => "ALS_CLF_Walk_L",
-        };
-        return (c, speed / CROUCH_REF);
-    }
-    let (set, reference) = if sprinting { (["ALS_N_Run_F", "ALS_N_Run_RF", "ALS_N_Run_RB", "ALS_N_Run_B", "ALS_N_Run_LB", "ALS_N_Run_LF"], RUN_REF) } else { (["ALS_N_Walk_F", "ALS_N_Walk_RF", "ALS_N_Walk_RB", "ALS_N_Walk_B", "ALS_N_Walk_LB", "ALS_N_Walk_LF"], WALK_REF) };
-    let c = match a {
-        a if a.abs() <= 30.0 => set[0],
-        a if a.abs() >= 150.0 => set[3],
-        a if a > 0.0 => if a <= 100.0 { set[1] } else { set[2] },
-        a => if a >= -100.0 { set[5] } else { set[4] },
-    };
-    (c, speed / reference)
 }
 
 /// HideBoneByName: collapse the bone (and, through the hierarchy, everything under it); then ALS spine rotation (aim pitch,
 /// shadow copy) and lean roll. Axes come from last frame's bone GlobalTransform (the pose is about to be propagated).
-fn hide_bones(
+pub(crate) fn hide_bones(
     player: Single<(&Player, &GlobalTransform)>,
     mut joints: Query<(Entity, &Name, &mut Transform, &GlobalTransform), With<AnimationTargetId>>,
     parents: Query<&ChildOf>,
     roots: Query<&BodyRoot>,
+    tp: Res<ThirdPerson>,
 ) {
     let (p, pg) = *player;
     let (right, fwd) = (pg.right().as_vec3(), pg.forward().as_vec3());
     for (e, n, mut t, g) in &mut joints {
         let Some(shadow) = root_of(e, &parents, &roots).map(|r| roots.get(r).unwrap().shadow) else { continue };
         let name = n.as_str();
-        if (if shadow { &SHADOW_HIDDEN_BONES[..] } else { &HIDDEN_BONES[..] }).contains(&name) {
+        if !tp.on && (if shadow { &SHADOW_HIDDEN_BONES[..] } else { &HIDDEN_BONES[..] }).contains(&name) {
             t.scale = Vec3::ZERO;
         }
         if SPINE.contains(&name) {
@@ -213,17 +323,17 @@ fn hide_bones(
 
 #[cfg(test)]
 mod tests {
-    use super::pick_clip;
+    use super::targets;
     #[test]
-    fn clip_by_direction() {
-        let walk = |h: f32| pick_clip(true, 0.0, false, false, 1.25, h).0;
-        assert_eq!(walk(90.0), "ALS_N_Walk_F");
-        assert_eq!(walk(-90.0), "ALS_N_Walk_B");
-        assert_eq!(walk(0.0), "ALS_N_Walk_RF");
-        assert_eq!(walk(180.0), "ALS_N_Walk_LF");
-        assert_eq!(walk(-45.0), "ALS_N_Walk_RB");
-        assert_eq!(pick_clip(true, 0.0, true, false, 1.0, 180.0).0, "ALS_CLF_Walk_L");
-        assert_eq!(pick_clip(false, 2.0, false, false, 1.0, 90.0).0, "ALS_N_JumpLoop");
-        assert_eq!(pick_clip(true, 0.0, false, false, 0.0, 90.0).0, "ALS_N_Pose");
+    fn blend_weights() {
+        let get = |w: &[(&str, f32)], n: &str| w.iter().filter(|c| c.0 == n).map(|c| c.1).sum::<f32>();
+        let (w, _) = targets(true, 0.0, false, 0.0, 1.25, 0.0);
+        assert!((get(&w, "ALS_N_Walk_F") - 1.0).abs() < 1e-5);
+        let (w, _) = targets(true, 0.0, false, 0.0, 1.25, 90.0); // strafe right = RF/RB mix
+        assert!(get(&w, "ALS_N_Walk_RF") > 0.4 && get(&w, "ALS_N_Walk_RB") > 0.3);
+        let (w, _) = targets(true, 0.0, false, 0.5, 2.0, -170.0);
+        assert!((w.iter().map(|c| c.1).sum::<f32>() - 1.0).abs() < 1e-4 && get(&w, "ALS_N_Run_B") > 0.39 && get(&w, "ALS_N_Walk_LB") > 0.0);
+        assert_eq!(targets(false, 2.0, false, 0.0, 1.0, 0.0).0[0].0, "ALS_N_JumpLoop");
+        assert_eq!(targets(true, 0.0, true, 0.0, 0.0, 0.0).0[0].0, "ALS_CLF_Pose");
     }
 }
