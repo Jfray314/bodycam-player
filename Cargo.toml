@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["tools/extract", "tools/binka", "tools/audio-bake","tools/uasset", "game"]
+members = ["tools/extract", "tools/binka", "tools/audio-bake","tools/uasset", "game", "bodycam-core"]
 
 [profile.dev.package."*"]
 opt-level = 3
