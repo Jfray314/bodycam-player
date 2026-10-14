@@ -136,8 +136,8 @@ fn stack(st: &PostFxState) -> impl Bundle {
         // Histogram auto exposure, AutoExposureBias +1 (exposure_bias), metering mask stand-in.
         AutoExposure {
             range: -6.0..=6.0,
-            speed_brighten: 3.0, // AutoExposureSpeedUp
-            speed_darken: 1.0,   // AutoExposureSpeedDown
+            speed_brighten: 13.0, // GlobalPostProcess AutoExposureSpeedUp 13 (LobbyB volume says 3 and took ~10 s to settle at spawn; user report) - ponytail: volume priority unverified
+            speed_darken: 13.0,  // AutoExposureSpeedDown 13
             metering_mask: st.mask.clone(),
             ..default()
         },
