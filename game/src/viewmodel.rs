@@ -577,7 +577,7 @@ fn base_loop(
             if time.elapsed_secs() >= anim.montage_until && anim.current.as_deref() != Some("A_FP_Tablet_Pose") {
                 anim.after_montage = false;
                 play(&mut anim, &mut player, &mut tr, "A_FP_Tablet_Pose", true, BLEND);
-                anim.action_pitch = -13.0; // tilt the view down onto the screen
+                anim.action_pitch = std::env::var("BODYCAM_TABPITCH").ok().and_then(|v| v.parse().ok()).unwrap_or(-6.0); // tilt the view down onto the screen (real game: tablet low and face-on, screen ~80% of the view, hands + frame visible)
                 anim.montage_until = f32::MAX; // the camera follows the head (looks down at the tablet) like during a montage
             }
         }
