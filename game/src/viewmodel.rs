@@ -116,8 +116,20 @@ fn aim_point(gun: &str) -> Option<(&'static str, Vec3)> {
         "UZI" => Vec3::new(0.0, -19.48, 8.72),
         "Vaiga" => Vec3::new(0.0, -8.37, 9.12),
         "Vector" => Vec3::new(0.0, -11.0, 7.0),
-        _ => return None, // Revolver: socket is rotated on a rotated Root, not mapped yet
+        // Revolver Root is rotated: muzzle = UE +Z, up = UE +X (AimPoint x 7.5 > Barrel 5.3 > Trigger 0.5; AimPointSecondary
+        // at UE Y -6.9 lands on the right like the other guns' canted sights). See `ads_axes`.
+        "Revolver" => Vec3::new(7.5, 0.2, -28.0),
+        _ => return None,
     }))
+}
+
+/// Gun joint axes -> arms space when squared to the view (columns = where joint X, Y, Z go; view forward = -Z, up = +Y).
+/// Joint = UE (x, -y, z). Most guns: UE +Y muzzle, +Z up. Revolver: UE +Z muzzle, +X up.
+fn ads_axes(gun: &str) -> Mat3 {
+    match gun {
+        "Revolver" => Mat3::from_cols(Vec3::Y, Vec3::X, Vec3::NEG_Z),
+        _ => Mat3::from_cols(Vec3::NEG_X, Vec3::Z, Vec3::Y),
+    }
 }
 
 fn load(mut cmd: Commands, assets: Res<AssetServer>) {
@@ -673,7 +685,7 @@ fn place_arms(
         if let (Some(ap), Some(gt), Ok(rg)) = (gun_aim, gun_bone.and_then(|b| globals.get(b).ok()), globals.get(root)) {
             let g = post.to_matrix() * rg.to_matrix().inverse() * gt.to_matrix();
             let p = g.transform_point3(ap);
-            let target = Quat::from_mat3(&Mat3::from_cols(Vec3::NEG_X, Vec3::Z, Vec3::Y));
+            let target = Quat::from_mat3(&ads_axes(gun.map_or("", |(_, g)| g.0)));
             let (_, rot, _) = g.to_scale_rotation_translation();
             let q = Quat::IDENTITY.slerp(target * rot.inverse(), ads.alpha);
             post = Transform::from_translation(-p * ads.alpha) * Transform::from_translation(p) * Transform::from_rotation(q) * Transform::from_translation(-p) * post;
