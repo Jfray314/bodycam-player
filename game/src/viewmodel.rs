@@ -253,10 +253,9 @@ fn no_cull(
 ) {
     for e in &new {
         if root_of(e, &parents, &arms).is_some() || root_of(e, &parents, &guns).is_some() {
+            // Arms + gun cast the shadow's upper body: UE's Shadow mesh copies the Mesh pose, whose arms follow the same FP
+            // animation as the Arms, so the FP arms are the exact source; the shadow body hides its own upper arms (body.rs).
             cmd.entity(e).insert((bevy::camera::visibility::NoFrustumCulling, crate::player::IgnoreTraces));
-            if root_of(e, &parents, &arms).is_some() {
-                cmd.entity(e).insert(bevy::light::NotShadowCaster); // Bodycam_Player Arms: CastShadow=false (the body's Shadow mesh casts instead)
-            }
         }
     }
 }

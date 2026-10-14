@@ -183,7 +183,11 @@ void ExportAll(string[]? only)
     {
         const string Als = "Bodycam/Content/AdvancedLocomotionV4/CharacterAssets/MannequinSkeleton/AnimationExamples/Base/";
         ExportMesh("Bodycam/Content/BodycamSkin/DefaultSkin/DefaultOperator", "body");
-        foreach (var c in new[] { "BasePoses/ALS_N_Pose", "BasePoses/ALS_CLF_Pose", "Locomotion/ALS_N_Walk_F", "Locomotion/ALS_N_Run_F", "Locomotion/ALS_N_Sprint_F", "Locomotion/ALS_CLF_Walk_F" })
+        foreach (var c in new[] { "BasePoses/ALS_N_Pose", "BasePoses/ALS_CLF_Pose", "Locomotion/ALS_N_Sprint_F",
+                     "Locomotion/ALS_N_Walk_F", "Locomotion/ALS_N_Walk_B", "Locomotion/ALS_N_Walk_LF", "Locomotion/ALS_N_Walk_LB", "Locomotion/ALS_N_Walk_RF", "Locomotion/ALS_N_Walk_RB",
+                     "Locomotion/ALS_N_Run_F", "Locomotion/ALS_N_Run_B", "Locomotion/ALS_N_Run_LF", "Locomotion/ALS_N_Run_LB", "Locomotion/ALS_N_Run_RF", "Locomotion/ALS_N_Run_RB",
+                     "Locomotion/ALS_CLF_Walk_F", "Locomotion/ALS_CLF_Walk_B", "Locomotion/ALS_CLF_Walk_L", "Locomotion/ALS_CLF_Walk_R",
+                     "InAir/ALS_N_JumpLoop", "InAir/ALS_N_FallLoop", "InAir/ALS_N_Land_Light" })
             ExportAnim(Als + c, "body_anims");
     }
     foreach (var dirName in keys.Select(k => k[AnimRoot.Length..].Split('/')[0]).Distinct())
