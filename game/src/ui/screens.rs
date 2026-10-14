@@ -322,10 +322,17 @@ fn weapon(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
         let c = button(cmd, strip, Node { padding: UiRect::all(px(4)), ..default() }, Act::Weapon(o.row.clone()), None, PANEL, PANEL_HOVER, Some(if o.row == it.row { RED } else { Color::srgb(0.2, 0.2, 0.22) }));
         img(cmd, c, cx, &icon_of(&o.row), 96.0, 48.0, Color::WHITE);
     }
+    // MODIFY: attachments the gun has sockets for (attach::available); one device per socket.
+    let mods = add(cmd, body, Node { column_gap: px(14), margin: UiRect::top(px(10)), flex_wrap: FlexWrap::Wrap, ..row() });
+    for (n, (id, label)) in crate::attach::available(&it.row).into_iter().enumerate() {
+        let on = cx.s.has_att(&it.row, id);
+        let key = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9][n.min(8)];
+        let b = button(cmd, mods, Node { padding: UiRect::axes(px(14), px(8)), ..row() }, Act::Att(id), Some(key), if on { RED } else { PANEL }, PANEL_HOVER, None);
+        txt(cmd, b, cx, &format!("[{}] {label}", n + 1), 24.0, Color::WHITE, Wt::Bold);
+    }
     let foot = add(cmd, body, Node { column_gap: px(36), margin: UiRect::top(px(14)), ..row() });
     for (label, act, key) in [
         ("[ESC] BACK".to_string(), Act::Back, KeyCode::Escape),
-        (format!("[SPACE] SUPPRESSOR: {}", if cx.s.has_att(&it.row, "suppressor") { "ON" } else { "OFF" }), Act::Att("suppressor"), KeyCode::Space),
         (format!("[F] SWAP {slot_name}"), Act::Equip, KeyCode::KeyF),
     ] {
         let b = button(cmd, foot, Node { padding: UiRect::axes(px(8), px(6)), ..row() }, act, Some(key), CLEAR, PANEL_HOVER, None);

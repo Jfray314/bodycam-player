@@ -80,6 +80,10 @@ switch (cmd)
         { var sk = provider.LoadPackageObject<USkeleton>(args[4]); foreach (var v in sk.Get<CUE4Parse.UE4.Assets.Objects.FStructFallback[]>("VirtualBones")) Console.WriteLine(string.Join(" ", v.Properties.Select(q => q.Name + "=" + q.Tag?.GenericValue))); break; }
     case "refpose": // refpose <skm> -> bone ref pose (cm, quaternion)
         { var m = provider.LoadPackageObject<USkeletalMesh>(args[4]); for (int i = 0; i < m.ReferenceSkeleton.FinalRefBoneInfo.Length; i++) { var t = m.ReferenceSkeleton.FinalRefBonePose[i]; Console.WriteLine($"{m.ReferenceSkeleton.FinalRefBoneInfo[i].Name} parent={m.ReferenceSkeleton.FinalRefBoneInfo[i].ParentIndex} T=({t.Translation.X:F2},{t.Translation.Y:F2},{t.Translation.Z:F2}) Q=({t.Rotation.X:F3},{t.Rotation.Y:F3},{t.Rotation.Z:F3},{t.Rotation.W:F3})"); } break; }
+    case "att": // att <attlib.json>: every library mesh -> <outDir>/att/<id>/ (+ static-mesh sockets in the json)
+        foreach (var e in JsonSerializer.Deserialize<List<AttLib>>(File.ReadAllText(args[4]))!)
+        { try { ExportMesh(e.mesh, e.id, "att"); } catch (Exception ex) { Console.WriteLine($"att fail {e.id}: {ex.Message}"); } }
+        break;
     case "mesh": ExportMesh(args[4], args.Length > 5 ? args[5] : Path.GetFileNameWithoutExtension(args[4])); break;
     case "anim": foreach (var a in args.Skip(4)) ExportAnim(a); break;
 }
@@ -92,9 +96,12 @@ void ExportMesh(string asset, string name, string sub = "", string[]? matOverrid
     foreach (var f in Run(obj)) { File.Copy(f, Path.Combine(dir, Path.GetFileName(f)), true); Console.WriteLine("wrote " + f); }
     var skel = sm0?.Skeleton?.Load<USkeleton>();
     var bones = sm0?.ReferenceSkeleton.FinalRefBoneInfo.Select((b, i) => new { name = b.Name.Text, parent = b.ParentIndex }).ToList();
-    var sockets = (sm0 == null ? [] : sm0.Sockets.Select(s => s.Load<USkeletalMeshSocket>()).Where(s => s != null)
+    var skSock = (sm0 == null ? [] : sm0.Sockets.Select(s => s.Load<USkeletalMeshSocket>()).Where(s => s != null)
         .Concat(skel?.Sockets.Select(s => s.Load<USkeletalMeshSocket>()).Where(s => s != null) ?? []))
         .Select(s => new { name = s!.SocketName.Text, bone = s.BoneName.Text, loc = new[] { s.RelativeLocation.X, s.RelativeLocation.Y, s.RelativeLocation.Z }, rot = new[] { s.RelativeRotation.Pitch, s.RelativeRotation.Yaw, s.RelativeRotation.Roll }, scale = new[] { s.RelativeScale.X, s.RelativeScale.Y, s.RelativeScale.Z } }).ToList();
+    var stSock = (st0?.Sockets ?? []).Select(p => p.Load<CUE4Parse.UE4.Assets.Exports.StaticMesh.UStaticMeshSocket>()).Where(s => s != null)
+        .Select(s => new { name = s!.SocketName.Text, bone = "", loc = new[] { s.RelativeLocation.X, s.RelativeLocation.Y, s.RelativeLocation.Z }, rot = new[] { s.RelativeRotation.Pitch, s.RelativeRotation.Yaw, s.RelativeRotation.Roll }, scale = new[] { s.RelativeScale.X, s.RelativeScale.Y, s.RelativeScale.Z } }).ToList();
+    var sockets = sm0 == null ? stSock : skSock;
     var slots = sm0 != null ? sm0.SkeletalMaterials.Select(x => (x.MaterialSlotName.Text, x.MaterialInterface)).ToList()
                             : (st0?.StaticMaterials ?? []).Select(x => (x.MaterialSlotName.Text, x.MaterialInterface)).ToList();
     var mats = new List<object>();
@@ -242,6 +249,7 @@ List<(string path, string? skel)> ScanSkms()
     File.WriteAllLines(cache, res.Select(r => r.Item1 + "	" + r.Item2));
     return res;
 }
+class AttLib { public string id { get; set; } = ""; public string mesh { get; set; } = ""; }
 class AttPart { public string row { get; set; } = ""; public string cls { get; set; } = ""; public string? socket { get; set; } public string mesh { get; set; } = ""; }
 class AttCfg { public string? receiver { get; set; } public List<AttPart> parts { get; set; } = new(); }
 class GunCfg { public string[]? materials { get; set; } public string? name { get; set; } public string? skm { get; set; } public string[]? extraDirs { get; set; } public bool? skip { get; set; } public string[]? variants { get; set; } }

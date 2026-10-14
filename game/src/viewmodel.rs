@@ -704,8 +704,7 @@ fn place_arms(
     recoil: Res<crate::recoil::Recoil>,
     ads: Res<Ads>,
     mut sway: ResMut<Sway>,
-    aim: Res<AimOffset>,
-    tablet: Res<crate::ui::Tablet>,
+    (aim, tablet, att): (Res<AimOffset>, Res<crate::ui::Tablet>, Res<crate::attach::AttState>),
     mut arms: Query<(Entity, &mut Transform, &Anim), With<ArmsRoot>>,
     joints: Query<(Entity, &Name)>,
     parents: Query<&ChildOf>,
@@ -713,15 +712,17 @@ fn place_arms(
     mut gun_joint: Local<Option<Entity>>,
     mut action: Local<f32>,
     guns: Query<(Entity, &GunRoot)>,
-    mut gun_bone: Local<Option<Entity>>,
+    mut gun_bone: Local<Option<(String, Entity)>>,
 ) {
     let gun = guns.iter().next();
-    let aim_sock = gun.and_then(|(_, g)| aim_point(g.0));
-    if gun_bone.is_none_or(|b| globals.get(b).is_err() || !gun.is_some_and(|(g, _)| root_of_entity(b, g, &parents))) {
-        *gun_bone = gun.zip(aim_sock).and_then(|((g, _), (bone, _))| joints.iter().find(|(e, n)| n.as_str().eq_ignore_ascii_case(bone) && root_of_entity(*e, g, &parents)).map(|j| j.0));
+    // WEP.GetActiveAimpointComponent: a mounted optic's own AimPoint (gun-joint metres) wins over the receiver / slide socket.
+    let opt = att.aim.clone().filter(|_| gun.is_some_and(|(_, g)| g.0 != "Tablet"));
+    let aim_sock = opt.as_ref().map(|(b, v)| (b.as_str(), *v)).or_else(|| gun.and_then(|(_, g)| aim_point(g.0)).map(|(b, v)| (b, Vec3::new(v.x, -v.y, v.z) * 0.01)));
+    if gun_bone.as_ref().is_none_or(|(n, b)| Some(n.as_str()) != aim_sock.map(|s| s.0) || globals.get(*b).is_err() || !gun.is_some_and(|(g, _)| root_of_entity(*b, g, &parents))) {
+        *gun_bone = gun.zip(aim_sock).and_then(|((g, _), (bone, _))| joints.iter().find(|(e, n)| n.as_str().eq_ignore_ascii_case(bone) && root_of_entity(*e, g, &parents)).map(|j| (bone.to_string(), j.0)));
     }
     // UE socket (x, y, z) cm -> joint frame (x, -y, z) m: the PSK import mirrors Y (as ueblender.attach_parts); verified by the sights centring.
-    let gun_aim = aim_sock.map(|(_, v)| Vec3::new(v.x, -v.y, v.z) * 0.01);
+    let gun_aim = aim_sock.map(|(_, v)| v);
     let (pose, act) = inv.filter(|_| !tablet.shown).map(|i| (pose_offset(&i.slots[i.current].anims, "PoseOffset"), pose_offset(&i.slots[i.current].anims, "ActionPoseOffset"))).unwrap_or_default();
     let hip = 1.0 - ads.alpha;
     let now = time.elapsed_secs();
@@ -740,7 +741,7 @@ fn place_arms(
         let mut post = post;
         // Rotation too: rec_1791925656 has the same gun-in-camera rotation (within 0.1 deg) on 5 different guns, so the node
         // squares the gun to the view. Gun joint axes (UE x, -y, z) -> camera: UE +Y (muzzle) = view forward, UE +Z = up.
-        if let (Some(ap), Some(gt), Ok(rg)) = (gun_aim, gun_bone.and_then(|b| globals.get(b).ok()), globals.get(root)) {
+        if let (Some(ap), Some(gt), Ok(rg)) = (gun_aim, gun_bone.as_ref().and_then(|(_, b)| globals.get(*b).ok()), globals.get(root)) {
             let g = post.to_matrix() * rg.to_matrix().inverse() * gt.to_matrix();
             let p = g.transform_point3(ap);
             let target = Quat::from_mat3(&ads_axes(gun.map_or("", |(_, g)| g.0)));

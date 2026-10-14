@@ -504,7 +504,7 @@ fn handle(act: Act, cx: &mut Cx, rect: Option<(f32, f32)>) {
         }
         Act::Att(id) => {
             let row = cx.ui.weapon.clone();
-            cx.s.toggle_att(&row, id);
+            crate::attach::toggle(cx.s, &row, id);
             settings::save(cx.s);
             cx.ui.toast = (format!("{id} {}.", if cx.s.has_att(&row, id) { "mounted" } else { "removed" }), 2.0);
         }
