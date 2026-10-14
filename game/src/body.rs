@@ -238,6 +238,7 @@ pub(crate) fn drive(
         if st.fall < -LAND_MIN {
             st.land_t = 0.0;
             st.land_heavy = st.fall < -LAND_HEAVY;
+            info!("landing at {:.1} m/s: {}", -st.fall, if st.land_heavy { "ALS_N_Land_Heavy" } else { "ALS_N_Land_Light" });
         }
         st.fall = 0.0;
     }

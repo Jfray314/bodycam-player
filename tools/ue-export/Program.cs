@@ -187,7 +187,7 @@ void ExportAll(string[]? only)
                      "Locomotion/ALS_N_Walk_F", "Locomotion/ALS_N_Walk_B", "Locomotion/ALS_N_Walk_LF", "Locomotion/ALS_N_Walk_LB", "Locomotion/ALS_N_Walk_RF", "Locomotion/ALS_N_Walk_RB",
                      "Locomotion/ALS_N_Run_F", "Locomotion/ALS_N_Run_B", "Locomotion/ALS_N_Run_LF", "Locomotion/ALS_N_Run_LB", "Locomotion/ALS_N_Run_RF", "Locomotion/ALS_N_Run_RB",
                      "Locomotion/ALS_CLF_Walk_F", "Locomotion/ALS_CLF_Walk_B", "Locomotion/ALS_CLF_Walk_L", "Locomotion/ALS_CLF_Walk_R",
-                     "InAir/ALS_N_JumpLoop", "InAir/ALS_N_FallLoop", "InAir/ALS_N_Land_Light" })
+                     "InAir/ALS_N_JumpLoop", "InAir/ALS_N_FallLoop", "InAir/ALS_N_Land_Light", "InAir/ALS_N_Land_Heavy" })
             ExportAnim(Als + c, "body_anims");
     }
     foreach (var dirName in keys.Select(k => k[AnimRoot.Length..].Split('/')[0]).Distinct())
