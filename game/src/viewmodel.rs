@@ -39,7 +39,7 @@ impl Plugin for ViewmodelPlugin {
         app.add_systems(Startup, load)
             .init_resource::<StressAnim>()
             .init_resource::<RegripState>()
-            .add_systems(Update, (spawn_arms, hook_players, no_cull, attach_gun, play_events, base_loop, additive_weights, stress_layers, regrips).chain())
+            .add_systems(Update, (spawn_arms, hook_players, no_cull, attach_gun, play_events, tablet_anim, base_loop, additive_weights, stress_layers, regrips).chain())
             .add_systems(Last, debug_bones)
             .add_systems(
                 PostUpdate,
@@ -135,8 +135,10 @@ fn ads_axes(gun: &str) -> Mat3 {
 fn load(mut cmd: Commands, assets: Res<AssetServer>) {
     let names = ["M4A1", "Glock17", "Akm", "Deagle", "FAL", "Mossberg590", "Remington700", "Revolver", "SCAR-H", "SVD", "UZI", "MP9", "Vector", "MP5", "Benelli", "Crossbow", "Vaiga"];
     // Only the default loadout is preloaded (guns are 40 MB glbs each: all 17 cost ~20 s); the rest load on first equip.
-    let guns = names[..2].iter().map(|n| (*n, assets.load(format!("models/guns/{n}.glb")))).collect();
-    let arm_anims = names[2..].iter().map(|n| assets.load(format!("models/arms_anims/{n}.glb"))).collect();
+    let mut guns: HashMap<&'static str, Handle<Gltf>> = names[..2].iter().map(|n| (*n, assets.load(format!("models/guns/{n}.glb")))).collect();
+    guns.insert("Tablet", assets.load("ui/Tablet.glb")); // the menu tablet (ui module), attached like a gun
+    let mut arm_anims: Vec<Handle<Gltf>> = names[2..].iter().map(|n| assets.load(format!("models/arms_anims/{n}.glb"))).collect();
+    arm_anims.push(assets.load("ui/arms_tablet.glb"));
     cmd.insert_resource(ViewmodelAssets { arms: assets.load("models/arms.glb"), guns, arm_anims });
 }
 
@@ -272,13 +274,14 @@ fn attach_gun(
     gltfs: Res<Assets<Gltf>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     inv: Option<Single<&Inventory>>,
+    tablet: Res<crate::ui::Tablet>,
     joints: Query<(Entity, &Name, &AnimationTargetId)>,
     parents: Query<&ChildOf>,
     arms: Query<(), With<ArmsRoot>>,
     guns: Query<(Entity, &GunRoot)>,
 ) {
     let Some(inv) = inv else { return };
-    let Some(want) = gun_model(&inv.slots[inv.current].name, &inv.slots[inv.current].anims) else { return };
+    let Some(want) = (if tablet.shown { Some("Tablet") } else { gun_model(&inv.slots[inv.current].name, &inv.slots[inv.current].anims) }) else { return };
     if guns.iter().any(|(_, g)| g.0 == want) {
         return;
     }
@@ -293,6 +296,27 @@ fn attach_gun(
         .spawn((GunRoot(want), WorldAssetRoot(g.scenes[0].clone()), AnimationGraphHandle(graph), Anim { nodes, ..default() }, Transform::default()))
         .id();
     cmd.entity(hand).add_child(gun);
+}
+
+/// Tablet raise/put-away: A_FP_Tablet_Draw_02 / A_FP_Tablet_Holster on the arms (the pose loop is `base_loop`'s).
+fn tablet_anim(
+    time: Res<Time>,
+    mut tablet: ResMut<crate::ui::Tablet>,
+    mut roots: Query<&mut Anim, With<ArmsRoot>>,
+    mut players: Query<(&mut AnimationPlayer, &mut AnimationTransitions, &AnimLink)>,
+) {
+    let Some(raise) = tablet.cmd.take() else { return };
+    let (clip, len) = if raise { ("A_FP_Tablet_Draw_02", 1.133) } else { ("A_FP_Tablet_Holster", 0.9) };
+    for (mut player, mut tr, link) in &mut players {
+        let Ok(mut anim) = roots.get_mut(link.0) else { continue };
+        if play(&mut anim, &mut player, &mut tr, clip, false, Duration::from_millis(150)) {
+            anim.montage_until = time.elapsed_secs() + len - 0.2;
+            anim.action_pitch = 0.0;
+            anim.action = false;
+            anim.blend_out = 0.2;
+            anim.after_montage = true;
+        }
+    }
 }
 
 fn play(anim: &mut Anim, player: &mut AnimationPlayer, tr: &mut AnimationTransitions, clip: &str, repeat: bool, blend: Duration) -> bool {
@@ -533,11 +557,24 @@ fn base_loop(
     p: Single<&Player>,
     inv: Option<Single<&Inventory>>,
     ads: Res<Ads>,
+    tablet: Res<crate::ui::Tablet>,
     mut roots: Query<&mut Anim, With<ArmsRoot>>,
     mut players: Query<(&mut AnimationPlayer, &mut AnimationTransitions, &AnimLink)>,
 ) {
     let Some(inv) = inv else { return };
     let anims = &inv.slots[inv.current].anims;
+    if tablet.shown {
+        for (mut player, mut tr, link) in &mut players {
+            let Ok(mut anim) = roots.get_mut(link.0) else { continue };
+            if time.elapsed_secs() >= anim.montage_until && anim.current.as_deref() != Some("A_FP_Tablet_Pose") {
+                anim.after_montage = false;
+                play(&mut anim, &mut player, &mut tr, "A_FP_Tablet_Pose", true, BLEND);
+                anim.action_pitch = -13.0; // tilt the view down onto the screen
+                anim.montage_until = f32::MAX; // the camera follows the head (looks down at the tablet) like during a montage
+            }
+        }
+        return;
+    }
     let Some(fire) = anims["Fire"][0]["Character"]["path"].as_str() else { return };
     let prefix = clip_of(fire).trim_end_matches("Fire").to_string(); // "A_FP_M4A1_"
     let aim = anims["AimIdlePose"]["path"].as_str().map(clip_of);
@@ -664,6 +701,7 @@ fn place_arms(
     ads: Res<Ads>,
     mut sway: ResMut<Sway>,
     aim: Res<AimOffset>,
+    tablet: Res<crate::ui::Tablet>,
     mut arms: Query<(Entity, &mut Transform, &Anim), With<ArmsRoot>>,
     joints: Query<(Entity, &Name)>,
     parents: Query<&ChildOf>,
@@ -680,7 +718,7 @@ fn place_arms(
     }
     // UE socket (x, y, z) cm -> joint frame (x, -y, z) m: the PSK import mirrors Y (as ueblender.attach_parts); verified by the sights centring.
     let gun_aim = aim_sock.map(|(_, v)| Vec3::new(v.x, -v.y, v.z) * 0.01);
-    let (pose, act) =inv.map(|i| (pose_offset(&i.slots[i.current].anims, "PoseOffset"), pose_offset(&i.slots[i.current].anims, "ActionPoseOffset"))).unwrap_or_default();
+    let (pose, act) = inv.filter(|_| !tablet.shown).map(|i| (pose_offset(&i.slots[i.current].anims, "PoseOffset"), pose_offset(&i.slots[i.current].anims, "ActionPoseOffset"))).unwrap_or_default();
     let hip = 1.0 - ads.alpha;
     let now = time.elapsed_secs();
     for (root, mut t, anim) in &mut arms {

@@ -256,6 +256,20 @@ pub struct Inventory {
 }
 
 impl Inventory {
+    /// Loadout screen: the chosen primary and sidearm become slots 1 and 2 (the rest keep their order) and the primary is current.
+    pub fn equip(&mut self, primary: &str, secondary: &str) {
+        self.slots.sort_by_key(|w| (w.name != primary, w.name != secondary));
+        (self.current, self.action) = (0, None);
+    }
+    /// Draws the current weapon again (after the tablet is put away).
+    pub fn redraw(&mut self, out: &mut MessageWriter<MontageStarted>) {
+        let cur = self.current;
+        let w = &mut self.slots[cur];
+        let m = if w.equipped_once { w.one("Draw") } else { w.one("FirstEquip") };
+        w.equipped_once = true;
+        self.action = None;
+        self.start(ActionKind::Draw, m, cur, out);
+    }
     pub fn busy(&self) -> bool {
         self.action.is_some()
     }
@@ -403,8 +417,9 @@ fn give_loadout(mut cmd: Commands, player: Single<Entity, With<Player>>, mut out
     let mut slots = load_weapons();
     // Default loadout: primary M4A1 + sidearm Glock17, then every other gun for testing.
     // Dev: BODYCAM_START=<name> equips that gun first (gun audits).
-    let start = std::env::var("BODYCAM_START").unwrap_or_else(|_| "M4A1".into());
-    slots.sort_by_key(|w| (w.name != start, w.name != "M4A1", w.name != "Glock17", w.name.clone()));
+    let cfg = crate::ui::settings::load(); // loadout chosen on the tablet
+    let start = std::env::var("BODYCAM_START").unwrap_or_else(|_| cfg.primary.clone());
+    slots.sort_by_key(|w| (w.name != start, w.name != cfg.primary, w.name != cfg.secondary, w.name.clone()));
     let mut inv = Inventory { slots, current: 0, cooldown: 0.0, action: None, r_held: 0.0, fire_start: None, last_fire_start: 0.0, pull_slider: vec![] };
     let first = inv.slots[0].one("FirstEquip");
     inv.slots[0].equipped_once = true;

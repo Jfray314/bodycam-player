@@ -94,12 +94,13 @@ fn mark_ready(
 
 type Plan = Vec<(Result<KeyCode, MouseButton>, f32, f32)>;
 
-fn autotest(
+pub(crate) fn autotest(
     time: Res<Time>,
     ready: Res<Ready>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut fake: ResMut<crate::sway::FakeLook>,
+    mut cur: ResMut<crate::ui::FakeCursor>,
     mut plan: Local<Option<Plan>>,
 ) {
     let Some(r) = ready.0 else { return };
@@ -136,6 +137,18 @@ fn autotest(
                 "Flash" => Ok(KeyCode::F9),
                 "Hit" => Ok(KeyCode::F11),
                 "Kill" => Ok(KeyCode::F12),
+                "Esc" => Ok(KeyCode::Escape),
+                "Tab" => Ok(KeyCode::Tab),
+                "F" => Ok(KeyCode::KeyF),
+                "C" => Ok(KeyCode::KeyC),
+                "T" => Ok(KeyCode::KeyT),
+                "Left" => Ok(KeyCode::ArrowLeft),
+                "Right" => Ok(KeyCode::ArrowRight),
+                // Tablet cursor motion (ui::FakeCursor): counts per frame while held.
+                "CurR" => Ok(KeyCode::F21),
+                "CurL" => Ok(KeyCode::F20),
+                "CurD" => Ok(KeyCode::F19),
+                "CurU" => Ok(KeyCode::F18),
                 // Fake mouse motion for the viewmodel sway (sway::FakeLook): counts per frame while held.
                 "LookR" => Ok(KeyCode::F24),
                 "LookL" => Ok(KeyCode::F23),
@@ -147,12 +160,17 @@ fn autotest(
     });
     let t = time.elapsed_secs() - r;
     fake.0 = Vec2::ZERO;
+    cur.0 = Vec2::ZERO;
     for (k, at, hold) in plan.iter() {
         let (on, off) = (t >= *at && t < at + hold, t >= at + hold);
         match *k {
             Ok(KeyCode::F24) if on => fake.0.x += 12.0,
             Ok(KeyCode::F23) if on => fake.0.x -= 12.0,
             Ok(KeyCode::F22) if on => fake.0.y -= 12.0,
+            Ok(KeyCode::F21) if on => cur.0.x += 12.0,
+            Ok(KeyCode::F20) if on => cur.0.x -= 12.0,
+            Ok(KeyCode::F19) if on => cur.0.y += 12.0,
+            Ok(KeyCode::F18) if on => cur.0.y -= 12.0,
             _ => {}
         }
         match *k {

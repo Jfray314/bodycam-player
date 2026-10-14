@@ -10,6 +10,7 @@ mod bots;
 mod grid;
 mod gunfight;
 mod testmap;
+mod ui;
 mod hud;
 mod map;
 mod player;
@@ -33,6 +34,7 @@ fn main() {
         .add_plugins(body::BodyPlugin)
         .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, sway::SwayPlugin, recoil::RecoilPlugin, map::MapPlugin, gunfight::GunfightPlugin, grid::GridPlugin, bots::BotsPlugin, camadjust::CamAdjustPlugin, dev::DevPlugin))
         .add_plugins((effects::EffectsPlugin, soft::SoftPlugin))
+        .add_plugins(ui::UiPlugin)
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
         .add_systems(Startup, test_range.run_if(|| !map::available()))
         .run();
