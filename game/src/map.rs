@@ -159,9 +159,19 @@ fn setup(mut cmd: Commands, assets: Res<AssetServer>, mut ambient: ResMut<Global
     // Ultra_Dynamic_Sky's sun (the directional with its intensity set): the light travels along dir_ue, the sun lies opposite.
     let sun_dir = info.lights.iter().find(|l| l.kind == "directional" && l.intensity > 0.0).map_or(Vec3::new(-0.4, 0.8, 0.45), |l| -ue_to_bevy(l.dir_ue).normalize());
     cmd.spawn((WorldAssetRoot(assets.load(format!("maps/{sn}.glb#Scene0"))), Transform::default()))
-        .observe(move |ev: On<WorldInstanceReady>, mut cmd: Commands, children: Query<&Children>, meshes: Query<Option<&GltfMaterialName>, With<Mesh3d>>, mut player: Single<(&mut Player, &mut Transform)>, mut st: ResMut<MapState>| {
+        .observe(move |ev: On<WorldInstanceReady>, mut cmd: Commands, children: Query<&Children>, meshes: Query<(Option<&GltfMaterialName>, Option<&MeshMaterial3d<StandardMaterial>>), With<Mesh3d>>, mut mats: ResMut<Assets<StandardMaterial>>, mut player: Single<(&mut Player, &mut Transform)>, mut st: ResMut<MapState>| {
             for e in children.iter_descendants(ev.entity) {
-                if let Ok(name) = meshes.get(e) {
+                if let Ok((name, mat)) = meshes.get(e) {
+                    // Albedo above real-world white blows out under the level's spots (MI_Trim_01d tints x2, BasicShapeMaterial 0.9): clamp
+                    // untextured albedo to 0.7 and textured tints to 1.
+                    // ponytail: the UE tint graphs are compiled away; clamp instead of reading the MI params.
+                    if let Some(mut m) = mat.and_then(|m| mats.get_mut(&m.0)) {
+                        let cap = if m.base_color_texture.is_some() { 1.0 } else { 0.7 };
+                        let c = m.base_color.to_linear();
+                        if c.red.max(c.green).max(c.blue) > cap {
+                            m.base_color = LinearRgba { red: c.red.min(cap), green: c.green.min(cap), blue: c.blue.min(cap), alpha: c.alpha }.into();
+                        }
+                    }
                     cmd.entity(e).insert((MapGeometry, RayCastBackfaces));
                     // PhysMat SurfaceType of the material (scene.json "surfaces"): footsteps + bullet impacts read it.
                     if let Some(s) = name.and_then(|n| surfaces.get(&n.0)) {

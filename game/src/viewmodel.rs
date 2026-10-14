@@ -162,6 +162,8 @@ struct Anim {
     action_pitch: f32,
     /// The running montage is an action (reload, draw, inspect...), not a fire kick: ActionPoseOffset applies.
     action: bool,
+    /// The running montage is the GoPro camera adjust: the hand must reach the lens, so the BAS hip pose offset fades out.
+    no_pose: bool,
     /// Blend-out time of the last montage, used for the crossfade back to the base loop.
     blend_out: f32,
     after_montage: bool,
@@ -317,6 +319,7 @@ fn tablet_anim(
             anim.montage_until = time.elapsed_secs() + len - 0.2;
             anim.action_pitch = 0.0;
             anim.action = false;
+            anim.no_pose = false;
             anim.blend_out = 0.2;
             anim.after_montage = true;
         }
@@ -423,6 +426,7 @@ fn play_events(
                 anim.montage_until = now + if s.len > 0.0 { (s.len - s.blend_out).max(0.05) } else { 0.25 };
                 anim.action_pitch = s.pitch;
                 anim.action = s.action;
+                anim.no_pose = s.arms.contains("GoPro_Adjust");
                 anim.blend_out = s.blend_out;
                 anim.after_montage = true;
             }
@@ -573,7 +577,7 @@ fn base_loop(
             if time.elapsed_secs() >= anim.montage_until && anim.current.as_deref() != Some("A_FP_Tablet_Pose") {
                 anim.after_montage = false;
                 play(&mut anim, &mut player, &mut tr, "A_FP_Tablet_Pose", true, BLEND);
-                anim.action_pitch = -13.0; // tilt the view down onto the screen
+                anim.action_pitch = std::env::var("BODYCAM_TABPITCH").ok().and_then(|v| v.parse().ok()).unwrap_or(-6.0); // tilt the view down onto the screen (real game: tablet low and face-on, screen ~80% of the view, hands + frame visible)
                 anim.montage_until = f32::MAX; // the camera follows the head (looks down at the tablet) like during a montage
             }
         }
@@ -711,7 +715,7 @@ fn place_arms(
     parents: Query<&ChildOf>,
     globals: Query<&GlobalTransform>,
     mut gun_joint: Local<Option<Entity>>,
-    mut action: Local<f32>,
+    mut action: Local<[f32; 2]>,
     guns: Query<(Entity, &GunRoot)>,
     mut gun_bone: Local<Option<Entity>>,
 ) {
@@ -727,8 +731,9 @@ fn place_arms(
     let now = time.elapsed_secs();
     for (root, mut t, anim) in &mut arms {
         // ponytail: ActionPoseOffset blend speed (8/s) is a guess; the real blend lives in the compiled ABP.
-        *action = crate::status::finterp_to(*action, if now < anim.montage_until && anim.action { 1.0 } else { 0.0 }, time.delta_secs(), 8.0);
-        let off = Transform { translation: pose.translation.lerp(act.translation, *action), rotation: pose.rotation.slerp(act.rotation, *action), ..default() };
+        action[0] = crate::status::finterp_to(action[0], if now < anim.montage_until && anim.action { 1.0 } else { 0.0 }, time.delta_secs(), 8.0);
+        action[1] = crate::status::finterp_to(action[1], if now < anim.montage_until && anim.no_pose { 1.0 } else { 0.0 }, time.delta_secs(), 6.0);
+        let off = Transform { translation: pose.translation.lerp(act.translation, action[0]) * (1.0 - action[1]), rotation: Quat::IDENTITY.slerp(pose.rotation.slerp(act.rotation, action[0]), 1.0 - action[1]), ..default() };
         let off = Transform { translation: off.translation * hip, rotation: Quat::IDENTITY.slerp(off.rotation, hip), ..default() };
         let aim = Transform::from_translation(GRIP) * aim.0 * Transform::from_translation(-GRIP);
         let post = aim * off * Transform::from_translation(-FP_CAMERA_SOCKET);

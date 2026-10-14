@@ -150,16 +150,21 @@ fn attach(mut cmd: Commands, st: Res<PostFxState>, q: Query<Entity, Added<Bodyca
     }
 }
 
+/// Puts the camera on the lens stack or the plain one according to `st.enabled` (F2 and the settings toggle).
+pub fn apply_enabled(cmd: &mut Commands, st: &PostFxState, cams: impl IntoIterator<Item = Entity>) {
+    for e in cams {
+        if st.enabled {
+            cmd.entity(e).insert(stack(st));
+        } else {
+            cmd.entity(e).remove::<(BodycamPostFx, Bloom, MotionBlur, AutoExposure)>().insert((Tonemapping::TonyMcMapface, Msaa::Sample4));
+        }
+    }
+}
+
 fn toggles(mut cmd: Commands, keys: Res<ButtonInput<KeyCode>>, mut st: ResMut<PostFxState>, cam: Query<Entity, With<BodycamCamera>>) {
     if keys.just_pressed(KeyCode::F2) {
         st.enabled = !st.enabled;
-        for e in &cam {
-            if st.enabled {
-                cmd.entity(e).insert(stack(&st));
-            } else {
-                cmd.entity(e).remove::<(BodycamPostFx, Bloom, MotionBlur, AutoExposure)>().insert((Tonemapping::TonyMcMapface, Msaa::Sample4));
-            }
-        }
+        apply_enabled(&mut cmd, &st, cam.iter());
     }
 }
 

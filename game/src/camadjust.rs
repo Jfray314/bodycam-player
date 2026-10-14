@@ -67,6 +67,11 @@ fn camera_anim(time: Res<Time>, mut st: ResMut<CamAdjust>, mut cam: Single<&mut 
     let q = st.track[i].slerp(st.track[(i + 1).min(st.track.len() - 1)], a);
     let env = (t / 0.25).min(1.0) * ((2.3333333 - t) / 0.25).clamp(0.0, 1.0);
     cam.rotation *= Quat::IDENTITY.slerp(q, env);
+    // The wrist ends ~9 cm behind / 16 cm left of the FP_Camera socket (measured in arms space), out of the 120 deg frustum. The clip was
+    // authored for a camera on the capsule axis (camera_armature xy = 0, socket sits 22 cm in front of the arms origin).
+    // ponytail: camera pulled back/left during the montage instead of a real camera-bone position track.
+    let back = cam.rotation * Vec3::new(-0.04, 0.0, 0.12) * env;
+    cam.translation += back;
 }
 
 /// UpdateCameraAdjust: returns true when the accumulator hits 1 and adjusting is allowed (it then resets).
