@@ -367,6 +367,7 @@ impl Plugin for WeaponPlugin {
             .add_message::<DryFire>()
             .add_message::<Regrip>()
             .add_message::<HandShake>()
+            .add_message::<ShellLanded>()
             .add_systems(Startup, setup_fx)
             .add_systems(PostStartup, give_loadout)
             .add_systems(Update, ((actions, swap, aim, fire, eject_shells, fade, particles, shells).chain(), log_montages));
@@ -818,6 +819,7 @@ struct Shell {
     vel: Vec3,
     spin: Vec3,
     age: f32,
+    landed: bool,
 }
 const SHELL_LIFE: f32 = 60.0;
 const SHELL_CAP: usize = 64;
@@ -833,7 +835,7 @@ thread_local! {
 
 /// WEP.PullSliderLogic -> SpawnShell: at the gun's Eject socket with Pistol_Eject velocity (0, 50..75, 100..125) cm/s in socket space;
 /// on the last round it also plays the gun-only FireOut montage.
-// ponytail: the DT_Shell casing sound (Shell_Pistol_Cue) is not in the audio bake, so shells land silently; spin read as rad/s.
+// ponytail: spin read as rad/s.
 fn eject_shells(
     mut cmd: Commands,
     time: Res<Time>,
@@ -886,7 +888,7 @@ fn eject_shells(
             Mesh3d(fx.shell.0.clone()),
             MeshMaterial3d(fx.shell.1.clone()),
             t,
-            Shell { vel: jt.rotation() * vel, spin, age: 0.0 },
+            Shell { vel: jt.rotation() * vel, spin, age: 0.0, landed: false },
             crate::player::IgnoreTraces,
         ));
         n += 1;
@@ -901,8 +903,12 @@ fn eject_shells(
     }
 }
 
+/// Pistol_Eject collision -> DT_Shell row Pistol sound (Shell_Pistol_Cue), once per shell on its first floor hit.
+#[derive(Message)]
+pub struct ShellLanded;
+
 /// Shell flight: gravity -980 cm/s2, spin, bounce on the floor (y = 0), despawn after SHELL_LIFE.
-fn shells(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Transform, &mut Shell)>) {
+fn shells(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Transform, &mut Shell)>, mut landed: MessageWriter<ShellLanded>) {
     let dt = time.delta_secs();
     for (e, mut t, mut s) in &mut q {
         s.age += dt;
@@ -918,6 +924,10 @@ fn shells(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Transfo
         let spin = s.spin;
         t.rotate_local(Quat::from_scaled_axis(spin * dt));
         if t.translation.y < 0.005 {
+            if !s.landed {
+                s.landed = true;
+                landed.write(ShellLanded);
+            }
             t.translation.y = 0.005;
             s.vel.y = -s.vel.y * 0.35;
             s.vel.x *= 0.6;

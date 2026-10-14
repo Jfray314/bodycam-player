@@ -8,7 +8,7 @@
 //! (distortion + dynamics) is not implemented (see `GUN_CHAIN_GAP`).
 use crate::player::{Footstep, Player, StepKind};
 use crate::status::NearMiss;
-use crate::weapon::{DryFire, Fired, MontageStarted};
+use crate::weapon::{DryFire, Fired, MontageStarted, ShellLanded};
 use bevy::audio::{AudioSinkPlayback, Volume};
 use bevy::prelude::*;
 use rand::{Rng, SeedableRng};
@@ -335,7 +335,7 @@ impl Plugin for AudioPlugin {
             .insert_resource(Tremor(0.0))
             .init_resource::<Loops>()
             .add_systems(PostStartup, preload_player)
-            .add_systems(Update, (footsteps, weapon_sfx, near_miss_sfx, montage_sfx, run_queue, aim_sfx, start_pending, preload_weapons, loops, selftest).chain());
+            .add_systems(Update, (footsteps, weapon_sfx, near_miss_sfx, shell_sfx, montage_sfx, run_queue, aim_sfx, start_pending, preload_weapons, loops, selftest).chain());
     }
 }
 
@@ -452,6 +452,13 @@ fn near_miss_sfx(mut cmd: Commands, mut ev: MessageReader<NearMiss>, mut bank: R
                 trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &c, &params, dist);
             }
         }
+    }
+}
+
+/// SurfaceType switch: the shell floor carries no PhysMat, so index 0 (Default -> cement).
+fn shell_sfx(mut ev: MessageReader<ShellLanded>, mut live: ResMut<Live>) {
+    for _ in ev.read() {
+        live.queue.push((0.0, "/Game/BodycamWeapons/Core/Blueprint/Emitters/Particles/Emitters/Shell/Sounds_Shell/Shell_Pistol_Cue".into()));
     }
 }
 
