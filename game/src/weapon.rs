@@ -458,8 +458,9 @@ fn give_loadout(mut cmd: Commands, player: Single<Entity, With<Player>>, mut out
     let mut slots = load_weapons();
     // Default loadout: primary M4A1 + sidearm Glock17, then every other gun for testing.
     // Dev: BODYCAM_START=<name> equips that gun first (gun audits).
-    let start = std::env::var("BODYCAM_START").unwrap_or_else(|_| "M4A1".into());
-    slots.sort_by_key(|w| (w.name != start, w.name != "M4A1", w.name != "Glock17", w.name.clone()));
+    let norm = |s: &str| s.to_lowercase().replace([' ', '-'], "_");
+    let start = norm(&std::env::var("BODYCAM_START").unwrap_or_else(|_| "M4A1".into()));
+    slots.sort_by_key(|w| (norm(&w.name) != start, w.name != "M4A1", w.name != "Glock17", w.name.clone()));
     let mut inv = Inventory { slots, current: 0, cooldown: 0.0, action: None, r_held: 0.0, fire_start: None, last_fire_start: 0.0, pull_slider: vec![], cancel_in: None };
     let first = inv.slots[0].one("FirstEquip");
     inv.slots[0].equipped_once = true;

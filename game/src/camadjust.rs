@@ -4,6 +4,7 @@
 //! PlayCameraAdjust(false): a DoOnce gate, delay RandomFloat(0, 3), then if not InDanger? (another character within 15 m) and
 //! still CanAdjust? play A_FP_GoPro_Adjust01 (the Spawn variant is never called), and reopen the gate after the montage + 10..100 s.
 use crate::player::{Footstep, Player};
+use crate::status::PlayerDamage;
 use crate::weapon::{ActionKind, Inventory, Montage, MontageStarted};
 use bevy::prelude::*;
 use rand::Rng;
@@ -14,7 +15,7 @@ impl Plugin for CamAdjustPlugin {
         // BODYCAM_ADJUST=<s>: dev hook, the gate check runs that many sim seconds after the viewmodel is ready.
         let dev = std::env::var("BODYCAM_ADJUST").ok().and_then(|v| v.parse().ok());
         app.insert_resource(CamAdjust { dev, track: load_track(), ..default() })
-            .add_systems(Update, tick)
+            .add_systems(Update, (tick, flinch))
             .add_systems(PostUpdate, camera_anim.after(bevy::app::AnimationSystems).after(crate::viewmodel::FollowHead).before(bevy::transform::TransformSystems::Propagate));
     }
 }
@@ -143,4 +144,26 @@ mod tests {
         assert!(super::update(&mut v, 0.01, 4.0, true)); // one step during a fast turn
         assert!(!super::update(&mut v, 0.01, 4.0, false) && v == 1.0); // held at 1 until allowed
     }
+}
+
+/// Bodycam_Player.Flinch: RetriggerableDelay(RandomFloat 0.1..0.15), then PlayAnimMontage of A_FP_Glock17_Flinch03 or Flinch01
+/// (RandomBool) on the arms whatever gun is held. UE has no BP caller; the native damage path is assumed -> every PlayerDamage.
+fn flinch(time: Res<Time>, ready: Res<crate::dev::Ready>, mut dev: Local<Option<f32>>, mut dmg: MessageReader<PlayerDamage>, mut left: Local<Option<f32>>, mut out: MessageWriter<MontageStarted>, inv: Option<Single<&Inventory>>) {
+    // BODYCAM_FLINCH=<s>: dev hook, a hit lands that many sim seconds after the viewmodel is ready.
+    let dev_hit = ready.0.is_some_and(|r| *dev.get_or_insert_with(|| std::env::var("BODYCAM_FLINCH").ok().and_then(|v| v.parse().ok()).unwrap_or(f32::MAX)) + r <= time.elapsed_secs() && std::mem::replace(&mut *dev, Some(f32::MAX)).is_some_and(|v| v < f32::MAX));
+    if dmg.read().count() > 0 || dev_hit {
+        *left = Some(rand::rng().random_range(0.1..0.15));
+    }
+    let Some(t) = left.as_mut() else { return };
+    *t -= time.delta_secs();
+    if *t > 0.0 {
+        return;
+    }
+    *left = None;
+    let n = if rand::rng().random_bool(0.5) { "03" } else { "01" };
+    let path = format!("/BodycamAnimationFramework/Animations/Glock/Character/A_FP_Glock17_Flinch{n}_Montage.A_FP_Glock17_Flinch{n}_Montage");
+    info!("flinch montage {n}");
+    let row = inv.map(|i| i.slots[i.current].name.to_string()).unwrap_or_default();
+    // length 1.1 s from the baked clip; PlayAnimMontage defaults BlendIn/Out 0.25.
+    out.write(MontageStarted { row, kind: ActionKind::CameraAdjust, montage: Montage { path, length: 1.1, notifies: vec![], blend_in: 0.25, blend_out: 0.25, weapon: None } });
 }
