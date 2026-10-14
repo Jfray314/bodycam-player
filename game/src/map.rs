@@ -2,9 +2,13 @@
 //! Falls back to the grey-box range in main.rs when the asset is missing.
 //! Collision: ray casts against the map's render meshes (no physics crate in the project).
 use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings, RayCastBackfaces, RayCastVisibility};
+use bevy::asset::RenderAssetUsages;
 use bevy::camera::Exposure;
+use bevy::light::Skybox;
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension};
 use bevy::curve::cubic_splines::LinearSpline;
 use bevy::post_process::auto_exposure::{AutoExposure, AutoExposureCompensationCurve};
+use bevy::gltf::GltfMaterialName;
 use bevy::prelude::*;
 use bevy::world_serialization::{WorldAssetRoot, WorldInstanceReady};
 use crate::player::Player;
@@ -26,7 +30,12 @@ pub fn available() -> bool {
         return false;
     }
     let r = root();
-    std::path::Path::new(&format!("{r}/maps/scene.glb")).exists() && std::path::Path::new(&format!("{r}/maps/scene.json")).exists()
+    let s = scene_name();
+    std::path::Path::new(&format!("{r}/maps/{s}.glb")).exists() && std::path::Path::new(&format!("{r}/maps/{s}.json")).exists()
+}
+/// Scene file base name in assets-local/maps (BODYCAM_SCENE overrides, e.g. the re-export `scene2`).
+fn scene_name() -> String {
+    std::env::var("BODYCAM_SCENE").unwrap_or_else(|_| "scene2".into())
 }
 
 /// Present only while the map is the level. `frames` counts down after the scene spawns so transforms/AABBs exist before the player drops in.
@@ -44,6 +53,9 @@ struct SceneInfo {
     lights: Vec<UeLight>,
     #[serde(default)]
     post: Vec<UePost>,
+    /// glTF material name -> EPhysicalSurface index (PhysMat), absent = default.
+    #[serde(default)]
+    surfaces: std::collections::HashMap<String, u8>,
 }
 /// One exported UE light component (units: cm, UE axes; see tools/ue-export/Scene.cs).
 #[derive(serde::Deserialize)]
@@ -71,7 +83,7 @@ struct UePost {
 }
 /// Marks that the level supplies UE auto-exposure; `apply_exposure` configures the camera's AutoExposure from it.
 #[derive(Resource)]
-struct MapExposure(Handle<AutoExposureCompensationCurve>);
+struct MapExposure(Handle<AutoExposureCompensationCurve>, Handle<Image>);
 /// Marks lights that may cast shadows when among the nearest `MAX_SHADOW_LIGHTS` to the camera.
 #[derive(Component)]
 struct ShadowCandidate;
@@ -92,6 +104,40 @@ const MIDDLE_GREY: f32 = 0.18;
 const UE_HIST: (f32, f32) = (-16.0, 4.0);
 /// Stand-in fill for Lumen indirect bounce (cd/m2); the level's skylight is mostly occluded indoors.
 const AMBIENT: f32 = 0.2;
+/// Sky cubemap scale (cd/m2). Ultra_Dynamic_Sky (LobbyB) draws its sky at runtime (SkyAtmosphere + clouds, nothing cooked): a gradient + sun glow stands in.
+const SKY_NITS: f32 = 300.0;
+
+/// Gradient sky cube (zenith blue -> pale horizon -> grey ground) with a sun glow towards `sun` (unit vector to the sun, Bevy axes).
+fn sky_cube(sun: Vec3) -> Image {
+    const N: usize = 32;
+    let mut data = Vec::with_capacity(N * N * 6 * 4);
+    for f in 0..6 {
+        for y in 0..N {
+            for x in 0..N {
+                let (u, v) = (2.0 * (x as f32 + 0.5) / N as f32 - 1.0, 2.0 * (y as f32 + 0.5) / N as f32 - 1.0);
+                let d = match f {
+                    0 => Vec3::new(1.0, -v, -u),
+                    1 => Vec3::new(-1.0, -v, u),
+                    2 => Vec3::new(u, 1.0, v),
+                    3 => Vec3::new(u, -1.0, -v),
+                    4 => Vec3::new(u, -v, 1.0),
+                    _ => Vec3::new(-u, -v, -1.0),
+                }
+                .normalize();
+                let t = d.y.max(0.0).sqrt();
+                let sky = if d.y < 0.0 { Vec3::splat(0.35) } else { Vec3::new(0.78, 0.86, 1.0).lerp(Vec3::new(0.28, 0.5, 0.95), t) };
+                let g = d.dot(sun).max(0.0);
+                let c = sky + Vec3::new(1.0, 0.9, 0.7) * (g.powf(8.0) * 0.25 + g.powf(400.0) * 4.0);
+                data.extend(c.to_array().map(|v| (v.clamp(0.0, 1.0).powf(1.0 / 2.2) * 255.0) as u8));
+                data.push(255);
+            }
+        }
+    }
+    let mut img = Image::new(Extent3d { width: N as u32, height: (N * 6) as u32, depth_or_array_layers: 1 }, TextureDimension::D2, data, TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::RENDER_WORLD);
+    img.reinterpret_stacked_2d_as_array(6);
+    img.texture_view_descriptor = Some(TextureViewDescriptor { dimension: Some(TextureViewDimension::Cube), ..default() });
+    img
+}
 #[derive(serde::Deserialize)]
 struct Start {
     loc_cm: [f32; 3],
@@ -103,16 +149,24 @@ fn ue_to_bevy(p: [f32; 3]) -> Vec3 {
     Vec3::new(p[1], p[2], -p[0]) * 0.01
 }
 
-fn setup(mut cmd: Commands, assets: Res<AssetServer>, mut ambient: ResMut<GlobalAmbientLight>, mut curves: ResMut<Assets<AutoExposureCompensationCurve>>) {
-    let info: SceneInfo = serde_json::from_str(&std::fs::read_to_string(format!("{}/maps/scene.json", root())).expect("scene.json")).expect("scene.json parse");
+fn setup(mut cmd: Commands, assets: Res<AssetServer>, mut ambient: ResMut<GlobalAmbientLight>, mut curves: ResMut<Assets<AutoExposureCompensationCurve>>, mut images: ResMut<Assets<Image>>) {
+    let sn = scene_name();
+    let info: SceneInfo = serde_json::from_str(&std::fs::read_to_string(format!("{}/maps/{sn}.json", root())).expect("scene json")).expect("scene json parse");
+    let surfaces = info.surfaces.clone();
     let start = ue_to_bevy(info.player_start.loc_cm);
     let yaw = -info.player_start.yaw_deg.to_radians();
     cmd.insert_resource(MapState { frames: i32::MAX });
-    cmd.spawn((WorldAssetRoot(assets.load("maps/scene.glb#Scene0")), Transform::default()))
-        .observe(move |ev: On<WorldInstanceReady>, mut cmd: Commands, children: Query<&Children>, meshes: Query<(), With<Mesh3d>>, mut player: Single<(&mut Player, &mut Transform)>, mut st: ResMut<MapState>| {
+    // Ultra_Dynamic_Sky's sun (the directional with its intensity set): the light travels along dir_ue, the sun lies opposite.
+    let sun_dir = info.lights.iter().find(|l| l.kind == "directional" && l.intensity > 0.0).map_or(Vec3::new(-0.4, 0.8, 0.45), |l| -ue_to_bevy(l.dir_ue).normalize());
+    cmd.spawn((WorldAssetRoot(assets.load(format!("maps/{sn}.glb#Scene0"))), Transform::default()))
+        .observe(move |ev: On<WorldInstanceReady>, mut cmd: Commands, children: Query<&Children>, meshes: Query<Option<&GltfMaterialName>, With<Mesh3d>>, mut player: Single<(&mut Player, &mut Transform)>, mut st: ResMut<MapState>| {
             for e in children.iter_descendants(ev.entity) {
-                if meshes.contains(e) {
+                if let Ok(name) = meshes.get(e) {
                     cmd.entity(e).insert((MapGeometry, RayCastBackfaces));
+                    // PhysMat SurfaceType of the material (scene.json "surfaces"): footsteps + bullet impacts read it.
+                    if let Some(s) = name.and_then(|n| surfaces.get(&n.0)) {
+                        cmd.entity(e).insert(crate::weapon::SurfaceMat(*s));
+                    }
                 }
             }
             // PlayerStart is the capsule centre (88 cm half height): drop from just above and let the ground cast find the floor.
@@ -134,7 +188,7 @@ fn setup(mut cmd: Commands, assets: Res<AssetServer>, mut ambient: ResMut<Global
         // target = -avg + c becomes -clamp(avg, lo, hi) + c, i.e. y(avg) = avg - clamp(avg) + c (the histogram itself spans all of UE_HIST).
         let (x0, x1, lo, hi, c) = (UE_HIST.0 - UE_TO_BEVY, UE_HIST.1 - UE_TO_BEVY, UE_AE_MIN - UE_TO_BEVY, UE_AE_MAX - UE_TO_BEVY, (MIDDLE_GREY.log2() * 16.0).round() / 16.0);
         let curve = AutoExposureCompensationCurve::from_curve(LinearSpline::new([vec2(x0, x0 - lo + c), vec2(lo, c), vec2(hi, c), vec2(x1, x1 - hi + c)])).expect("exposure curve");
-        cmd.insert_resource(MapExposure(curves.add(curve)));
+        cmd.insert_resource(MapExposure(curves.add(curve), images.add(sky_cube(sun_dir))));
     }
 }
 
@@ -232,7 +286,7 @@ fn apply_exposure(mut cmd: Commands, ex: Option<Res<MapExposure>>, mut q: Query<
         ae.speed_brighten = UE_AE_SPEED;
         ae.speed_darken = UE_AE_SPEED;
         ae.compensation_curve = ex.0.clone();
-        cmd.entity(e).insert(Exposure { ev100: CAM_EV100 });
+        cmd.entity(e).insert((Exposure { ev100: CAM_EV100 }, Skybox { image: Some(ex.1.clone()), brightness: SKY_NITS, rotation: Quat::IDENTITY }));
     }
 }
 

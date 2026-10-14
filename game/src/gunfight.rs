@@ -113,7 +113,7 @@ fn shoot(
         if s.burst_left == 0 {
             s.next_burst = now + rng.random_range(2.0..4.0);
         }
-        gun.fire(&[e], muzzle, target, SPREAD_DEG);
+        let _ = gun.fire(&[e], muzzle, target, SPREAD_DEG);
     }
 }
 
@@ -139,12 +139,13 @@ impl BotGun<'_, '_> {
         self.ray.cast_ray(Ray3d::new(from, dir), &settings).first().is_none_or(|(_, h)| h.distance > from.distance(to) - 0.3)
     }
 
-    pub fn fire(&mut self, own: &[Entity], muzzle: Vec3, target: Vec3, spread_deg: f32) {
+    /// Returns whether the shot hit the player (damage written).
+    pub fn fire(&mut self, own: &[Entity], muzzle: Vec3, target: Vec3, spread_deg: f32) -> bool {
         let mut rng = rand::rng();
-        // Aim at the camera with a random cone error.
+        // WEP.GetInitialFireDirection (bot branch): aim at the target, RandomUnitVectorInEllipticalConeInDegrees(spread, spread).
         let aim = (target - muzzle).normalize();
-        let (a, r) = (rng.random_range(0.0..std::f32::consts::TAU), spread_deg.to_radians() * rng.random::<f32>().sqrt());
-        let dir = (Quat::from_rotation_arc(Vec3::NEG_Z, aim) * Quat::from_euler(EulerRot::ZXY, a, r, 0.0).mul_vec3(Vec3::NEG_Z)).normalize();
+        let dir = crate::weapon::random_in_elliptical_cone(aim, spread_deg, spread_deg, &mut rng);
+        let mut hit = false;
         let filter = |x: Entity| !own.contains(&x) && !self.ignore.contains(x);
         let settings = MeshRayCastSettings::default().with_filter(&filter);
         let wall = self.ray.cast_ray(Ray3d::new(muzzle, Dir3::new(dir).unwrap()), &settings).first().map(|(_, h)| h.distance);
@@ -160,6 +161,7 @@ impl BotGun<'_, '_> {
             }
             if miss < HIT_RADIUS {
                 self.dmg.write(PlayerDamage(DAMAGE));
+                hit = true;
             } else if miss < WHIZ_RADIUS {
                 self.whiz.write(BulletFly { distance_cm: miss * 100.0 });
             }
@@ -172,5 +174,6 @@ impl BotGun<'_, '_> {
             Fading(0.06),
             IgnoreTraces,
         ));
+        hit
     }
 }

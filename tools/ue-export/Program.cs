@@ -48,7 +48,7 @@ switch (cmd)
         break;
     case "mapinfo": // mapinfo <umap asset>: export type histogram, streaming sublevels
         { var ex = provider.LoadPackage(args[4]).GetExports().ToList();
-          foreach (var g in ex.GroupBy(e => e.ExportType).OrderByDescending(g => g.Count()).Take(30)) Console.WriteLine($"{g.Count()}	{g.Key}");
+          foreach (var g in ex.GroupBy(e => e.ExportType).OrderByDescending(g => g.Count()).Take(300)) Console.WriteLine($"{g.Count()}	{g.Key}");
           foreach (var e in ex.Where(e => e.ExportType.Contains("LevelStreaming"))) Console.WriteLine("sub " + e.Name + " " + string.Join(";", e.Properties.Select(q => q.Name + "=" + q.Tag?.GenericValue)));
           break; }
     case "dump": // full JSON of every export (properties resolved)
