@@ -155,7 +155,8 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     // 1.02 corners), so only the corners go dark, curving around the centre. Replaces the BodycamBorders photo plane,
     // whose rough off-centre rim read as lumpy blobs.
     let hr = length((in.uv - 0.5) * vec2<f32>(aspect, 1.0));
-    col *= 1.0 - smoothstep(0.9, 1.0, hr);
+    // Per-channel radius (blue goes dark first, red last) gives the warm orange fringe on the arc seen in-game.
+    col *= vec3<f32>(1.0) - smoothstep(vec3<f32>(0.9, 0.86, 0.82), vec3<f32>(1.02, 0.98, 0.94), vec3<f32>(hr));
 
     // Sensor grain (luma + chroma), animated per frame, heavier in shadows.
     let n = pcg3(vec3<u32>(vec2<u32>(in.position.xy), frame)) - 0.5;
