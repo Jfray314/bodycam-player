@@ -336,8 +336,10 @@ fn setup_fx(mut cmd: Commands, assets: Res<AssetServer>, mut meshes: ResMut<Asse
     let mut decal = |tex: &str| {
         let m = mats.add(StandardMaterial {
             base_color_texture: Some(assets.load(format!("textures/fx/{tex}.png"))),
-            base_color: Color::srgb(0.22, 0.22, 0.22), // ponytail: unlit grey atlas looked like a light smear; darkened by eye
-            unlit: true,
+            // Lit (not unlit): unlit colours ignore scene lighting, so auto exposure (+5 EV indoors) blew them out to white.
+            base_color: Color::srgb(0.12, 0.12, 0.12),
+            perceptual_roughness: 1.0,
+            reflectance: 0.0,
             alpha_mode: AlphaMode::Blend,
             cull_mode: None,
             ..default()
@@ -723,7 +725,7 @@ fn fire(
         let scale = crate::status::map_range_clamped(s.damage.unwrap_or(30.0), 0.0, 100.0, 0.1, 2.0);
         for _ in 0..2 {
             let v = aim_dir * rng.random_range(0.3..0.8) + Vec3::new(rng.random_range(-0.1..0.1), rng.random_range(0.2..0.5), rng.random_range(-0.1..0.1));
-            smoke(&mut cmd, &fx, &mut mats, origin + aim_dir * 0.05, v, 0.05 + 0.06 * scale, 1.0, 0.18, Color::srgb(0.75, 0.75, 0.75));
+            smoke(&mut cmd, &fx, &mut mats, origin + aim_dir * 0.05, v, 0.05 + 0.06 * scale, 1.0, 0.18, Color::srgb(0.4, 0.4, 0.4));
         }
     }
     // WEP.PullSliderLogic: on the shot, or on the Fire montage's PullSlider notify when Settings.bUsePullSliderNotify.
@@ -741,7 +743,7 @@ fn fire(
 /// Camera-facing smoke sprite (whisp_One sheet): grows 1.5x its size per second, alpha fades from `alpha` over `life`.
 #[allow(clippy::too_many_arguments)]
 fn smoke(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial>, at: Vec3, vel: Vec3, size: f32, life: f32, alpha: f32, tint: Color) {
-    let mat = mats.add(StandardMaterial { base_color_texture: Some(fx.smoke.clone()), base_color: tint.with_alpha(alpha), unlit: true, alpha_mode: AlphaMode::Blend, cull_mode: None, ..default() });
+    let mat = mats.add(StandardMaterial { base_color_texture: Some(fx.smoke.clone()), base_color: tint.with_alpha(alpha), perceptual_roughness: 1.0, reflectance: 0.0, alpha_mode: AlphaMode::Blend, cull_mode: None, ..default() });
     cmd.spawn((
         Mesh3d(fx.quad.clone()),
         MeshMaterial3d(mat.clone()),
@@ -762,8 +764,8 @@ fn impact_fx(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial
     }
     let mut rng = rand::rng();
     let (i, dust, bit_col) = match surf {
-        Surf::Concrete => (0, Color::srgb(0.62, 0.6, 0.57), Color::srgb(0.5, 0.48, 0.45)),
-        Surf::Metal => (1, Color::srgb(0.55, 0.55, 0.55), Color::srgb(0.9, 0.85, 0.7)),
+        Surf::Concrete => (0, Color::srgb(0.4, 0.38, 0.36), Color::srgb(0.5, 0.48, 0.45)),
+        Surf::Metal => (1, Color::srgb(0.35, 0.35, 0.35), Color::srgb(0.9, 0.85, 0.7)),
         Surf::Wood => (2, Color::srgb(0.55, 0.42, 0.28), Color::srgb(0.45, 0.3, 0.15)),
     };
     let (quads, dmat) = &fx.decals[i];
