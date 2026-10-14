@@ -243,7 +243,7 @@ fn setup(mut cmd: Commands, assets: Res<AssetServer>, mut images: ResMut<Assets<
         ))
         .id();
     cmd.spawn((Node { width: px(W), height: px(H), ..default() }, UiTargetCamera(cam), UiRoot));
-    let screen_mat = mats.add(StandardMaterial { base_color: Color::BLACK, emissive: LinearRgba::gray(1.6), emissive_texture: Some(image.clone()), perceptual_roughness: 0.6, reflectance: 0.0,
+    let screen_mat = mats.add(StandardMaterial { base_color: Color::BLACK, emissive: LinearRgba::gray(0.3), emissive_texture: Some(image.clone()), perceptual_roughness: 0.6, reflectance: 0.0,
         // The screen quad only spans u 0.004..0.656, v 0.043..0.392 of the UE composite render target: stretch that rect over our whole UI texture.
         uv_transform: bevy::math::Affine2::from_scale_angle_translation(Vec2::new(1.0 / 0.652, 1.0 / 0.349), 0.0, Vec2::new(-0.0039 / 0.652, -0.043 / 0.349)),
         ..default() });
