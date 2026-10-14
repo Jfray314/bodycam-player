@@ -121,6 +121,10 @@ fn autotest(
                 "F5" => Ok(KeyCode::F5),
                 "F7" => Ok(KeyCode::F7),
                 "F10" => Ok(KeyCode::F10),
+                "Boom" => Ok(KeyCode::F8),
+                "Flash" => Ok(KeyCode::F9),
+                "Hit" => Ok(KeyCode::F11),
+                "Kill" => Ok(KeyCode::F12),
                 // Fake mouse motion for the viewmodel sway (sway::FakeLook): counts per frame while held.
                 "LookR" => Ok(KeyCode::F24),
                 "LookL" => Ok(KeyCode::F23),
