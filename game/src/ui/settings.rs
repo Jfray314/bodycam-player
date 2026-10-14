@@ -33,6 +33,10 @@ pub struct Settings {
     pub binds: BTreeMap<String, String>,
     pub primary: String,
     pub secondary: String,
+    /// DT_PerkItems rows of the EXPLOSIVE / MELEE / GADGET loadout slots.
+    pub explosive: String,
+    pub melee: String,
+    pub gadget: String,
 }
 
 impl Default for Settings {
@@ -52,6 +56,9 @@ impl Default for Settings {
             binds: BTreeMap::new(),
             primary: "M4A1".into(),
             secondary: "Glock17".into(),
+            explosive: "Grenade G67".into(),
+            melee: "Knife".into(),
+            gadget: "Kamikaze".into(),
         }
     }
 }

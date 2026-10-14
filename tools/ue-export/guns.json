@@ -7,7 +7,7 @@
   "Remington700": {},
   "Mossberg590": { "skm": "Bodycam/Content/BodycamWeapons/Guns/Mossberg590/Mossberg" },
   "SG5-k": { "name": "MP5" },
-  "Karambit": { "skip": true }, "Knife": { "skip": true }, "Grenade": { "skip": true }, "Tablet": { "name": "Tablet", "skm": "Bodycam/Content/BodycamWeapons/Core/Blueprint/Tablet/SKM_Tablet" },
+  "Karambit": { "skip": true }, "Knife": { "name": "Knife", "skm": "Bodycam/Content/BodycamWeapons/Melee/Knife/Knife" }, "Grenade": { "skip": true }, "Grenade/G67": { "name": "G67", "skm": "Bodycam/Content/BodycamWeapons/Guns/G67/G67" }, "Grenade/FLASH9": { "name": "Flashbang", "skm": "Bodycam/Content/BodycamWeapons/Grenade/Flash/Flashbang", "noWeaponClips": true }, "Grenade/N67": { "skip": true }, "Tablet": { "name": "Tablet", "skm": "Bodycam/Content/BodycamWeapons/Core/Blueprint/Tablet/SKM_Tablet" },
   "Drone": { "skip": true }, "Bomb": { "skip": true }, "Camera": { "skip": true }, "Gopro": { "skip": true },
   "General": { "skip": true }, "Attenuation": { "skip": true }
 }

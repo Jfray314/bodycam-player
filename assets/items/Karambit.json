@@ -1,0 +1,508 @@
+{
+ "extra": {},
+ "row": "Karambit",
+ "item_class": "Item.Melee.Knife.Karambit.Karambit",
+ "actor": "/Game/BodycamWeapons/Core/Blueprint/Knife/Knife.Knife_C",
+ "stats_effects": [],
+ "anim_set": {
+  "IdlePose": {
+   "path": "/BodycamAnimationFramework/Animations/Karambit/Character/A_FP_Karambit_Idle.A_FP_Karambit_Idle",
+   "length": 8.0,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "ViewmodelOffsets": {
+   "ActionPoseOffset": {
+    "Translation": {
+     "x": 0.0,
+     "y": 3.4822229146957397,
+     "z": -7.462568998336792
+    }
+   }
+  },
+  "AdsSettings": {
+   "AdsSpeed": 3.0,
+   "SprintAdsSpeed": 10.0,
+   "AdsBlend": {
+    "BlendTime": 0.0,
+    "BlendOption": "EAlphaBlendOption::Sinusoidal"
+   },
+   "AdsAdditiveBlend": 1.0
+  },
+  "LookPositionSway": {
+   "SpringStiffness": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 0.5
+   },
+   "SpringDamping": {
+    "x": 0.2,
+    "y": 0.3,
+    "z": 0.6
+   },
+   "SpringSpeed": {
+    "x": 10.0,
+    "y": 5.0,
+    "z": 10.0
+   },
+   "SmoothDamping": {
+    "x": 5.0,
+    "y": 25.0,
+    "z": 5.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 10.0
+   },
+   "AdsScale": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 10.0
+   }
+  },
+  "HipLookPositionSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 0.4
+   },
+   "SpringDamping": {
+    "x": 0.0,
+    "y": 0.25,
+    "z": 0.4
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 10.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 5.0,
+    "z": 5.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 5.0,
+    "z": 5.0
+   }
+  },
+  "LookRotationSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 0.6,
+    "z": 0.0
+   },
+   "SpringDamping": {
+    "x": 0.0,
+    "y": 0.4,
+    "z": 0.0
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 0.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 50.0,
+    "z": 0.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 0.0
+   },
+   "AdsScale": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 0.0
+   }
+  },
+  "HipLookRotationSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 1.0
+   },
+   "SpringDamping": {
+    "x": 0.0,
+    "y": 0.4,
+    "z": 0.4
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 7.0,
+    "z": 7.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 50.0,
+    "z": 50.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 5.0,
+    "z": 5.0
+   }
+  },
+  "MovePositionSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 0.0
+   },
+   "SpringDamping": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 0.0
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 25.0,
+    "z": 0.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 2.0,
+    "z": 0.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 0.0
+   },
+   "AdsScale": {
+    "x": 1.0,
+    "y": 0.0,
+    "z": 0.0
+   }
+  },
+  "LowerSway": {
+   "Scale": 8.0,
+   "AdsScale": 50.0,
+   "InterpSpeed": 10.0,
+   "Curve": {
+    "path": "/BodycamAnimationFramework/Animations/General/Curve_GrenadeLowerSway.Curve_GrenadeLowerSway",
+    "curves": {
+     "FloatCurve": [
+      [
+       0.0,
+       3.3369275e-08,
+       2,
+       -0.018659236,
+       -0.018659236
+      ],
+      [
+       1.8930625,
+       -0.32465607,
+       2,
+       -0.5548955,
+       -0.5548955
+      ],
+      [
+       4.5643744,
+       -1.0031608,
+       2,
+       -0.018659236,
+       -0.018659236
+      ]
+     ]
+    }
+   }
+  },
+  "SwayPivotOffset": {
+   "x": 0.0,
+   "y": 100.0,
+   "z": 0.0
+  },
+  "WeaponCollision": {
+   "Length": 15.0,
+   "StartOffset": -10.0,
+   "HolsterPose": {
+    "Translation": {
+     "x": 0.0,
+     "y": -20.0,
+     "z": 0.0
+    }
+   },
+   "InterpSpeed": 5.0,
+   "DistanceThreshold": 15.0,
+   "TraceRadius": 5.0
+  },
+  "AimIdlePose": {
+   "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Aim_Idle_Loop.A_FP_Glock_Aim_Idle_Loop",
+   "length": 5.1,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "StressedIdleSubtle": {
+   "path": "/BodycamAnimationFramework/Animations/Glock/Character/A_FP_Glock17_Shake_Loop.A_FP_Glock17_Shake_Loop",
+   "length": 1.0666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "StressedIdleStrong": {
+   "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Stressed_Additive.A_FP_Glock_Stressed_Additive",
+   "length": 1.3666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "OverlayAnimBlueprint": "/BodycamAnimationFramework/Blueprints/Animation/Overlays/ABP_Overlay_Karambit.ABP_Overlay_Karambit_C",
+  "GunAnimInstance": "/BodycamAnimationFramework/Animations/Knife/Weapon/ABP_Knife.ABP_Knife_C",
+  "Fire": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Karambit/Character/A_FP_Karambit_Attack1_Montage.A_FP_Karambit_Attack1_Montage",
+     "length": 1.0333333,
+     "rate": 0.8,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/Game/Audio/Knife/Cue/Bodycam_SFX_Weapon_Knife_Attack.Bodycam_SFX_Weapon_Knife_Attack",
+        "Volume Multiplier": 1.0
+       }
+      }
+     ],
+     "blend_in": 0.15,
+     "blend_out": 0.0
+    },
+    "Weapon": null,
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Karambit/Character/A_FP_Karambit_Attack2_Montage.A_FP_Karambit_Attack2_Montage",
+     "length": 1.0,
+     "rate": 0.8,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/Game/Audio/Knife/Cue/Bodycam_SFX_Weapon_Knife_Attack.Bodycam_SFX_Weapon_Knife_Attack",
+        "Volume Multiplier": 1.0
+       }
+      }
+     ],
+     "blend_in": 0.15,
+     "blend_out": 0.0
+    },
+    "Weapon": null,
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    }
+   },
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Karambit/Character/A_FP_Karambit_Attack3_Montage.A_FP_Karambit_Attack3_Montage",
+     "length": 1.0333333,
+     "rate": 0.8,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/Game/Audio/Knife/Cue/Bodycam_SFX_Weapon_Knife_Attack.Bodycam_SFX_Weapon_Knife_Attack",
+        "Volume Multiplier": 1.0
+       }
+      }
+     ],
+     "blend_in": 0.15,
+     "blend_out": 0.0
+    },
+    "Weapon": null,
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    }
+   }
+  ],
+  "FirstEquip": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Karambit/Character/A_FP_Karambit_Draw_Montage.A_FP_Karambit_Draw_Montage",
+    "length": 1.0333333,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/Game/Audio/Knife/Cue/Bodycam_SFX_Weapon_Knife_Attack.Bodycam_SFX_Weapon_Knife_Attack",
+       "Volume Multiplier": 1.0,
+       "SoundTag": "Sound.Type.Draw"
+      }
+     }
+    ],
+    "blend_in": 0.25,
+    "blend_out": 0.25
+   }
+  },
+  "Draw": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Karambit/Character/A_FP_Karambit_Draw_Montage.A_FP_Karambit_Draw_Montage",
+    "length": 1.0333333,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/Game/Audio/Knife/Cue/Bodycam_SFX_Weapon_Knife_Attack.Bodycam_SFX_Weapon_Knife_Attack",
+       "Volume Multiplier": 1.0,
+       "SoundTag": "Sound.Type.Draw"
+      }
+     }
+    ],
+    "blend_in": 0.25,
+    "blend_out": 0.25
+   }
+  },
+  "holster": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Karambit/Character/A_FP_Karambit_Holster_Montage.A_FP_Karambit_Holster_Montage",
+    "length": 0.35591668,
+    "rate": 1.0,
+    "notifies": [],
+    "blend_in": 0.25,
+    "blend_out": 0.25
+   }
+  },
+  "Inspect": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Karambit/Character/A_FP_Karambit_Inspect_Montage.A_FP_Karambit_Inspect_Montage",
+    "length": 6.6666665,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/Game/Audio/Knife/Cue/Bodycam_SFX_Weapon_Knife_Karambit_Inspect_Cue.Bodycam_SFX_Weapon_Knife_Karambit_Inspect_Cue",
+       "Volume Multiplier": 1.0,
+       "SoundTag": "Sound.Type.Inspect"
+      }
+     }
+    ],
+    "blend_in": 0.25,
+    "blend_out": 0.5
+   },
+   "StandingActionRandomPoseOffset": {
+    "Min": {
+     "x": 0.0,
+     "y": -5.0,
+     "z": 15.0
+    },
+    "Max": {
+     "x": 10.0,
+     "y": -10.0,
+     "z": 20.0
+    }
+   }
+  },
+  "MagCheckFull": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Karambit/Character/A_FP_Karambit_Windup_Montage.A_FP_Karambit_Windup_Montage",
+    "length": 1.4,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/Game/Audio/Knife/Cue/Bodycam_SFX_Weapon_Throw_Prepare_Foley.Bodycam_SFX_Weapon_Throw_Prepare_Foley",
+       "Volume Multiplier": 1.0
+      }
+     }
+    ],
+    "blend_in": 0.25,
+    "blend_out": 0.25
+   }
+  },
+  "CurveWalk": {
+   "path": "/BodycamAnimationFramework/Animations/Revolver/Character/A_FP_Revolver_Walk_Loop.A_FP_Revolver_Walk_Loop",
+   "length": 3.0666666,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "ActionPitchAngle": {
+   "x": -20.0,
+   "y": 60.0
+  },
+  "NativeClass": "/BodycamAnimationFramework/Blueprints/Animation/Data/DA_BodycamAnimationSettings.DA_BodycamAnimationSettings_C"
+ }
+}

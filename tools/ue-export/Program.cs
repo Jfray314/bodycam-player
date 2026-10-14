@@ -190,17 +190,19 @@ void ExportAll(string[]? only)
                      "InAir/ALS_N_JumpLoop", "InAir/ALS_N_FallLoop", "InAir/ALS_N_Land_Light" })
             ExportAnim(Als + c, "body_anims");
     }
-    foreach (var dirName in keys.Select(k => k[AnimRoot.Length..].Split('/')[0]).Distinct())
+    // "Grenade/G67"-style guns.json keys: item anim sets one level down
+    string DirOf(string k) { var p = k[AnimRoot.Length..].Split('/'); return p.Length > 2 && cfg.ContainsKey(p[0] + "/" + p[1]) ? p[0] + "/" + p[1] : p[0]; }
+    foreach (var dirName in keys.Select(DirOf).Distinct())
     {
         var g = cfg.GetValueOrDefault(dirName) ?? new GunCfg();
         var name = g.name ?? dirName;
         if (g.skip == true || (only != null && !only.Contains(name, StringComparer.OrdinalIgnoreCase))) continue;
         var dirs = new[] { dirName }.Concat(g.extraDirs ?? []).ToList();
         string Under(string d, string sub) => AnimRoot + d + "/" + sub + "/";
-        var fp = keys.Where(k => dirs.Any(d => k.StartsWith(Under(d, "Character"), StringComparison.OrdinalIgnoreCase))).Where(IsSeq).ToList();
+        var fp = keys.Where(k => dirs.Any(d => k.StartsWith(g.noWeaponClips == true ? AnimRoot + d + "/" : Under(d, "Character"), StringComparison.OrdinalIgnoreCase))).Where(IsSeq).ToList();
         var wp = keys.Where(k => dirs.Any(d => k.StartsWith(Under(d, "Weapon"), StringComparison.OrdinalIgnoreCase))).Where(IsSeq).ToList();
-        if (fp.Count == 0 || wp.Count == 0) { Console.WriteLine($"skip {dirName}: fp={fp.Count} weapon={wp.Count}"); continue; }
-        var skel = provider.LoadPackageObject<UAnimSequence>(Strip(wp[0])).Skeleton?.Name;
+        if (fp.Count == 0 || (wp.Count == 0 && g.noWeaponClips != true)) { Console.WriteLine($"skip {dirName}: fp={fp.Count} weapon={wp.Count}"); continue; }
+        var skel = provider.LoadPackageObject<UAnimSequence>(Strip(wp.Count > 0 ? wp[0] : fp[0])).Skeleton?.Name;
         var att = attachments?.GetValueOrDefault(name);
         var skm = g.skm ?? att?.receiver ?? skms.FirstOrDefault(m => m.skel == skel).path;
         if (skm == null) { Console.WriteLine($"NO MESH for {dirName} (skeleton {skel}); add to guns.json"); continue; }
@@ -244,6 +246,6 @@ List<(string path, string? skel)> ScanSkms()
 }
 class AttPart { public string row { get; set; } = ""; public string cls { get; set; } = ""; public string? socket { get; set; } public string mesh { get; set; } = ""; }
 class AttCfg { public string? receiver { get; set; } public List<AttPart> parts { get; set; } = new(); }
-class GunCfg { public string[]? materials { get; set; } public string? name { get; set; } public string? skm { get; set; } public string[]? extraDirs { get; set; } public bool? skip { get; set; } public string[]? variants { get; set; } }
+class GunCfg { public string[]? materials { get; set; } public string? name { get; set; } public string? skm { get; set; } public string[]? extraDirs { get; set; } public bool? skip { get; set; } public bool? noWeaponClips { get; set; } public string[]? variants { get; set; } }
 
 class ConSink : Serilog.Core.ILogEventSink { public void Emit(Serilog.Events.LogEvent e) => Console.Error.WriteLine($"[{e.Level}] {e.RenderMessage()} {e.Exception}"); }

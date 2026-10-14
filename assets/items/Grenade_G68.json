@@ -1,0 +1,512 @@
+{
+ "extra": {
+  "CancelOverhand": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Cancel_Overhand.A_FP_G67_Cancel_Overhand",
+    "length": 1.5333333,
+    "rate": 1.0,
+    "notifies": []
+   }
+  },
+  "OverhandLoop": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Overhand_Loop.A_FP_G67_Overhand_Loop",
+    "length": 3.4666667,
+    "rate": 1.0,
+    "notifies": []
+   }
+  }
+ },
+ "row": "Grenade G68",
+ "item_class": "Item.Grenade.Grenade.Grenade.Grenade G68",
+ "actor": "/Game/BodycamWeapons/Core/Blueprint/Grenade/MB78.MB78_C",
+ "stats_effects": [
+  "/Game/BodycamCore/AbilitySystem/GameplayEffects/Grenades/Stats/GE_GrenadeStat_G68.GE_GrenadeStat_G68_C"
+ ],
+ "anim_set": {
+  "IdlePose": {
+   "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Idle_Loop01.A_FP_G67_Idle_Loop01",
+   "length": 30.033333,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "ViewmodelOffsets": {
+   "PoseOffset": {
+    "Translation": {
+     "x": 7.686739,
+     "y": 3.0,
+     "z": 0.0
+    }
+   }
+  },
+  "AdsSettings": {
+   "AdsSpeed": 3.0,
+   "SprintAdsSpeed": 10.0,
+   "AdsBlend": {
+    "BlendTime": 0.0,
+    "BlendOption": "EAlphaBlendOption::Sinusoidal"
+   },
+   "ScopeChangeBlend": {
+    "BlendTime": 8.0,
+    "BlendOption": "EAlphaBlendOption::Sinusoidal"
+   },
+   "AdsAdditiveBlend": 1.0
+  },
+  "LookPositionSway": {
+   "SpringStiffness": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 0.5
+   },
+   "SpringDamping": {
+    "x": 0.2,
+    "y": 0.3,
+    "z": 0.6
+   },
+   "SpringSpeed": {
+    "x": 10.0,
+    "y": 5.0,
+    "z": 10.0
+   },
+   "SmoothDamping": {
+    "x": 5.0,
+    "y": 25.0,
+    "z": 5.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 10.0
+   },
+   "AdsScale": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 10.0
+   }
+  },
+  "HipLookPositionSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 0.4
+   },
+   "SpringDamping": {
+    "x": 0.0,
+    "y": 0.25,
+    "z": 0.4
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 10.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 5.0,
+    "z": 5.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 5.0,
+    "z": 5.0
+   }
+  },
+  "LookRotationSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 0.6,
+    "z": 0.0
+   },
+   "SpringDamping": {
+    "x": 0.0,
+    "y": 0.4,
+    "z": 0.0
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 0.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 50.0,
+    "z": 0.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 0.0
+   },
+   "AdsScale": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 0.0
+   }
+  },
+  "HipLookRotationSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 1.0
+   },
+   "SpringDamping": {
+    "x": 0.0,
+    "y": 0.4,
+    "z": 0.4
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 7.0,
+    "z": 7.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 50.0,
+    "z": 50.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 5.0,
+    "z": 5.0
+   }
+  },
+  "MovePositionSway": {
+   "SpringStiffness": {
+    "x": 0.0,
+    "y": 1.0,
+    "z": 0.0
+   },
+   "SpringDamping": {
+    "x": 1.0,
+    "y": 1.0,
+    "z": 0.0
+   },
+   "SpringSpeed": {
+    "x": 0.0,
+    "y": 25.0,
+    "z": 0.0
+   },
+   "SmoothDamping": {
+    "x": 0.0,
+    "y": 2.0,
+    "z": 0.0
+   },
+   "Scale": {
+    "x": 0.0,
+    "y": 10.0,
+    "z": 0.0
+   },
+   "AdsScale": {
+    "x": 1.0,
+    "y": 0.0,
+    "z": 0.0
+   }
+  },
+  "LowerSway": {
+   "Scale": 8.0,
+   "AdsScale": 50.0,
+   "InterpSpeed": 10.0,
+   "Curve": {
+    "path": "/BodycamAnimationFramework/Animations/General/Curve_GrenadeLowerSway.Curve_GrenadeLowerSway",
+    "curves": {
+     "FloatCurve": [
+      [
+       0.0,
+       3.3369275e-08,
+       2,
+       -0.018659236,
+       -0.018659236
+      ],
+      [
+       1.8930625,
+       -0.32465607,
+       2,
+       -0.5548955,
+       -0.5548955
+      ],
+      [
+       4.5643744,
+       -1.0031608,
+       2,
+       -0.018659236,
+       -0.018659236
+      ]
+     ]
+    }
+   }
+  },
+  "SwayPivotOffset": {
+   "x": 0.0,
+   "y": 100.0,
+   "z": 0.0
+  },
+  "WeaponCollision": {
+   "Length": 75.0,
+   "StartOffset": -10.0,
+   "HolsterPose": {
+    "Translation": {
+     "x": 0.0,
+     "y": -20.0,
+     "z": 0.0
+    }
+   },
+   "InterpSpeed": 5.0,
+   "DistanceThreshold": 15.0,
+   "TraceRadius": 5.0
+  },
+  "AimIdlePose": {
+   "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Aim_Idle_Loop.A_FP_Glock_Aim_Idle_Loop",
+   "length": 5.1,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "StressedIdleSubtle": {
+   "path": "/BodycamAnimationFramework/Animations/Glock/Character/A_FP_Glock17_Shake_Loop.A_FP_Glock17_Shake_Loop",
+   "length": 1.0666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "StressedIdleStrong": {
+   "path": "/BodycamAnimationFramework/Animations/MGlock17/Character/A_FP_Glock_Stressed_Additive.A_FP_Glock_Stressed_Additive",
+   "length": 1.3666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "OverlayAnimBlueprint": "/BodycamAnimationFramework/Blueprints/Animation/ABP_Grenade.ABP_Grenade_C",
+  "GunAnimInstance": "/BodycamAnimationFramework/Animations/Grenade/G67/Weapon/ABP_G67.ABP_G67_C",
+  "ReGripMotions": [
+   {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Regrip01_Montage.A_FP_G67_Regrip01_Montage",
+    "length": 0.9,
+    "rate": 1.0,
+    "notifies": [],
+    "blend_in": 0.0,
+    "blend_out": 0.0
+   }
+  ],
+  "Fire": [
+   {
+    "Character": {
+     "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Throw_Overhand_Montage.A_FP_G67_Throw_Overhand_Montage",
+     "length": 0.9,
+     "rate": 0.8,
+     "notifies": [
+      {
+       "name": "PlayWepSounds_C",
+       "time": 0.0001,
+       "duration": 0.0,
+       "props": {
+        "Sound": "/BodycamAnimationFramework/Animations/Grenade/G67/Sounds/OverhandThrow.OverhandThrow",
+        "Volume Multiplier": 1.0,
+        "SoundTag": "Sound.Type.Fire"
+       }
+      }
+     ],
+     "blend_in": 0.15,
+     "blend_out": 0.25
+    },
+    "Weapon": null,
+    "StandingActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    },
+    "CrouchedActionRandomPoseOffset": {
+     "Min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     },
+     "Max": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+     }
+    }
+   }
+  ],
+  "FireOut": {
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/M4a1/Weapon/A_W_M4A1_Fire_Empty_Montage.A_W_M4A1_Fire_Empty_Montage",
+    "length": 0.56666666,
+    "rate": 1.0,
+    "notifies": [],
+    "blend_in": 0.0,
+    "blend_out": 0.0
+   }
+  },
+  "FirstEquip": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Draw_Montage.A_FP_G67_Draw_Montage",
+    "length": 0.91791666,
+    "rate": 1.0,
+    "notifies": [],
+    "blend_in": 0.25,
+    "blend_out": 0.25
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Weapon/A_W_G67_Draw_Montage.A_W_G67_Draw_Montage",
+    "length": 1.0,
+    "rate": 1.0,
+    "notifies": [],
+    "blend_in": 0.0,
+    "blend_out": 0.0
+   }
+  },
+  "Draw": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Draw_Montage.A_FP_G67_Draw_Montage",
+    "length": 0.91791666,
+    "rate": 1.0,
+    "notifies": [],
+    "blend_in": 0.25,
+    "blend_out": 0.25
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Weapon/A_W_G67_Draw_Montage.A_W_G67_Draw_Montage",
+    "length": 1.0,
+    "rate": 1.0,
+    "notifies": [],
+    "blend_in": 0.0,
+    "blend_out": 0.0
+   }
+  },
+  "holster": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Holster_Montage.A_FP_G67_Holster_Montage",
+    "length": 0.34,
+    "rate": 1.0,
+    "notifies": [],
+    "blend_in": 0.25,
+    "blend_out": 0.25
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Weapon/A_W_G67_Holster_Montage.A_W_G67_Holster_Montage",
+    "length": 0.6666667,
+    "rate": 1.0,
+    "notifies": [],
+    "blend_in": 0.0,
+    "blend_out": 0.0
+   }
+  },
+  "Inspect": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Inspect_Montage.A_FP_G67_Inspect_Montage",
+    "length": 4.1666665,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Grenade/G67/Sounds/Inspect.Inspect",
+       "Volume Multiplier": 1.0,
+       "SoundTag": "Sound.Type.Inspect"
+      }
+     }
+    ],
+    "blend_in": 0.25,
+    "blend_out": 0.25
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Weapon/A_W_G67_Inspect_Montage.A_W_G67_Inspect_Montage",
+    "length": 4.1666665,
+    "rate": 1.0,
+    "notifies": [],
+    "blend_in": 0.0,
+    "blend_out": 0.0
+   },
+   "StandingActionRandomPoseOffset": {
+    "Max": {
+     "x": 0.0,
+     "y": 3.0,
+     "z": 0.0
+    }
+   }
+  },
+  "MagCheckFull": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_PullPin_Overhand_Montage.A_FP_G67_PullPin_Overhand_Montage",
+    "length": 1.2333333,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Grenade/G67/Sounds/PullPinOverhand.PullPinOverhand",
+       "Volume Multiplier": 0.5
+      }
+     }
+    ],
+    "blend_in": 0.15,
+    "blend_out": 0.15
+   },
+   "Weapon": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Weapon/A_W_G67_PullPin_Overhand_Montage.A_W_G67_PullPin_Overhand_Montage",
+    "length": 1.2333333,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/BodycamAnimationFramework/Animations/Grenade/G67/Sounds/PullPinOverhand.PullPinOverhand",
+       "Volume Multiplier": 1.0,
+       "SoundTag": "Sound.Type.Fire"
+      }
+     }
+    ],
+    "blend_in": 0.0,
+    "blend_out": 0.0
+   }
+  },
+  "CurveWalk": {
+   "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Walk_Loop.A_FP_G67_Walk_Loop",
+   "length": 3.0666666,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveSprint": {
+   "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Sprint_Loop.A_FP_G67_Sprint_Loop",
+   "length": 2.2666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpStart": {
+   "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Jump_Start.A_FP_G67_Jump_Start",
+   "length": 0.9,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpLoop": {
+   "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Jump_Loop.A_FP_G67_Jump_Loop",
+   "length": 3.4666667,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "CurveJumpEnd": {
+   "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Jump_End.A_FP_G67_Jump_End",
+   "length": 0.93333334,
+   "rate": 1.0,
+   "notifies": []
+  },
+  "AdsCurveMovementScale": 1.0,
+  "SpineAdditiveActionWeight": 0.6,
+  "ActionPitchAngle": {
+   "x": -50.0,
+   "y": 300.0
+  },
+  "NativeClass": "/BodycamAnimationFramework/Blueprints/Animation/Data/DA_BodycamAnimationSettings.DA_BodycamAnimationSettings_C"
+ }
+}

@@ -299,7 +299,7 @@ fn roster(inv: Option<Single<&Inventory>>, mut r: ResMut<Roster>) {
     if !r.0.is_empty() {
         return;
     }
-    for w in &inv.slots {
+    for w in inv.slots.iter().chain(&inv.pool).filter(|w| w.kind == crate::weapon::ItemKind::Gun) {
         r.0.push(Item {
             row: w.name.clone(),
             display: display_name(&w.name),

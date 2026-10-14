@@ -102,6 +102,22 @@ for name, row in rows.items():
     print(f"{name:14s} reloads={len(data['anim_set'].get('ReloadTacCalm', []))} fire_len={char.get('length') if isinstance(char, dict) else '-'} recoil={'RecoilData' in data['anim_set']}")
 print('wrote', n)
 
+# Non-gun items (DT_PerkItems: Knife, Grenade G67/Flash, Kamikaze drone...) -> assets/items/<Row>.json (same anim_set shape)
+IT = os.path.join(os.path.dirname(os.path.normpath(OUT)), 'items'); os.makedirs(IT, exist_ok=True)
+for name, row in load('/Game/BodycamCore/ItemsDefinition/Gameplay/DT_PerkItems.DT_PerkItems')['exports'][0]['properties']['_rows'].items():
+    bas_path = row.get('AnimationData')
+    bas = export(load(bas_path), bas_path.split('.')[-1]) if bas_path else None
+    if not bas:
+        continue
+    extra = {}
+    if name in ('Grenade G67', 'Grenade G68'):  # clips the BAS does not list (GA_Character_Aim_Grenade cancel, hold pose)
+        G = '/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_'
+        extra = {k: expand({'Character': G + v + '.A_FP_G67_' + v}) for k, v in (('CancelOverhand', 'Cancel_Overhand'), ('OverhandLoop', 'Overhand_Loop'))}
+    json.dump({'extra': extra, 'row': name, 'item_class': row.get('ItemClassID'), 'actor': row.get('ActorClassOverride'),
+               'stats_effects': row.get('GameplayDataDefinition', {}).get('GameplayEffectsModifier', []),
+               'anim_set': expand(clean(bas.get('properties', {})))}, open(os.path.join(IT, name.replace(' ', '_') + '.json'), 'w'), indent=1)
+    print('item', name)
+
 # PRAS fire camera shake (BafCameraShake) with its rotation curve expanded.
 shake = export(load('/BodycamAnimationFramework/PRAS/CameraShakes/Shake_Rifle_Standard.Shake_Rifle_Standard'), 'Shake_Rifle_Standard')
 json.dump(expand(clean(shake['properties'])), open(os.path.join(os.path.dirname(os.path.normpath(OUT)), 'fire_shake.json'), 'w'), indent=1)
