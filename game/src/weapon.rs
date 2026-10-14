@@ -146,6 +146,22 @@ impl Weapon {
         }
         self.ammo = amount;
     }
+    /// Bolt-action guns (GA_Reload_Bolt): per-round reload loop (BAS ReloadLoop*/ReloadStart*) instead of a mag swap.
+    fn is_bolt(&self) -> bool {
+        self.anims.get("ReloadLoopCalm").is_some() && self.anims.get("ReloadEmptyCalm").is_none()
+    }
+    /// MagazineManager.PickAmmo: one round out of the spares (fullest mag first), unless mags are infinite.
+    fn pick_round(&mut self) {
+        if self.infinite_mags() {
+            return;
+        }
+        if let Some((i, _)) = self.mags.iter().copied().enumerate().max_by_key(|&(_, m)| m) {
+            self.mags[i] -= 1;
+            if self.mags[i] == 0 {
+                self.mags.remove(i);
+            }
+        }
+    }
     /// First montage of a list key (Fire: the one the viewmodel plays).
     fn one_of(&self, key: &str) -> Option<Montage> {
         Montage::from(self.anims.get(key)?.get(0)?)
@@ -182,6 +198,16 @@ pub struct Action {
     refill_at: f32,
     /// Slot to draw after a holster.
     next_slot: usize,
+    /// GA_Reload_Bolt step this montage belongs to (None = ordinary action).
+    bolt: Option<Bolt>,
+}
+
+/// GA_Reload_Bolt montages: StartReload (Enter, `empty` = bIsMagEmpty), then per-round loops, the last round plays the End montage.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Bolt {
+    Start { empty: bool, stressed: bool },
+    Loop { stressed: bool },
+    End,
 }
 
 /// PRAS RecoilData.ControllerRecoil: per-shot (min, max) steps in degrees and the RecoilSmoothing interp speed.
@@ -253,6 +279,8 @@ pub struct Inventory {
     last_fire_start: f32,
     /// Seconds until each pending WEP.PullSliderLogic (0 = this shot; PullSlider notify time for bUsePullSliderNotify guns).
     pull_slider: Vec<f32>,
+    /// Seconds until the cancelled bolt reload's CancelLoop montage plays.
+    cancel_in: Option<f32>,
 }
 
 impl Inventory {
@@ -277,7 +305,34 @@ impl Inventory {
         let Some(montage) = montage else { return };
         out.write(MontageStarted { row: self.slots[self.current].name.clone(), kind, montage: montage.clone() });
         let refill_at = if kind == ActionKind::Reload { montage.length * 0.7 } else { f32::MAX };
-        self.action = Some(Action { kind, montage, t: 0.0, refill_at, next_slot });
+        self.action = Some(Action { kind, montage, t: 0.0, refill_at, next_slot, bolt: None });
+    }
+    /// GA_Reload_Bolt L43: another round needed -> the End montage for the last one, else a random Loop; none -> ability ends.
+    fn bolt_next(&mut self, stressed: bool, out: &mut MessageWriter<MontageStarted>) {
+        let w = &self.slots[self.current];
+        if !(w.ammo < w.cap() && (w.infinite_mags() || !w.mags.is_empty())) {
+            return;
+        }
+        let (m, bolt) = if w.ammo + 1 == w.cap() {
+            (w.one(if stressed { "ReloadEndStressed" } else { "ReloadEndCalm" }), Bolt::End)
+        } else {
+            (w.pick(if stressed { "ReloadLoopStressed" } else { "ReloadLoopCalm" }), Bolt::Loop { stressed })
+        };
+        self.start(ActionKind::Reload, m, self.current, out);
+        if let Some(a) = &mut self.action {
+            a.refill_at = f32::MAX;
+            a.bolt = Some(bolt);
+        }
+    }
+    /// GA_Reload_Bolt.K2_OnEndAbility(cancelled) -> GA_CancelBoltReload: the running montage plays to its WaitDelay end
+    /// (length - 0.1, no round added), then CancelLoop.
+    fn cancel_bolt(&mut self) {
+        if let Some(a) = &self.action
+            && a.bolt.is_some()
+        {
+            self.cancel_in = Some((a.montage.length - 0.1 - a.t).max(0.0));
+            self.action = None;
+        }
     }
 }
 
@@ -418,9 +473,10 @@ fn give_loadout(mut cmd: Commands, player: Single<Entity, With<Player>>, mut out
     // Default loadout: primary M4A1 + sidearm Glock17, then every other gun for testing.
     // Dev: BODYCAM_START=<name> equips that gun first (gun audits).
     let cfg = crate::ui::settings::load(); // loadout chosen on the tablet
-    let start = std::env::var("BODYCAM_START").unwrap_or_else(|_| cfg.primary.clone());
-    slots.sort_by_key(|w| (w.name != start, w.name != cfg.primary, w.name != cfg.secondary, w.name.clone()));
-    let mut inv = Inventory { slots, current: 0, cooldown: 0.0, action: None, r_held: 0.0, fire_start: None, last_fire_start: 0.0, pull_slider: vec![] };
+    let norm = |s: &str| s.to_lowercase().replace([' ', '-'], "_");
+    let start = norm(&std::env::var("BODYCAM_START").unwrap_or_else(|_| cfg.primary.clone()));
+    slots.sort_by_key(|w| (norm(&w.name) != start, w.name != cfg.primary, w.name != cfg.secondary, w.name.clone()));
+    let mut inv = Inventory { slots, current: 0, cooldown: 0.0, action: None, r_held: 0.0, fire_start: None, last_fire_start: 0.0, pull_slider: vec![], cancel_in: None };
     let first = inv.slots[0].one("FirstEquip");
     inv.slots[0].equipped_once = true;
     inv.start(ActionKind::Draw, first, 0, &mut out);
@@ -442,7 +498,45 @@ fn actions(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, status: Res<crate::
         let cur = inv.current;
         inv.slots[cur].reload_done();
     }
-    if let Some(a) = &inv.action {
+    // GA_Reload_Bolt chain: each montage hands over at its WaitDelay (Start length - 0.05, Loop/End length - 0.1).
+    if let Some(a) = &inv.action
+        && let Some(b) = a.bolt
+        && a.t >= a.montage.length - if matches!(b, Bolt::Start { .. }) { 0.05 } else { 0.1 }
+    {
+        let cur = inv.current;
+        inv.action = None;
+        match b {
+            Bolt::Start { empty, stressed } => {
+                if empty {
+                    inv.slots[cur].ammo += 1; // RefillAmmo(1.0)
+                }
+                inv.slots[cur].pick_round();
+                inv.bolt_next(stressed, &mut out);
+            }
+            Bolt::Loop { stressed } => {
+                inv.slots[cur].ammo += 1;
+                inv.slots[cur].pick_round();
+                inv.bolt_next(stressed, &mut out);
+            }
+            Bolt::End => {
+                inv.slots[cur].ammo += 1;
+                inv.slots[cur].pick_round();
+            }
+        }
+    }
+    if let Some(t) = &mut inv.cancel_in {
+        *t -= dt;
+        if *t <= 0.0 {
+            inv.cancel_in = None;
+            let w = &inv.slots[inv.current];
+            if let Some(m) = w.one("CancelLoop") {
+                out.write(MontageStarted { row: w.name.clone(), kind: ActionKind::Reload, montage: m });
+            }
+        }
+    }
+    if let Some(a) = &inv.action
+        && a.bolt.is_none()
+    {
         if a.t >= a.montage.length {
             let (kind, next) = (a.kind, a.next_slot);
             inv.action = None;
@@ -472,7 +566,23 @@ fn actions(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, status: Res<crate::
         let tapped = inv.r_held < TAP;
         inv.r_held = 0.0;
         let w = &inv.slots[cur];
-        if tapped && !inv.busy() && w.can_reload() {
+        if tapped && !inv.busy() && w.is_bolt() && w.can_reload() {
+            // GA_Reload_Bolt.StartReload: Enter montage by bIsStressed / bIsMagEmpty.
+            let stressed = rand::rng().random::<f32>() < status.stress;
+            let empty = w.ammo == 0;
+            let key = match (empty, stressed) {
+                (false, false) => "ReloadStartCalm",
+                (false, true) => "ReloadStartStressed",
+                (true, false) => "ReloadStartCalmEmpty",
+                (true, true) => "ReloadStartStressedEmpty",
+            };
+            let m = w.pick(key);
+            inv.start(ActionKind::Reload, m, cur, &mut out);
+            if let Some(a) = &mut inv.action {
+                a.refill_at = f32::MAX;
+                a.bolt = Some(Bolt::Start { empty, stressed });
+            }
+        } else if tapped && !inv.busy() && w.can_reload() {
             // GA_Reload_Base.DetermineStressedStatus: bIsStressed = RandomBoolWithWeight(Stress); GetReloadMontage picks the
             // Stressed or Calm array. ponytail: Tac-reload falls back to the Empty array when a gun has none.
             let stressed = rand::rng().random::<f32>() < status.stress;
@@ -703,6 +813,9 @@ fn fire(
         }
         inv.last_fire_start = start;
         inv.fire_start = None;
+    }
+    if p.aiming || mouse.just_pressed(MouseButton::Left) {
+        inv.cancel_bolt(); // GA_Character_Aim / GA_Fire_Base CancelAbilitiesWithTag Ability.Weapon.Reload.Bolt
     }
     let w = &inv.slots[inv.current];
     let trigger = if w.full_auto { mouse.pressed(MouseButton::Left) } else { mouse.just_pressed(MouseButton::Left) };

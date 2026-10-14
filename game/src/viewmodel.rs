@@ -33,6 +33,10 @@ fn action_weight(kind: ActionKind) -> f32 {
     }
 }
 
+/// Set of the system that moves the camera with the head during montages (camera clips apply after it).
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FollowHead;
+
 pub struct ViewmodelPlugin;
 impl Plugin for ViewmodelPlugin {
     fn build(&self, app: &mut App) {
@@ -43,7 +47,7 @@ impl Plugin for ViewmodelPlugin {
             .add_systems(Last, debug_bones)
             .add_systems(
                 PostUpdate,
-                (place_arms, (follow_head, left_elbow).after(bevy::app::AnimationSystems)).before(bevy::transform::TransformSystems::Propagate),
+                (place_arms, (follow_head.in_set(FollowHead), left_elbow).after(bevy::app::AnimationSystems)).before(bevy::transform::TransformSystems::Propagate),
             );
     }
 }

@@ -4,6 +4,7 @@
 //! PlayCameraAdjust(false): a DoOnce gate, delay RandomFloat(0, 3), then if not InDanger? (another character within 15 m) and
 //! still CanAdjust? play A_FP_GoPro_Adjust01 (the Spawn variant is never called), and reopen the gate after the montage + 10..100 s.
 use crate::player::{Footstep, Player};
+use crate::status::PlayerDamage;
 use crate::weapon::{ActionKind, Inventory, Montage, MontageStarted};
 use bevy::prelude::*;
 use rand::Rng;
@@ -11,7 +12,11 @@ use rand::Rng;
 pub struct CamAdjustPlugin;
 impl Plugin for CamAdjustPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CamAdjust>().add_systems(Update, tick);
+        // BODYCAM_ADJUST=<s>: dev hook, the gate check runs that many sim seconds after the viewmodel is ready.
+        let dev = std::env::var("BODYCAM_ADJUST").ok().and_then(|v| v.parse().ok());
+        app.insert_resource(CamAdjust { dev, track: load_track(), ..default() })
+            .add_systems(Update, (tick, flinch))
+            .add_systems(PostUpdate, camera_anim.after(bevy::app::AnimationSystems).after(crate::viewmodel::FollowHead).before(bevy::transform::TransformSystems::Propagate));
     }
 }
 
@@ -25,6 +30,43 @@ pub struct CamAdjust {
     pending: Option<f32>,
     /// Gate closed until this many seconds pass (montage + 10..100 s).
     closed_for: f32,
+    dev: Option<f32>,
+    /// A_C_GoPro_Adjust01_Anim camera_armature rotation keys (UE quats relative to key 0) + sample rate.
+    track: Vec<Quat>,
+    /// Seconds since the adjust montage started (None = idle).
+    since: Option<f32>,
+}
+
+/// Camera skeleton clip of the adjust montage (BafCameraAnimation plays it on the camera bone; Camera_Pitch/Yaw/Roll curves
+/// are baked into these keys by tools/build_models.py -> camera_tracks.json).
+const TRACK_HZ: f32 = 30.428572;
+fn load_track() -> Vec<Quat> {
+    let root = std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into());
+    let Ok(txt) = std::fs::read_to_string(format!("{root}/models/camera_tracks.json")) else { return vec![] };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&txt) else { return vec![] };
+    let keys: Vec<Quat> = v["A_C_GoPro_Adjust01_Anim"]["bones"][0]["quat"]
+        .as_array()
+        .map(|a| a.iter().map(|q| Quat::from_xyzw(q[0].as_f64().unwrap_or(0.0) as f32, q[1].as_f64().unwrap_or(0.0) as f32, q[2].as_f64().unwrap_or(0.0) as f32, q[3].as_f64().unwrap_or(1.0) as f32)).collect())
+        .unwrap_or_default();
+    let Some(&q0) = keys.first() else { return keys };
+    // UE (X fwd, Y right, Z up, left-handed) -> Bevy (right X, up Y, fwd -Z): vector (x,y,z) -> (y,z,-x), handedness flips the angle.
+    keys.iter().map(|&q| { let r = q0.inverse() * q; Quat::from_xyzw(-r.y, -r.z, r.x, r.w) }).collect()
+}
+
+/// Camera-only rotation from the camera clip, blended with the montage envelope (BlendIn/BlendOut 0.25 s).
+fn camera_anim(time: Res<Time>, mut st: ResMut<CamAdjust>, mut cam: Single<&mut Transform, With<crate::player::BodycamCamera>>) {
+    let Some(t) = st.since.as_mut() else { return };
+    *t += time.delta_secs();
+    let t = *t;
+    if t > 2.3333333 || st.track.is_empty() {
+        st.since = None;
+        return;
+    }
+    let f = (t * TRACK_HZ).min((st.track.len() - 1) as f32);
+    let (i, a) = (f as usize, f.fract());
+    let q = st.track[i].slerp(st.track[(i + 1).min(st.track.len() - 1)], a);
+    let env = (t / 0.25).min(1.0) * ((2.3333333 - t) / 0.25).clamp(0.0, 1.0);
+    cam.rotation *= Quat::IDENTITY.slerp(q, env);
 }
 
 /// UpdateCameraAdjust: returns true when the accumulator hits 1 and adjusting is allowed (it then resets).
@@ -55,10 +97,14 @@ fn tick(
     p: Single<&Player>,
     inv: Option<Single<&Inventory>>,
     gunfight: Option<Res<crate::gunfight::Gunfight>>,
+    ready: Res<crate::dev::Ready>,
     mut st: ResMut<CamAdjust>,
     mut out: MessageWriter<MontageStarted>,
 ) {
     let dt = time.delta_secs();
+    if ready.0.is_some() && let Some(t) = st.dev.take() {
+        st.pending = Some(t);
+    }
     let speed_cm = p.vel.length() * 100.0;
     let can_adjust = speed_cm < 175.0 && !p.aiming && inv.as_ref().is_none_or(|i| i.action.is_none());
     // ponytail: Pitch(DeltaTime) isn't tracked; only the yaw term feeds the turn contribution.
@@ -79,6 +125,7 @@ fn tick(
         return;
     }
     let m = montage();
+    st.since = Some(0.0);
     st.closed_for = m.length + rand::rng().random_range(10.0..100.0);
     let row = inv.as_ref().map(|i| i.slots[i.current].name.to_string()).unwrap_or_default();
     info!("camera adjust montage at {:.1} s (gate closed {:.0} s)", time.elapsed_secs(), st.closed_for);
@@ -97,4 +144,26 @@ mod tests {
         assert!(super::update(&mut v, 0.01, 4.0, true)); // one step during a fast turn
         assert!(!super::update(&mut v, 0.01, 4.0, false) && v == 1.0); // held at 1 until allowed
     }
+}
+
+/// Bodycam_Player.Flinch: RetriggerableDelay(RandomFloat 0.1..0.15), then PlayAnimMontage of A_FP_Glock17_Flinch03 or Flinch01
+/// (RandomBool) on the arms whatever gun is held. UE has no BP caller; the native damage path is assumed -> every PlayerDamage.
+fn flinch(time: Res<Time>, ready: Res<crate::dev::Ready>, mut dev: Local<Option<f32>>, mut dmg: MessageReader<PlayerDamage>, mut left: Local<Option<f32>>, mut out: MessageWriter<MontageStarted>, inv: Option<Single<&Inventory>>) {
+    // BODYCAM_FLINCH=<s>: dev hook, a hit lands that many sim seconds after the viewmodel is ready.
+    let dev_hit = ready.0.is_some_and(|r| *dev.get_or_insert_with(|| std::env::var("BODYCAM_FLINCH").ok().and_then(|v| v.parse().ok()).unwrap_or(f32::MAX)) + r <= time.elapsed_secs() && std::mem::replace(&mut *dev, Some(f32::MAX)).is_some_and(|v| v < f32::MAX));
+    if dmg.read().count() > 0 || dev_hit {
+        *left = Some(rand::rng().random_range(0.1..0.15));
+    }
+    let Some(t) = left.as_mut() else { return };
+    *t -= time.delta_secs();
+    if *t > 0.0 {
+        return;
+    }
+    *left = None;
+    let n = if rand::rng().random_bool(0.5) { "03" } else { "01" };
+    let path = format!("/BodycamAnimationFramework/Animations/Glock/Character/A_FP_Glock17_Flinch{n}_Montage.A_FP_Glock17_Flinch{n}_Montage");
+    info!("flinch montage {n}");
+    let row = inv.map(|i| i.slots[i.current].name.to_string()).unwrap_or_default();
+    // length 1.1 s from the baked clip; PlayAnimMontage defaults BlendIn/Out 0.25.
+    out.write(MontageStarted { row, kind: ActionKind::CameraAdjust, montage: Montage { path, length: 1.1, notifies: vec![], blend_in: 0.25, blend_out: 0.25, weapon: None } });
 }
