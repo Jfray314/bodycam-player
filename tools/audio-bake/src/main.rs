@@ -119,7 +119,7 @@ fn main() {
 
     // Roots: every SoundCue under Content/Audio and the Ultimate_SFX gun/aim cues, plus whatever the table rows name.
     let mut files = vec![];
-    for d in ["Content/Audio/Guns/Cue", "Content/Audio/Player", "Content/Ultimate_SFX/GunShot/Cue", "Content/Ultimate_SFX/ClothesSounds", "Content/Ultimate_SFX/Repiration", "Content/BodycamWeapons/Core/Blueprint/Emitters/Particles/Emitters/Shell/Sounds_Shell"] { walk(&root.join(d), &mut files) }
+    for d in ["Content/Audio/Guns/Cue", "Content/Audio/Player", "Content/Ultimate_SFX/GunShot/Cue", "Content/Ultimate_SFX/ClothesSounds", "Content/Ultimate_SFX/Repiration", "Content/BodycamWeapons/Core/Blueprint/Emitters/Particles/Emitters/Shell/Sounds_Shell", "Content/Audio/Knife/Cue", "Content/Audio/Grenade/Cue", "Content/FPV_Drone/Sfx", "Content/Ultimate_SFX/Grenades", "Content/BallisticsVFX/SFX/Impacts/Grenade", "Content/BallisticsVFX/SFX/Explodes"] { walk(&root.join(d), &mut files) }
     for f in files {
         let rel = f.strip_prefix(root.join("Content")).unwrap().with_extension("");
         let pkg = format!("/Game/{}", rel.to_string_lossy().replace('\\', "/"));

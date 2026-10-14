@@ -72,6 +72,8 @@ pub enum Act {
     Equip,
     /// Toggle an attachment id on the shown weapon (MODIFY).
     Att(&'static str),
+    /// LOADOUT EXPLOSIVE / MELEE / GADGET column (0/1/2): equip that DT_PerkItems row.
+    Gear(usize, String),
     Mode(usize),
     Search,
     Offline(usize),
@@ -301,7 +303,7 @@ fn roster(inv: Option<Single<&Inventory>>, mut r: ResMut<Roster>) {
     if !r.0.is_empty() {
         return;
     }
-    for w in &inv.slots {
+    for w in inv.slots.iter().chain(&inv.pool).filter(|w| w.kind == crate::weapon::ItemKind::Gun) {
         r.0.push(Item {
             row: w.name.clone(),
             display: display_name(&w.name),
@@ -469,8 +471,8 @@ fn handle(act: Act, cx: &mut Cx, rect: Option<(f32, f32)>) {
             cx.ui.dirty = false;
         }
         Act::ResetAll => {
-            let keep = (cx.s.primary.clone(), cx.s.secondary.clone());
-            *cx.s = Settings { primary: keep.0, secondary: keep.1, ..default() };
+            let keep = (cx.s.primary.clone(), cx.s.secondary.clone(), cx.s.explosive.clone(), cx.s.melee.clone(), cx.s.gadget.clone());
+            *cx.s = Settings { primary: keep.0, secondary: keep.1, explosive: keep.2, melee: keep.3, gadget: keep.4, ..default() };
             cx.ui.dirty = false;
             cx.ui.toast = ("All settings reset.".into(), 2.5);
             cx.ui.dirty = true;
@@ -508,6 +510,17 @@ fn handle(act: Act, cx: &mut Cx, rect: Option<(f32, f32)>) {
             settings::save(cx.s);
             let label = crate::attach::IDS.iter().find(|i| i.0 == id).map_or(id, |i| i.1);
             cx.ui.toast = (format!("{label} {}.", if cx.s.has_att(&row, id) { "mounted" } else { "removed" }), 2.0);
+        }
+        Act::Gear(slot, row) => {
+            match slot {
+                0 => cx.s.explosive = row.clone(),
+                1 => cx.s.melee = row.clone(),
+                _ => cx.s.gadget = row.clone(),
+            }
+            if let Some(inv) = cx.inv.as_deref_mut() {
+                inv.set_item(crate::items::SLOT_GRENADE + slot, crate::items::load_item(&row));
+            }
+            cx.ui.toast = (format!("{} equipped.", crate::items::display_name(&row)), 2.5);
         }
         Act::Mode(i) => cx.ui.modes[i] = !cx.ui.modes[i],
         Act::Offline(i) => cx.ui.offline = i,

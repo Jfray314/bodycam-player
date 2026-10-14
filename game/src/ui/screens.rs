@@ -312,9 +312,19 @@ fn loadout(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
             item_card(cmd, list, cx, it, &it.row == eq);
         }
     }
-    static_col(cmd, "EXPLOSIVE", "M67 FRAG GRENADE", "Grenades are not implemented yet.");
-    static_col(cmd, "MELEE", "KNIFE", "Melee is not implemented yet.");
-    static_col(cmd, "GADGET", "KAMIKAZE", "Gadgets are not implemented yet.");
+    // EXPLOSIVE / MELEE / GADGET: the real items (items.rs / perks.rs); the card with the check is the equipped one.
+    for (i, (name, rows, cur)) in [("EXPLOSIVE", &["Grenade G67", "Grenade Flash"][..], &cx.s.explosive), ("MELEE", &["Knife"][..], &cx.s.melee), ("GADGET", &["Kamikaze"][..], &cx.s.gadget)].into_iter().enumerate() {
+        let c = add(cmd, cols, Node { width: px(250), ..col() });
+        txt(cmd, c, cx, name, 22.0, GREY, Wt::Bold);
+        for r in rows {
+            let on = *r == cur.as_str();
+            let b = button(cmd, c, Node { width: px(250), height: px(120), margin: UiRect::top(px(8)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, column_gap: px(8), ..row() }, Act::Gear(i, r.to_string()), None, PANEL, PANEL_HOVER, Some(if on { GREEN } else { Color::srgb(0.2, 0.2, 0.22) }));
+            txt(cmd, b, cx, &crate::items::display_name(r).to_uppercase(), 22.0, Color::WHITE, Wt::Bold);
+            if on {
+                img(cmd, b, cx, "T_UI_Checkmark", 18.0, 18.0, GREEN);
+            }
+        }
+    }
     let foot = add(cmd, body, Node { column_gap: px(20), margin: UiRect::top(px(10)), ..row() });
     let e = add(cmd, foot, (Node { padding: UiRect::axes(px(22), px(10)), column_gap: px(8), ..row() }, BackgroundColor(Color::srgb(0.1, 0.25, 0.12))));
     img(cmd, e, cx, "T_UI_Checkmark", 22.0, 22.0, GREEN);

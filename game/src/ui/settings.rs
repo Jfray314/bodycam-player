@@ -35,6 +35,10 @@ pub struct Settings {
     pub secondary: String,
     /// Weapon row -> mounted attachment ids (tablet MODIFY); see `weapon::ATTACHMENTS`.
     pub attachments: BTreeMap<String, Vec<String>>,
+    /// DT_PerkItems rows of the EXPLOSIVE / MELEE / GADGET loadout slots.
+    pub explosive: String,
+    pub melee: String,
+    pub gadget: String,
 }
 
 impl Default for Settings {
@@ -55,6 +59,9 @@ impl Default for Settings {
             primary: "M4A1".into(),
             secondary: "Glock17".into(),
             attachments: BTreeMap::new(),
+            explosive: "Grenade G67".into(),
+            melee: "Knife".into(),
+            gadget: "Kamikaze".into(),
         }
     }
 }

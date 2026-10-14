@@ -299,6 +299,25 @@ pub fn wav_path(pkg: &str) -> String {
 
 // ---------- events ----------
 
+/// Play a SoundCue (or a bare SoundWave package) once: items.rs / perks.rs (grenade blast, knife hit, drone crash...).
+/// `dist_cm` feeds the cue's attenuation/crossfade ranges (0 = at the listener).
+#[derive(Message, Clone)]
+pub struct PlayCue {
+    pub cue: String,
+    pub dist_cm: f32,
+}
+
+fn play_cues(mut cmd: Commands, mut ev: MessageReader<PlayCue>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>) {
+    for e in ev.read() {
+        if bank.has(&e.cue) {
+            trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &e.cue, &Params::default(), e.dist_cm);
+        } else {
+            let handle = load_wave(&mut live, &assets, &e.cue);
+            cmd.spawn(Pending { wait: 0.0, handle, volume: 1.0, pitch: 1.0 });
+        }
+    }
+}
+
 // ---------- playback ----------
 
 #[derive(Component)]
@@ -336,7 +355,7 @@ impl Plugin for AudioPlugin {
             .insert_resource(Tremor(0.0))
             .init_resource::<Loops>()
             .add_systems(PostStartup, preload_player)
-            .add_systems(Update, (footsteps, weapon_sfx, near_miss_sfx, shell_sfx, montage_sfx, run_queue, aim_sfx, start_pending, preload_weapons, loops, selftest).chain());
+            .add_systems(Update, (footsteps, weapon_sfx, near_miss_sfx, shell_sfx, montage_sfx, play_cues, run_queue, aim_sfx, start_pending, preload_weapons, loops, selftest).chain());
     }
 }
 

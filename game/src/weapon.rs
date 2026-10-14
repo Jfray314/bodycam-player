@@ -78,6 +78,9 @@ pub struct Montage {
 }
 
 impl Montage {
+    pub fn from_value(v: &Value) -> Option<Self> {
+        Self::from(v)
+    }
     fn from(v: &Value) -> Option<Self> {
         // Gun-only montages (FireOut) have no Character key; the gun-side clip stands in for it.
         let c = v.get("Character").or_else(|| v.get("Weapon")).unwrap_or(v);
@@ -108,7 +111,17 @@ impl Montage {
     }
 }
 
+/// Inventory slot kinds: BP_InventoryComponent slots Primary/Seconday (Gun), Grenade, Melee, Perk.First (items.rs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ItemKind {
+    Gun,
+    Grenade,
+    Knife,
+    Drone,
+}
+
 pub struct Weapon {
+    pub kind: ItemKind,
     /// DT_WeaponItems row name.
     pub name: String,
     pub stats: Stats,
@@ -123,6 +136,17 @@ pub struct Weapon {
 }
 
 impl Weapon {
+    /// A non-gun item (assets/items/<Row>.json anim set).
+    pub fn item(name: &str, kind: ItemKind, anims: Value) -> Self {
+        Weapon { kind, name: name.into(), stats: Stats::default(), ammo: 1, mags: vec![], full_auto: false, anims, equipped_once: false }
+    }
+    pub fn montage(&self, key: &str) -> Option<Montage> {
+        self.one(key)
+    }
+    /// i-th entry of a montage list (Fire = Attack01..03 for the knife).
+    pub fn montage_list(&self, i: usize, key: &str) -> Option<Montage> {
+        Montage::from(self.anims.get(key)?.get(i)?)
+    }
     fn cap(&self) -> u32 {
         self.stats.ammo_capacity.unwrap_or(30.0) as u32
     }
@@ -187,6 +211,8 @@ pub enum ActionKind {
     FireOut,
     /// AC_BodycamCamera GoPro adjust montage (camadjust.rs); not an Inventory action.
     CameraAdjust,
+    /// Item use: grenade pull-pin/throw, knife attack, drone deploy (items.rs); not an Inventory action key.
+    Use,
 }
 
 #[derive(Clone, Debug)]
@@ -270,7 +296,10 @@ pub struct MontageStarted {
 
 #[derive(Component)]
 pub struct Inventory {
+    /// IA_Slot1..5: Primary, Secondary, Grenade, Melee, Perk.First.
     pub slots: Vec<Weapon>,
+    /// Guns not in the loadout (tablet LOADOUT screen swaps them in).
+    pub pool: Vec<Weapon>,
     pub current: usize,
     pub cooldown: f32,
     pub action: Option<Action>,
@@ -288,7 +317,11 @@ pub struct Inventory {
 impl Inventory {
     /// Loadout screen: the chosen primary and sidearm become slots 1 and 2 (the rest keep their order) and the primary is current.
     pub fn equip(&mut self, primary: &str, secondary: &str) {
-        self.slots.sort_by_key(|w| (w.name != primary, w.name != secondary));
+        let mut all: Vec<Weapon> = self.slots.drain(0..2).chain(self.pool.drain(..)).collect();
+        all.sort_by_key(|w| (w.name != primary, w.name != secondary));
+        let rest = all.split_off(2);
+        self.slots.splice(0..0, all);
+        self.pool = rest;
         (self.current, self.action) = (0, None);
     }
     /// Draws the current weapon again (after the tablet is put away).
@@ -302,6 +335,30 @@ impl Inventory {
     }
     pub fn busy(&self) -> bool {
         self.action.is_some()
+    }
+    /// Tablet LOADOUT: replaces an item slot (explosive / melee / gadget) with another DT_PerkItems row.
+    pub fn set_item(&mut self, slot: usize, w: Option<Weapon>) {
+        if let Some(w) = w
+            && slot < self.slots.len()
+            && self.slots[slot].kind == w.kind
+        {
+            self.slots[slot] = w;
+        }
+    }
+    /// Starts an item-use montage on the current slot (items.rs); `next_slot` is irrelevant for non-holster actions.
+    pub fn use_item(&mut self, m: Option<Montage>, out: &mut MessageWriter<MontageStarted>) {
+        let cur = self.current;
+        self.start(ActionKind::Use, m, cur, out);
+    }
+    /// Swaps to `slot` through the normal holster -> draw chain (GA_Character_SwapItem).
+    pub fn swap_to(&mut self, slot: usize, out: &mut MessageWriter<MontageStarted>) {
+        if slot != self.current && !self.busy() {
+            let m = self.slots[self.current].one("holster");
+            self.start(ActionKind::Holster, m, slot, out);
+            if self.action.is_none() {
+                self.current = slot;
+            }
+        }
     }
     fn start(&mut self, kind: ActionKind, montage: Option<Montage>, next_slot: usize, out: &mut MessageWriter<MontageStarted>) {
         let Some(montage) = montage else { return };
@@ -497,6 +554,7 @@ fn load_weapons() -> Vec<Weapon> {
             stats: s.clone(),
             anims: v["anim_set"].clone(),
             equipped_once: false,
+            kind: ItemKind::Gun,
         });
     }
     out
@@ -510,7 +568,10 @@ fn give_loadout(mut cmd: Commands, player: Single<Entity, With<Player>>, mut out
     let norm = |s: &str| s.to_lowercase().replace([' ', '-'], "_");
     let start = norm(&std::env::var("BODYCAM_START").unwrap_or_else(|_| cfg.primary.clone()));
     slots.sort_by_key(|w| (norm(&w.name) != start, w.name != cfg.primary, w.name != cfg.secondary, w.name.clone()));
-    let mut inv = Inventory { slots, current: 0, cooldown: 0.0, action: None, r_held: 0.0, fire_start: None, last_fire_start: 0.0, pull_slider: vec![], cancel_in: None };
+    // Loadout slots (IA_Slot1..5): Primary, Secondary, Grenade, Melee, Perk.First; the other guns wait in `pool` (BODYCAM_START=<gun> makes it the primary).
+    let pool = slots.split_off(2.min(slots.len()));
+    slots.splice(2..2, crate::items::load_items(&cfg));
+    let mut inv = Inventory { slots, pool, current: 0, cooldown: 0.0, action: None, r_held: 0.0, fire_start: None, last_fire_start: 0.0, pull_slider: vec![], cancel_in: None };
     let first = inv.slots[0].one("FirstEquip");
     inv.slots[0].equipped_once = true;
     inv.start(ActionKind::Draw, first, 0, &mut out);
@@ -589,7 +650,9 @@ fn actions(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, status: Res<crate::
     // IA_Reload: InputTriggerTap 0.25 s. IA_InspectAmmos: InputTriggerHold 0.25 s, one-shot.
     const TAP: f32 = 0.25;
     let cur = inv.current;
-    if keys.pressed(KeyCode::KeyR) {
+    if inv.slots[cur].kind != ItemKind::Gun {
+        inv.r_held = 0.0;
+    } else if keys.pressed(KeyCode::KeyR) {
         inv.r_held += dt;
         if inv.r_held >= TAP && inv.r_held - dt < TAP && !inv.busy() {
             let w = &inv.slots[cur];
@@ -633,19 +696,26 @@ fn actions(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, status: Res<crate::
 }
 
 /// GA_Character_SwapItem: holster the current weapon (cancelling reload/inspect), then draw the next.
-fn swap(keys: Res<ButtonInput<KeyCode>>, mut inv: Single<&mut Inventory>, mut wheel: MessageReader<MouseWheel>, mut out: MessageWriter<MontageStarted>) {
+fn swap(keys: Res<ButtonInput<KeyCode>>, perk: Res<crate::perks::Perk>, mut inv: Single<&mut Inventory>, mut wheel: MessageReader<MouseWheel>, mut out: MessageWriter<MontageStarted>) {
     let n = inv.slots.len();
     let mut next = inv.current;
     let digits = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6];
+    // Used-up items (thrown grenade, dropped knife) can't be drawn: CycleInventory only visits valid items.
+    let usable = |i: usize| inv.slots[i].kind == ItemKind::Gun || inv.slots[i].ammo > 0;
     for (i, k) in digits.iter().enumerate() {
-        if keys.just_pressed(*k) && i < n {
+        if keys.just_pressed(*k) && i < n && usable(i) {
             next = i;
         }
     }
     for w in wheel.read() {
-        next = if w.y < 0.0 { (next + 1) % n } else { (next + n - 1) % n };
+        for _ in 0..n {
+            next = if w.y < 0.0 { (next + 1) % n } else { (next + n - 1) % n };
+            if usable(next) {
+                break;
+            }
+        }
     }
-    let swapping = matches!(inv.action, Some(Action { kind: ActionKind::Holster | ActionKind::Draw, .. }));
+    let swapping = perk.locked() || matches!(inv.action, Some(Action { kind: ActionKind::Holster | ActionKind::Draw, .. }));
     if next != inv.current && !swapping {
         let m = inv.slots[inv.current].one("holster");
         let cur = inv.current;
@@ -658,8 +728,9 @@ fn swap(keys: Res<ButtonInput<KeyCode>>, mut inv: Single<&mut Inventory>, mut wh
 }
 
 /// Aiming doesn't zoom: the bodycam FOV stays 120 (measured live); the gun comes up to the camera instead.
-fn aim(mouse: Res<ButtonInput<MouseButton>>, mut p: Single<&mut Player>, mut regrip: MessageWriter<Regrip>) {
-    p.aiming = mouse.pressed(MouseButton::Right);
+fn aim(mouse: Res<ButtonInput<MouseButton>>, inv: Single<&Inventory>, mut p: Single<&mut Player>, mut regrip: MessageWriter<Regrip>) {
+    // Items aim through their own abilities (items.rs); the ADS pose/slow-down is gun-only.
+    p.aiming = mouse.pressed(MouseButton::Right) && inv.slots[inv.current].kind == ItemKind::Gun;
     // GA_Character_Aim end: AC.ForceReGripMotion(0.2).
     if mouse.just_released(MouseButton::Right) {
         regrip.write(Regrip { delay: 0.2 });
@@ -853,6 +924,9 @@ fn fire(
         inv.cancel_bolt(); // GA_Character_Aim / GA_Fire_Base CancelAbilitiesWithTag Ability.Weapon.Reload.Bolt
     }
     let w = &inv.slots[inv.current];
+    if w.kind != ItemKind::Gun {
+        return;
+    }
     let trigger = if w.full_auto { mouse.pressed(MouseButton::Left) } else { mouse.just_pressed(MouseButton::Left) };
     if trigger && w.ammo == 0 && mouse.just_pressed(MouseButton::Left) && inv.cooldown <= 0.0 && !inv.busy() && !p.sprinting {
         dry.write(DryFire { row: w.name.clone() });

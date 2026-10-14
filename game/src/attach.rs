@@ -282,8 +282,8 @@ fn glass(mut mats: ResMut<Assets<StandardMaterial>>, new: Query<(&GltfMaterialNa
 }
 
 /// C / Z toggles (GA_ToggleAttachment_*), MMB = SwitchUsedOptic (+ ForceReGripMotion(0.1)).
-fn switch_input(keys: Res<ButtonInput<KeyCode>>, mouse: Res<ButtonInput<MouseButton>>, tablet: Res<crate::ui::Tablet>, mut st: ResMut<AttState>, mut regrip: MessageWriter<Regrip>, cfg: Option<Res<Settings>>, inv: Option<Single<&Inventory>>) {
-    if tablet.shown {
+fn switch_input(keys: Res<ButtonInput<KeyCode>>, mouse: Res<ButtonInput<MouseButton>>, tablet: Res<crate::ui::Tablet>, mut st: ResMut<AttState>, mut regrip: MessageWriter<Regrip>, cfg: Option<Res<Settings>>, inv: Option<Single<&Inventory>>, player: Option<Single<&crate::player::Player>>) {
+    if tablet.shown || player.is_some_and(|p| p.locked) { // piloting the drone: C is the drone's own light (perks.rs)
         return;
     }
     if keys.just_pressed(KeyCode::KeyC) {
