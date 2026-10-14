@@ -244,12 +244,13 @@ impl CtlRecoil {
 
 fn look(time: Res<Time>, motion: Res<AccumulatedMouseMotion>, mouse: Res<ButtonInput<MouseButton>>, cursor: Single<&CursorOptions>, mut q: Single<&mut Player>) {
     let p = &mut **q;
+    let sens = SENS * crate::ui::settings::sens_mult(); // Settings > Game > Mouse Sensitivity
     let d = if cursor.grab_mode == CursorGrabMode::Locked { motion.delta } else { Vec2::ZERO };
-    let input = Vec2::new(d.x, -d.y) * SENS.to_degrees(); // same sign convention as the recoil step
+    let input = Vec2::new(d.x, -d.y) * sens.to_degrees(); // same sign convention as the recoil step
     let step = p.ctl_recoil.tick(time.delta_secs(), input, mouse.pressed(MouseButton::Left));
-    p.yaw -= d.x * SENS + step.x.to_radians();
-    p.yaw_rate = yaw_delta_time((d.x * SENS).to_degrees() / time.delta_secs().max(1e-4));
-    p.pitch = (p.pitch - d.y * SENS + step.y.to_radians()).clamp(-89.9f32.to_radians(), 89.9f32.to_radians()); // ViewPitchMin/Max
+    p.yaw -= d.x * sens + step.x.to_radians();
+    p.yaw_rate = yaw_delta_time((d.x * sens).to_degrees() / time.delta_secs().max(1e-4));
+    p.pitch = (p.pitch - d.y * sens + step.y.to_radians()).clamp(-89.9f32.to_radians(), 89.9f32.to_radians()); // ViewPitchMin/Max
 }
 
 /// Shake_Rifle_Standard (BafCameraShake): rotation curve * random amplitude per shot, PlayRate 2, Smoothing 35.
