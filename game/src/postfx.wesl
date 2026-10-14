@@ -156,8 +156,8 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     // whose rough off-centre rim read as lumpy blobs.
     let hr = length((in.uv - 0.5) * vec2<f32>(aspect, 1.0));
     // Per-channel radius (blue goes dark first, red last) gives the warm orange fringe on the arc; fitted to the user's
-    // in-game corner crop (R/G/B half-dark at |uv| ~0.94/0.925/0.905, black past ~0.98, long dim red tail).
-    col *= vec3<f32>(1.0) - smoothstep(vec3<f32>(0.9, 0.87, 0.85), vec3<f32>(0.99, 0.96, 0.94), vec3<f32>(hr));
+    // in-game corner crop (R/G/B half-dark at |uv| ~0.94/0.925/0.905, black past ~1.0). Every channel starts past the mid-sides (0.889) so only the corners darken..
+    col *= vec3<f32>(1.0) - smoothstep(vec3<f32>(0.935, 0.915, 0.9), vec3<f32>(1.0, 0.985, 0.97), vec3<f32>(hr));
 
     // Sensor grain (luma + chroma), animated per frame, heavier in shadows.
     let n = pcg3(vec3<u32>(vec2<u32>(in.position.xy), frame)) - 0.5;
