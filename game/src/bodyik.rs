@@ -2,7 +2,7 @@
 //! one: AnimBP SetFootOffsets / SetPelvisIKOffset) and third-person arms (two-bone IK of the body's own arms onto the FP arms'
 //! hands, which are placed relative to the gun by the FP animation, so the body holds the current gun in any pose/montage).
 //! Poses are computed from the local Transforms the animation just wrote (GlobalTransforms are last frame's), in BodyRoot space.
-use crate::body::BodyRoot;
+use crate::body::{BodyRoot, ThirdPerson};
 use crate::player::{IgnoreTraces, Player};
 use bevy::animation::AnimationTargetId;
 use bevy::math::Affine3A;
@@ -22,7 +22,7 @@ impl Plugin for IkPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FootIk>()
             .add_systems(Update, (fill_bones, foot_trace).chain().after(crate::body::drive))
-            .add_systems(PostUpdate, apply_ik.after(crate::body::hide_bones).before(bevy::transform::TransformSystems::Propagate));
+            .add_systems(PostUpdate, (apply_ik, fp_arms_visibility).after(crate::body::hide_bones).before(bevy::transform::TransformSystems::Propagate));
     }
 }
 
@@ -140,18 +140,60 @@ fn two_bone(root: Entity, [a, b, c]: [Entity; 3], target: Vec3, pole: Vec3, end_
     set_rot(c, root, end_rot.unwrap_or(rc), q);
 }
 
-fn apply_ik(ik: Res<FootIk>, roots: Query<(Entity, &BodyRoot)>, mut q: Bones) {
-    for (root, r) in &roots {
+fn apply_ik(
+    ik: Res<FootIk>,
+    tp: Res<ThirdPerson>,
+    roots: Query<(Entity, &BodyRoot, &GlobalTransform)>,
+    mut q: Bones,
+    fp: Query<(Entity, &Name, &GlobalTransform)>,
+    arms: Query<Entity, With<crate::viewmodel::ArmsRoot>>,
+    parents: Query<&ChildOf>,
+) {
+    let hands: Vec<(String, GlobalTransform)> = match (tp.on, arms.single()) {
+        (true, Ok(ar)) => fp.iter().filter(|(e, n, _)| matches!(n.as_str(), "hand_r" | "hand_l") && crate::viewmodel::root_of_entity(*e, ar, &parents)).map(|(_, n, g)| (n.to_string(), *g)).collect(),
+        _ => vec![],
+    };
+    for (root, r, rg) in &roots {
         let b = |n: &str| r.bones.get(n).copied();
-        if ik.off.iter().all(|o| o.abs() < 0.003) && ik.pelvis.abs() < 0.003 {
-            continue;
-        }
-        if let (Some(pelvis), Some(tl), Some(cl), Some(fl), Some(tr), Some(cr), Some(fr)) = (b("pelvis"), b("thigh_l"), b("calf_l"), b("foot_l"), b("thigh_r"), b("calf_r"), b("foot_r")) {
+        if (ik.off.iter().any(|o| o.abs() >= 0.003) || ik.pelvis.abs() >= 0.003)
+            && let (Some(pelvis), Some(tl), Some(cl), Some(fl), Some(tr), Some(cr), Some(fr)) = (b("pelvis"), b("thigh_l"), b("calf_l"), b("foot_l"), b("thigh_r"), b("calf_r"), b("foot_r"))
+        {
             let wanted = [fl, fr].map(|f| pose(f, root, &q).0);
             shift(pelvis, root, Vec3::Y * ik.pelvis, &mut q);
             for (i, chain) in [[tl, cl, fl], [tr, cr, fr]].into_iter().enumerate() {
                 two_bone(root, chain, wanted[i] + Vec3::Y * ik.off[i], Vec3::NEG_Z, None, &mut q);
             }
+        }
+        // Third-person arms: hands to the FP arms' hands (gun-relative placement from the FP animation), elbows down and out.
+        let inv = rg.affine().inverse();
+        for (name, g) in &hands {
+            let side = if name.ends_with('r') { "r" } else { "l" };
+            let (Some(u), Some(l), Some(h)) = (b(&format!("upperarm_{side}")), b(&format!("lowerarm_{side}")), b(&format!("hand_{side}"))) else { continue };
+            let m = inv * g.affine();
+            let (_, rot, t) = m.to_scale_rotation_translation();
+            let sx = if side == "r" { 1.0 } else { -1.0 };
+            two_bone(root, [u, l, h], t, Vec3::new(sx * 0.6, -1.0, 0.3), Some(rot), &mut q);
+        }
+    }
+}
+
+/// Third-person view: hide the FP arms' skin (the body's own arms hold the gun); the gun stays.
+fn fp_arms_visibility(
+    tp: Res<ThirdPerson>,
+    arms: Query<Entity, With<crate::viewmodel::ArmsRoot>>,
+    mut meshes: Query<(Entity, &mut Visibility), With<Mesh3d>>,
+    parents: Query<&ChildOf>,
+    guns: Query<Entity, With<crate::viewmodel::GunRoot>>,
+    mut last: Local<Option<bool>>,
+) {
+    if *last == Some(tp.on) {
+        return;
+    }
+    let Ok(ar) = arms.single() else { return };
+    *last = Some(tp.on);
+    for (e, mut v) in &mut meshes {
+        if crate::viewmodel::root_of_entity(e, ar, &parents) && !guns.iter().any(|g| crate::viewmodel::root_of_entity(e, g, &parents)) {
+            *v = if tp.on { Visibility::Hidden } else { Visibility::Inherited };
         }
     }
 }
