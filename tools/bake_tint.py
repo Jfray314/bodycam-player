@@ -1,7 +1,7 @@
 """Bakes the operator-skin "Color" materials (MI_*_Color*: grey detail Diffuse + IDMap channels selecting tinted tile patterns)
 into a plain base-colour texture, so build_glb (which takes PM_Diffuse) doesn't render the grey detail map as white gear.
 Usage: python -I tools/bake_tint.py <_work/<item>/<item>.json>   (rewrites PM_Diffuse to <name>_tinted.png; idempotent)
-ponytail: the UE material graph is compiled away; colour = sum(ID channel i * tint_i * tile_i / mean(tile_i)) * Diffuse / mean(Diffuse),
+ponytail: the UE material graph is compiled away; colour = sum(ID channel i * tint_i * tile_i / mean(tile_i)) * Diffuse * 2 (linear),
 with the uncovered remainder using Tile A. Good enough for near-black gear; refit against in-game captures if colours look off."""
 import json, os, sys
 import numpy as np
@@ -37,14 +37,16 @@ for m in meta["materials"]:
     h, w = base.shape[:2]
     idm = load(tex["IDMap"], (w, h))
     detail = srgb_to_lin(base[..., :3]).mean(-1, keepdims=True)
-    detail = detail / max(detail.mean(), 1e-3)
+    detail = detail * 2.0  # UE detail-map convention (0.5 grey = neutral)
     out = np.zeros((h, w, 3), np.float32)
     cover = np.zeros((h, w, 1), np.float32)
     for i, k in enumerate("ABCD"):
         tint = cols.get(f"Tile {k} tint")
         if tint is None:
             continue
-        wgt = idm[..., i : i + 1] if i < 4 else 0
+        wgt = idm[..., i : i + 1]
+        if i == 3 and wgt.mean() > 0.99:
+            continue  # IDMap without an alpha channel (M_Equipment_ID): opaque alpha is not a Tile D mask
         tile_name = tex.get(f"Tile {k}")
         pat = np.ones((h, w, 1), np.float32)
         if tile_name:
