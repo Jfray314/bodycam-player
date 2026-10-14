@@ -183,8 +183,11 @@ struct BodycamBorders;
 
 /// Calibration: the cooked FishEye material graph is compiled away, so its UV mapping is unknown. Fitted to in-game
 /// captures, where the housing only shades the screen corners (the raw plane at 23 cm puts them deep in the black);
-/// 1.15: user in-game refs show the housing only as a dark arc in the extreme corners.
-const BORDERS_FIT: f32 = 1.15;
+/// 1.08 (centred, see BORDERS_CENTRE): user in-game refs show the housing only as a dark arc in the extreme corners.
+const BORDERS_FIT: f32 = 1.08;
+/// LENS_VEIW_05's clear window is off-centre (opaque rim 779 px left / 842 right, 210 top / 191 bottom of 3211 x 1807),
+/// which left only the right corners dark. Shift the plane (m, plane space) so the window centres on the view.
+const BORDERS_CENTRE: Vec2 = Vec2::new(31.5 / 3211.0 * 1.699687 * BORDERS_FIT, 9.5 / 1807.0 * 0.805974 * BORDERS_FIT);
 
 /// SpringArmBodycamBorders: TargetArmLength 23 cm forward, CameraLagSpeed 50, CameraRotationLagSpeed 65
 /// (UE spring-arm lag = exponential interp toward the target each frame).
@@ -199,7 +202,7 @@ fn borders_follow(
     let (lp, lr) = lagged.get_or_insert((pos, rot));
     *lp = lp.lerp(pos, (50.0 * dt).min(1.0));
     *lr = lr.slerp(rot, (65.0 * dt).min(1.0));
-    b.translation = *lp + *lr * Vec3::new(0.0, 0.0, -0.23);
+    b.translation = *lp + *lr * BORDERS_CENTRE.extend(-0.23);
     b.rotation = *lr;
 }
 
