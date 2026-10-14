@@ -506,7 +506,8 @@ fn handle(act: Act, cx: &mut Cx, rect: Option<(f32, f32)>) {
             let row = cx.ui.weapon.clone();
             crate::attach::toggle(cx.s, &row, id);
             settings::save(cx.s);
-            cx.ui.toast = (format!("{id} {}.", if cx.s.has_att(&row, id) { "mounted" } else { "removed" }), 2.0);
+            let label = crate::attach::IDS.iter().find(|i| i.0 == id).map_or(id, |i| i.1);
+            cx.ui.toast = (format!("{label} {}.", if cx.s.has_att(&row, id) { "mounted" } else { "removed" }), 2.0);
         }
         Act::Mode(i) => cx.ui.modes[i] = !cx.ui.modes[i],
         Act::Offline(i) => cx.ui.offline = i,
