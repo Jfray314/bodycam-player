@@ -325,7 +325,7 @@ fn weapon(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     let foot = add(cmd, body, Node { column_gap: px(36), margin: UiRect::top(px(14)), ..row() });
     for (label, act, key) in [
         ("[ESC] BACK".to_string(), Act::Back, KeyCode::Escape),
-        ("[SPACE] MODIFY".into(), Act::Toast("Attachment modification is not available yet.".into()), KeyCode::Space),
+        (format!("[SPACE] SUPPRESSOR: {}", if cx.s.has_att(&it.row, "suppressor") { "ON" } else { "OFF" }), Act::Att("suppressor"), KeyCode::Space),
         (format!("[F] SWAP {slot_name}"), Act::Equip, KeyCode::KeyF),
     ] {
         let b = button(cmd, foot, Node { padding: UiRect::axes(px(8), px(6)), ..row() }, act, Some(key), CLEAR, PANEL_HOVER, None);

@@ -239,6 +239,8 @@ pub struct Fired {
     pub aiming: bool,
     /// FireRate attribute (seconds between shots); drives the stress gain.
     pub fire_rate: f32,
+    /// Suppressor mounted: audio plays Cosmetic.Weapon.SFX.FireSuppressed.
+    pub suppressed: bool,
 }
 
 /// AC_BodycamAnimationComponent.PlayEndFireRegripMotion / ForceReGripMotion(delay): play a random ReGripMotions
@@ -789,9 +791,10 @@ fn fire(
     mut dry: MessageWriter<DryFire>,
     mut regrip: MessageWriter<Regrip>,
     (gun, kids, gun_meshes, mesh_assets): (Query<(Entity, &GlobalTransform, &GunRoot)>, Query<&Children>, Query<(&GlobalTransform, &Mesh3d)>, Res<Assets<Mesh>>),
-    (joints, parents, mut sights): (Query<(Entity, &Name, &GlobalTransform)>, Query<&ChildOf>, Local<HashMap<String, Vec3>>),
+    (joints, parents, mut sights, cfg): (Query<(Entity, &Name, &GlobalTransform)>, Query<&ChildOf>, Local<HashMap<String, Vec3>>, Option<Res<crate::ui::settings::Settings>>),
 ) {
     let (inv, p) = &mut *q;
+    let suppressed = cfg.as_ref().is_some_and(|c| c.has_att(&inv.slots[inv.current].name, "suppressor"));
     inv.cooldown -= time.delta_secs();
     let now = time.elapsed_secs();
     // GA_Fire_Base ability end (trigger released): TryPlayRegripAnimation, then LastFireTime = FireStartTime.
@@ -883,7 +886,7 @@ fn fire(
     cmd.spawn((PointLight { intensity: 40_000.0, range: 6.0, color: Color::srgb(1.0, 0.55, 0.2), ..default() }, Transform::from_translation(origin + aim_dir * 0.3), Fading(time.delta_secs() * 1.5)));
     // SpawnFireParticles: MuzzleSmoke ParticleSystem at BulletSpawnOrigin, scale = MapRange(Damage, 0..100 -> 0.1..2.0); skipped while aiming.
     // ponytail: the system asset (cosmetic tag, default per skin) is not in the dump; two drifting smoke sprites stand in.
-    if !p.aiming {
+    if !p.aiming && !suppressed {
         let scale = crate::status::map_range_clamped(s.damage.unwrap_or(30.0), 0.0, 100.0, 0.1, 2.0);
         for _ in 0..2 {
             let v = aim_dir * rng.random_range(0.3..0.8) + Vec3::new(rng.random_range(-0.1..0.1), rng.random_range(0.2..0.5), rng.random_range(-0.1..0.1));
@@ -899,7 +902,7 @@ fn fire(
         inv.pull_slider.push(0.0);
     }
     let w = &inv.slots[cur];
-    fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming, fire_rate: s.fire_rate.unwrap_or(0.1) });
+    fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming, fire_rate: s.fire_rate.unwrap_or(0.1), suppressed });
 }
 
 /// Camera-facing smoke sprite (whisp_One sheet): grows 1.5x its size per second, alpha fades from `alpha` over `life`.

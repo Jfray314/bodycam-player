@@ -70,6 +70,8 @@ pub enum Act {
     Weapon(String),
     Cycle(i32),
     Equip,
+    /// Toggle an attachment id on the shown weapon (MODIFY).
+    Att(&'static str),
     Mode(usize),
     Search,
     Offline(usize),
@@ -499,6 +501,12 @@ fn handle(act: Act, cx: &mut Cx, rect: Option<(f32, f32)>) {
                 }
                 cx.ui.toast = (format!("{} equipped.", it.display), 2.5);
             }
+        }
+        Act::Att(id) => {
+            let row = cx.ui.weapon.clone();
+            cx.s.toggle_att(&row, id);
+            settings::save(cx.s);
+            cx.ui.toast = (format!("{id} {}.", if cx.s.has_att(&row, id) { "mounted" } else { "removed" }), 2.0);
         }
         Act::Mode(i) => cx.ui.modes[i] = !cx.ui.modes[i],
         Act::Offline(i) => cx.ui.offline = i,

@@ -442,7 +442,7 @@ fn footsteps(mut cmd: Commands, mut ev: MessageReader<Footstep>, mut bank: ResMu
 }
 
 fn weapon_sfx(mut cmd: Commands, mut fired: MessageReader<Fired>, mut dry: MessageReader<DryFire>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>) {
-    let shots = fired.read().map(|f| (f.row.clone(), "Fire")).chain(dry.read().map(|d| (d.row.clone(), "FireDry")));
+    let shots = fired.read().map(|f| (f.row.clone(), if f.suppressed { "FireSuppressed" } else { "Fire" })).chain(dry.read().map(|d| (d.row.clone(), "FireDry")));
     for (row, kind) in shots.collect::<Vec<_>>() {
         if let Some(c) = bank.weapon_cue(&row, kind).map(str::to_string) {
             trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &c, &Params::default(), MUZZLE_DIST_CM);

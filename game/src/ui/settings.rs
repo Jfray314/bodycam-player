@@ -33,6 +33,8 @@ pub struct Settings {
     pub binds: BTreeMap<String, String>,
     pub primary: String,
     pub secondary: String,
+    /// Weapon row -> mounted attachment ids (tablet MODIFY); see `weapon::ATTACHMENTS`.
+    pub attachments: BTreeMap<String, Vec<String>>,
 }
 
 impl Default for Settings {
@@ -52,7 +54,18 @@ impl Default for Settings {
             binds: BTreeMap::new(),
             primary: "M4A1".into(),
             secondary: "Glock17".into(),
+            attachments: BTreeMap::new(),
         }
+    }
+}
+
+impl Settings {
+    pub fn has_att(&self, row: &str, id: &str) -> bool {
+        self.attachments.get(row).is_some_and(|v| v.iter().any(|a| a == id))
+    }
+    pub fn toggle_att(&mut self, row: &str, id: &str) {
+        let v = self.attachments.entry(row.into()).or_default();
+        if let Some(i) = v.iter().position(|a| a == id) { v.remove(i); } else { v.push(id.into()); }
     }
 }
 
