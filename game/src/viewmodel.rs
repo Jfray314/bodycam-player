@@ -461,7 +461,7 @@ fn stress_layers(
                 player.start(*node).repeat();
             }
             if let Some(act) = player.animation_mut(*node) {
-                act.set_weight(w);
+                act.set_weight(w.clamp(0.0, 1.0)); // UE blend nodes clamp alpha; StressedStrongIdleAlpha runs 0..4 and weight 4 on an additive pulls the hands through the gun
             }
         }
     }
@@ -505,14 +505,22 @@ fn regrips(
         if *t <= 0.0 {
             rg.pending = None;
             let list = inv.slots[inv.current].anims["ReGripMotions"].as_array();
-            clip = list.filter(|l| !l.is_empty()).and_then(|l| l[rand::rng().random_range(0..l.len())]["path"].as_str().map(clip_of));
+            clip = list.filter(|l| !l.is_empty()).and_then(|l| {
+                let m = &l[rand::rng().random_range(0..l.len())];
+                let f = |k: &str, d: f64| m[k].as_f64().unwrap_or(d) as f32;
+                m["path"].as_str().map(|p| (clip_of(p), (f("length", 0.0), f("blend_in", 0.25), f("blend_out", 0.25))))
+            });
         }
     }
     let now = time.elapsed_secs();
     for (mut player, mut tr, link) in &mut players {
         let Ok(mut anim) = roots.get_mut(link.0) else { continue };
-        if let Some(c) = &clip {
-            play(&mut anim, &mut player, &mut tr, c, false, BLEND);
+        if let Some((c, env)) = &clip
+            && play(&mut anim, &mut player, &mut tr, c, false, BLEND)
+        {
+            // Without an envelope a finished additive clip keeps its last frame at weight 1 forever, and each regrip stacks on the last.
+            let node = anim.nodes[c];
+            anim.add_env.insert(node, *env);
         }
         if shaking && play(&mut anim, &mut player, &mut tr, "A_FP_shakingHand", false, BLEND) {
             anim.montage_until = now + 2.0; // ponytail: montage length unknown until the clip is exported
@@ -594,7 +602,13 @@ fn follow_head(
     }
     let montage = time.elapsed_secs() < anim.montage_until;
     if !montage && anim.current.is_some() {
-        *idle = Some(rel); // track the base loop's head so the montage delta starts from where the base pose was
+        // Low-pass the base loop's head (walk/sprint bob): the montage replaces the loop, so an instantaneous sample would
+        // offset the camera by a random bob phase (arm swinging in from above/below when reloading while moving).
+        let k = 1.0 - (-time.delta_secs() / 0.4).exp();
+        *idle = Some(match *idle {
+            Some(i) => Transform { translation: i.translation.lerp(rel.translation, k), rotation: i.rotation.slerp(rel.rotation, k), ..default() },
+            None => rel,
+        });
     }
     let Some(idle) = *idle else { return };
     *weight = crate::status::finterp_to(*weight, if montage { 1.0 } else { 0.0 }, time.delta_secs(), 1.0 / BLEND.as_secs_f32());
@@ -698,7 +712,11 @@ fn place_arms(
         {
             sway.pivot = Some(post.transform_point(rg.affine().inverse().transform_point3(gg.translation())));
         }
-        *t = p.view_base * recoil.offset * sway.offset * post;
+        // UE (PRAS) moves the gun bone and the hands follow by IK, the elbows stay put. Lifting the whole rigid arms by the full
+        // fitted climb (up to 14 cm hip, Glock spam) pushes the forearms across the view so the hands wrap over the gun.
+        let mut ro = recoil.offset;
+        ro.translation.y *= 0.35;
+        *t = p.view_base * ro * sway.offset * post;
     }
 }
 

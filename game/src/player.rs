@@ -315,6 +315,7 @@ fn movement(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     mut q: Single<(&mut Player, &mut Transform)>,
+    inv: Option<Single<&crate::weapon::Inventory>>,
     mut steps: MessageWriter<Footstep>,
     map: Option<Res<crate::map::MapState>>,
     geo: Query<(), With<crate::map::MapGeometry>>,
@@ -337,7 +338,9 @@ fn movement(
     // ALS CanSprint (LookingDirection mode): input amount > 0.5 and move direction within 100 deg of the view;
     // not while aiming (Aiming rotation mode) or crouched (AllowedGait). GA_Character_Sprint needs acceleration.
     let within_100 = input.length() > 0.5 && input.x.atan2(input.y).to_degrees().abs() < 100.0;
-    p.sprinting = keys.pressed(KeyCode::ShiftLeft) && within_100 && !p.crouched && !p.aiming;
+    // GA_Reload_Base.TryBlockingSprint: cancels sprint and applies GE_BlockSprint for the whole reload.
+    let reloading = inv.is_some_and(|i| i.action.as_ref().is_some_and(|a| a.kind == crate::weapon::ActionKind::Reload));
+    p.sprinting = keys.pressed(KeyCode::ShiftLeft) && within_100 && !p.crouched && !p.aiming && !reloading;
     let max = if p.crouched { CROUCH } else if p.sprinting { SPRINT } else if p.aiming { ADS } else { WALK };
 
     let rot = Quat::from_rotation_y(p.yaw);
