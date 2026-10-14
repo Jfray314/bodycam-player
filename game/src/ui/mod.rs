@@ -531,8 +531,28 @@ fn ui_input(
     btns: Query<(Entity, &Btn, &ComputedNode, &UiGlobalTransform, Option<&CalculatedClip>)>,
     mut scrollers: Query<(&Scroller, &mut ScrollPosition, &ComputedNode, &UiGlobalTransform)>,
     mut exit: MessageWriter<AppExit>,
+    ready: Res<crate::dev::Ready>,
+    mut script: Local<Option<(Vec<(f32, Vec2)>, usize)>>,
 ) {
     let dt = time.delta_secs();
+    // BODYCAM_CLICKS="t:x,y;t:x,y": warp the cursor and click at sim time t after "viewmodel ready" (scripted tests).
+    let (plan, next) = script.get_or_insert_with(|| {
+        let v = std::env::var("BODYCAM_CLICKS").unwrap_or_default();
+        let p = v.split(';').filter_map(|e| {
+            let (t, xy) = e.split_once(':')?;
+            let (x, y) = xy.split_once(',')?;
+            Some((t.parse().ok()?, Vec2::new(x.parse().ok()?, y.parse().ok()?)))
+        });
+        (p.collect(), 0)
+    });
+    let mut scripted = false;
+    if let (Some(r), true) = (ready.0, tablet.ready) {
+        if *next < plan.len() && time.elapsed_secs() - r >= plan[*next].0 {
+            ui.cursor = plan[*next].1;
+            *next += 1;
+            scripted = true;
+        }
+    }
     if ui.toast.1 > 0.0 {
         ui.toast.1 -= dt;
         if ui.toast.1 <= 0.0 {
@@ -549,7 +569,9 @@ fn ui_input(
     if !tablet.shown || !tablet.ready {
         return;
     }
-    ui.cursor = (ui.cursor + mi.motion * CURSOR_SPEED).clamp(Vec2::ZERO, Vec2::new(W - 1.0, H - 1.0));
+    if !scripted {
+        ui.cursor = (ui.cursor + mi.motion * CURSOR_SPEED).clamp(Vec2::ZERO, Vec2::new(W - 1.0, H - 1.0));
+    }
     let c = ui.cursor;
     // Smallest button under the cursor wins (nested buttons).
     let hit = btns
@@ -579,7 +601,7 @@ fn ui_input(
                 }
             }
         }
-    } else if mi.click {
+    } else if mi.click || scripted {
         if let Some((_, b, n, g, _)) = hit {
             act = Some((b.act.clone(), Some(rect_of(n, g))));
         }

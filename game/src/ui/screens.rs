@@ -76,7 +76,9 @@ fn frame(cmd: &mut Commands, root: Entity, cx: &BuildCx, back: &str, primary: Op
     let page = add(cmd, root, Node { width: percent(100), height: percent(100), flex_direction: FlexDirection::Column, ..default() });
     let bar = add(cmd, page, Node { width: percent(100), height: px(96), padding: UiRect::axes(px(40), px(0)), justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, ..default() });
     cmd.entity(bar).insert(BackgroundColor(Color::srgb(0.02, 0.02, 0.025)));
-    let left = add(cmd, bar, Node { width: px(620), ..row() });
+    let wide = tabs.len() > 3;
+    let side = if wide { 330.0 } else { 520.0 };
+    let left = add(cmd, bar, Node { width: px(side), ..row() });
     let b = button(cmd, left, Node { padding: UiRect::axes(px(18), px(10)), ..row() }, Act::Back, Some(KeyCode::Escape), CLEAR, PANEL_HOVER, None);
     txt(cmd, b, cx, back, 28.0, Color::WHITE, Wt::Bold);
     if let Some((label, act)) = primary {
@@ -95,8 +97,8 @@ fn frame(cmd: &mut Commands, root: Entity, cx: &BuildCx, back: &str, primary: Op
         let e = txt(cmd, mid, cx, "[E]", 24.0, GREY, Wt::Medium);
         cmd.entity(e).insert(Btn { act: tab_act(usize::MAX - 1), key: Some(KeyCode::KeyE), bg: CLEAR, hover: CLEAR, set: None });
     }
-    let right = add(cmd, bar, Node { width: px(620), justify_content: JustifyContent::FlexEnd, column_gap: px(14), ..row() });
-    for (amount, key, icon) in [("1000", "[E]", "T_UI_ReissadCurrency"), ("893", "[R]", "T_UI_ELOCurrency")] {
+    let right = add(cmd, bar, Node { width: px(side), justify_content: JustifyContent::FlexEnd, column_gap: px(14), ..row() });
+    for (amount, key, icon) in [("1000", "[E]", "T_UI_ReissadCurrency"), ("893", "[R]", "T_UI_ELOCurrency")].into_iter().filter(|_| !wide) {
         let c = add(cmd, right, (Node { padding: UiRect::axes(px(14), px(8)), column_gap: px(10), ..row() }, BackgroundColor(PANEL)));
         img(cmd, c, cx, icon, 26.0, 26.0, Color::WHITE);
         txt(cmd, c, cx, amount, 26.0, Color::WHITE, Wt::Bold);
@@ -241,7 +243,7 @@ fn icon_of(row: &str) -> String {
 }
 
 fn item_card(cmd: &mut Commands, p: Entity, cx: &BuildCx, it: &Item, equipped: bool) {
-    let c = button(cmd, p, Node { width: px(300), padding: UiRect::all(px(8)), margin: UiRect::bottom(px(14)), ..col() }, Act::Weapon(it.row.clone()), None, PANEL, PANEL_HOVER, Some(if equipped { GREEN } else { Color::srgb(0.2, 0.2, 0.22) }));
+    let c = button(cmd, p, Node { width: px(300), flex_shrink: 0.0, padding: UiRect::all(px(8)), margin: UiRect::bottom(px(14)), ..col() }, Act::Weapon(it.row.clone()), None, PANEL, PANEL_HOVER, Some(if equipped { GREEN } else { Color::srgb(0.2, 0.2, 0.22) }));
     img(cmd, c, cx, &icon_of(&it.row), 280.0, 140.0, Color::WHITE);
     let r = add(cmd, c, Node { justify_content: JustifyContent::SpaceBetween, width: percent(100), ..row() });
     txt(cmd, r, cx, &it.display.to_uppercase(), 26.0, Color::WHITE, Wt::Bold);
@@ -374,7 +376,7 @@ fn settings_screen(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     let list = add(cmd, cols, (Node { width: px(1100), overflow: Overflow::scroll_y(), padding: UiRect::right(px(20)), ..col() }, ScrollPosition(Vec2::new(0.0, cx.ui.scroll[2])), Scroller(2)));
     if cx.ui.tab == 4 {
         for (i, (_, label, _)) in ACTIONS.iter().enumerate() {
-            let r = add(cmd, list, (Node { width: percent(100), height: px(64), padding: UiRect::axes(px(20), px(0)), justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, margin: UiRect::bottom(px(6)), ..default() }, BackgroundColor(PANEL)));
+            let r = add(cmd, list, (Node { width: percent(100), height: px(64), flex_shrink: 0.0, padding: UiRect::axes(px(20), px(0)), justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, margin: UiRect::bottom(px(6)), ..default() }, BackgroundColor(PANEL)));
             txt(cmd, r, cx, label, 28.0, Color::WHITE, Wt::Medium);
             let b = button(cmd, r, Node { width: px(260), height: px(46), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, Act::Rebind(i), None, Color::srgb(0.16, 0.16, 0.18), PANEL_HOVER, Some(if cx.ui.rebinding == Some(i) { RED } else { Color::srgb(0.3, 0.3, 0.32) }));
             let t = txt(cmd, b, cx, &if cx.ui.rebinding == Some(i) { "PRESS A KEY".into() } else { settings::key_name(settings::bound(cx.s, ACTIONS[i].0)).to_uppercase() }, 26.0, Color::WHITE, Wt::Bold);
@@ -388,7 +390,7 @@ fn settings_screen(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
         cmd.entity(h).insert(Node { margin: UiRect::new(px(0), px(0), px(14), px(10)), ..default() });
         for s in sets {
             let sp = settings::spec(s);
-            let r = add(cmd, list, (Node { width: percent(100), height: px(76), padding: UiRect::axes(px(20), px(0)), justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, margin: UiRect::bottom(px(6)), ..default() }, BackgroundColor(PANEL), Btn { act: Act::Noop, key: None, bg: PANEL, hover: PANEL_HOVER, set: Some(s) }));
+            let r = add(cmd, list, (Node { width: percent(100), height: px(76), flex_shrink: 0.0, padding: UiRect::axes(px(20), px(0)), justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, margin: UiRect::bottom(px(6)), ..default() }, BackgroundColor(PANEL), Btn { act: Act::Noop, key: None, bg: PANEL, hover: PANEL_HOVER, set: Some(s) }));
             txt(cmd, r, cx, sp.label, 28.0, Color::WHITE, Wt::Medium);
             let c = add(cmd, r, Node { column_gap: px(14), ..row() });
             match sp.kind {
