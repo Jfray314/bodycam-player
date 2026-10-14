@@ -41,7 +41,7 @@ impl Plugin for BodyPlugin {
     }
 }
 
-/// Debug third-person orbit view (F8 toggles; BODYCAM_3P="dist:yaw_deg:height" starts it): camera orbits the player, the owner
+/// Debug third-person orbit view (Insert toggles; BODYCAM_3P="dist:yaw_deg:height" starts it): camera orbits the player, the owner
 /// body copy shows its head and arms. For checking the body as a third-person model.
 #[derive(Resource)]
 pub struct ThirdPerson {
@@ -58,7 +58,7 @@ impl Default for ThirdPerson {
 }
 
 fn third_person_cam(keys: Res<ButtonInput<KeyCode>>, mut tp: ResMut<ThirdPerson>, mut cam: Single<&mut Transform, With<crate::player::BodycamCamera>>) {
-    if keys.just_pressed(KeyCode::F8) {
+    if keys.just_pressed(KeyCode::Insert) {
         tp.on = !tp.on;
     }
     if keys.pressed(KeyCode::Comma) {
