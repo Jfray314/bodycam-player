@@ -178,6 +178,14 @@ void ExportAll(string[]? only)
         ExportMesh("Bodycam/Content/BodycamSkin/Arms/Basic/SKM_HumanArmsLongSleeves_Morphers", "arms");
         foreach (var k in keys.Where(k => k.Contains("/AdditiveMotions/") || k.Contains("/Gopro/Adjust/") || k.Contains("Additive") || k.Contains("Shake_Loop") || k.Contains("/ShakingHands/")).Where(IsSeq)) ExportAnim(Strip(k), "common");
     }
+    // full-body player mesh (BP Mesh = DT_OperatorSkins default skin; same ALS mannequin skeleton as the Shadow mesh AnimMan) + ALS locomotion clips
+    if (only == null || only.Contains("body"))
+    {
+        const string Als = "Bodycam/Content/AdvancedLocomotionV4/CharacterAssets/MannequinSkeleton/AnimationExamples/Base/";
+        ExportMesh("Bodycam/Content/BodycamSkin/DefaultSkin/DefaultOperator", "body");
+        foreach (var c in new[] { "BasePoses/ALS_N_Pose", "BasePoses/ALS_CLF_Pose", "Locomotion/ALS_N_Walk_F", "Locomotion/ALS_N_Run_F", "Locomotion/ALS_N_Sprint_F", "Locomotion/ALS_CLF_Walk_F" })
+            ExportAnim(Als + c, "body_anims");
+    }
     foreach (var dirName in keys.Select(k => k[AnimRoot.Length..].Split('/')[0]).Distinct())
     {
         var g = cfg.GetValueOrDefault(dirName) ?? new GunCfg();

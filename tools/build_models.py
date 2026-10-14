@@ -63,6 +63,8 @@ arms_json = os.path.join(work, "arms", "arms.json")
 arms_psas = ([p for p in psas("common") if not os.path.basename(p).startswith("A_C_")]  # A_C_* are camera-skeleton clips: tracks go to curves.json
              + [p for g in arms_guns if g in guns for p in psas(f"fp/{g}")])
 blender("build_glb.py", [arms_json, os.path.join(out, "arms.glb")] + arms_psas)
+# full-body third-person/shadow mesh + ALS clips (ue-export "body" step)
+blender("build_glb.py", [os.path.join(work, "body", "body.json"), os.path.join(out, "body.glb")] + psas("body_anims"))
 for g in guns:
     blender("build_glb.py", [os.path.join(work, "guns", g, g + ".json"), os.path.join(out, "guns", g + ".glb")] + psas(f"guns/{g}/anims"), {"FRAME": "attach"})
     if g not in arms_guns and psas(f"fp/{g}"):
