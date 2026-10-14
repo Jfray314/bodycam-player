@@ -25,7 +25,7 @@ F8/F9 camera recording), run offline in the real game.
 
 ## Controls (from IMC_KBM_CharacterOnFoot)
 WASD move, Shift sprint, LeftControl crouch (hold), Space jump, Q/E lean, LMB fire, RMB aim, R tap reload,
-R hold 0.25 s mag check, J inspect, 1-6 / wheel swap. F2 toggles the camera post-process.
+R hold 0.25 s mag check, J inspect, 1-5 / wheel swap (Primary, Secondary, Grenade, Melee, Perk), X quick knife attack, G drop item, F pick up, C drone light, F leave drone (items.rs / perks.rs). F2 toggles the camera post-process.
 
 ## Model/animation export (arms, guns, FP clips -> .glb)
 One command (reads the paks read-only, writes only `assets-local/models`, git-ignored):
@@ -45,6 +45,9 @@ Clip names equal the UE asset names. Normals are flipped DX->GL; ORM textures ar
 Default attachments (tools/attachments.py: assets/weapons/<Row>.json -> DT_NewShopItem -> DT_WeaponSkins -> static mesh; socket from ItemClassID) are baked into each gun glb as child nodes of the socket's bone (they follow reload clips). Reticles/ammo skipped. `curves.json` = float anim curves (30 Hz) per clip, `camera_tracks.json` = GoPro A_C_* camera bone keys.
 Not exported: montages.
 
+
+## Items (non-gun) assets
+`python -I tools/build_items.py [G67,Knife,Flashbang,Kamikaze,DroneController,DroneGoggles]` (ue-export `Grenade/G67`, `Knife`, `Drone*` entries in tools/ue-export/guns.json; writes only guns/<Item>.glb + arms_anims/<Item>.glb, never arms.glb). `tools/weapon_data.py` also bakes `assets/items/<DT_PerkItems row>.json` (BAS anim set + `extra` montages). Item audio cues: extract `Audio/Knife Audio/Grenade FPV_Drone/Sfx`, decode with binka, tools/audio-bake roots.
 
 ## Fast iteration (test map, scripted shots, recordings)
 All times are **sim seconds after "viewmodel ready"** (arms + gun meshes spawned; logged as `viewmodel ready at N s real`), so no guessed load offsets. Code: `game/src/dev.rs`, `game/src/testmap.rs`.
@@ -77,7 +80,11 @@ All times are **sim seconds after "viewmodel ready"** (arms + gun meshes spawned
 | SoundCues, footsteps, breathing, bodycam mic filter (Samsung A52 IR convolution + EQ) | `audio.rs` | in progress |
 | Arms/gun meshes + FP animations, BAS viewmodel sway/ADS/offsets, PRAS viewmodel recoil curves | | in progress (mesh export) |
 | Blueprint logic (leaning/auto-lean, stamina, blood on camera, abilities) | | in progress (Kismet decompiler) |
-| BallisticsVFX impacts/muzzle/shells, flashlight/laser, grenades, knife, drop/take, death/hit reactions | | todo |
+| Grenades (GA_Character_Aim_Grenade / GA_ThrowGrenade / Grenade_C / G67_C / Flash_C): RMB pull pin, LMB throw (overhand), toss velocity 1600 cm/s, ray-swept bounce, 3 s fuse, radial damage 200 (350/1000 cm, exp 1.3), flashbang | `items.rs` | real data, physics approximated |
+| Knife (GA_Character_QuickAttack, Knife_C.CloseRangeAttack: 50 cm sphere, 125 cm, 100 dmg), drop/pick up (G/F) | `items.rs` | real data |
+| Perk slot: Kamikaze FPV drone (A_FP_Drone_Deploy notifies, BP_FPV_Drone Angle-mode controls, DroneMovementComponent 700/3500/1000 cm/s, crash -> GA_ExplodePerk 200 dmg 200/1000 cm exp 2, battery, GA_LeavePerk, cooldown) | `perks.rs` | real data, see ponytail notes |
+| Tablet LOADOUT EXPLOSIVE/MELEE/GADGET columns | `ui/screens.rs` `Act::Gear` | real items |
+| BallisticsVFX impacts/muzzle/shells, flashlight/laser, death/hit reactions | | todo (item flashlight: GA_Flashlight is the drone's light, see perks.rs) |
 
 ## Tablet menu (game/src/ui)
 Escape/Tab raises the real tablet (SKM_Tablet + A_FP_Tablet_* clips); bevy_ui screens (HOME/PLAY/LOADOUT/weapon/MENU/SETTINGS/SOCIAL/CREDITS) render to a texture on its screen. Settings -> `%APPDATA%/bodycam-player/settings.json` (BODYCAM_CONFIG overrides). Assets: `assets-local/ui` (Tablet.glb, arms_tablet.glb built with ue-export `all Tablet` + tools/blender/build_glb.py, tex/*.png via ue-export `tex`, Ki fonts). Dev: BODYCAM_AUTO keys Esc Tab F C T Left Right CurR/L/U/D, BODYCAM_CURSOR=x,y, BODYCAM_CLICKS="t:x,y;..." (1920x1080 UI space).

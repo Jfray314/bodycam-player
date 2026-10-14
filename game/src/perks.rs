@@ -7,6 +7,9 @@
 //! (350) fires GameplayEvent.Perk.Crash -> GA_DroneCrash -> GA_ExplodePerk (200 dmg, inner 200 / outer 1000 cm, exp 2). F = GA_LeavePerk
 //! (Drone_Exit montage, back to Primary); battery drain GE_PerkStat_Default IdleBatteryConsumption 0.1 + 0.001 x speed(cm/s) per second,
 //! empty = GA_OutOfBattery -> Perk.Leave; GadgetCooldown after use (GE_Perk_Cooldown).
+// ponytail: not ported - goggles visual (virtual-bone socket), propeller/rotor spin, drone HUD widget (DroneUI), Acro/Horizon flight modes,
+// FPV post-process/night vision, Spectator/Sentinel drones, RC car, bomb (GA_TriggerBomb, Special slot / game-mode item), GoPro PerkDeploy camera montage.
+// GA_Flashlight is this drone light (GameplayCue.Perk.RcCar.Flashlight): on foot, C toggles the gun-mounted flashlight attachment (GA_ToggleAttachment_Flashlight), not a helmet light.
 use crate::audio::PlayCue;
 use crate::items::{Detonate, DRONE_BLAST, SLOT_PERK};
 use crate::player::{BodycamCamera, IgnoreTraces, Player};

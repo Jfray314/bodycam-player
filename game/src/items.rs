@@ -12,6 +12,8 @@ use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
 use bevy::prelude::*;
 use serde_json::Value;
 
+// ponytail: underhand throw (bOverhandGrenade always true), knife throw (RMB + LMB), sticky/RGN/G68 grenades, ReceivePointDamage fuse shortening,
+// bots are not flashed (GE_Flashed 18 s), BFL_Explosion falloff formula is UE's ApplyRadialDamageWithFalloff shape.
 pub const SLOT_GRENADE: usize = 2;
 pub const SLOT_MELEE: usize = 3;
 pub const SLOT_PERK: usize = 4;
