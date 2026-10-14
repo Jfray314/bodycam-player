@@ -23,6 +23,9 @@ pub struct DevPlugin;
 impl Plugin for DevPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Ready>().add_systems(PreUpdate, (mark_ready, autotest.after(bevy::input::InputSystems)).chain()).add_systems(Update, shots);
+        if let Some(deg) = env("BODYCAM_PITCH").and_then(|v| v.parse::<f32>().ok()) { // look up/down for screenshots (legs, shadow)
+            app.add_systems(PreUpdate, move |mut p: Single<&mut crate::player::Player>| p.pitch = deg.to_radians());
+        }
         if let Some(s) = env("BODYCAM_SPEED").and_then(|v| v.parse::<f32>().ok()) {
             app.add_systems(Startup, move |mut t: ResMut<Time<Virtual>>| {
                 t.set_relative_speed(s);
@@ -60,6 +63,7 @@ fn mark_ready(
     mut ready: ResMut<Ready>,
     arms: Query<(), With<ArmsRoot>>,
     guns: Query<(), With<GunRoot>>,
+    bodies: Query<(), With<crate::body::BodyRoot>>,
     meshes: Query<Entity, With<Mesh3d>>,
     parents: Query<&ChildOf>,
     mut settle: Local<u32>,
@@ -68,7 +72,7 @@ fn mark_ready(
         return;
     }
     // Real-time fallback so a missing model can't hang a test run forever.
-    if (has_mesh_under(&arms, &meshes, &parents) && has_mesh_under(&guns, &meshes, &parents)) || real.elapsed_secs() > 90.0 {
+    if (has_mesh_under(&arms, &meshes, &parents) && has_mesh_under(&guns, &meshes, &parents) && has_mesh_under(&bodies, &meshes, &parents)) || real.elapsed_secs() > 90.0 {
         *settle += 1; // a few frames so animation poses are applied before t=0
         if *settle > 5 {
             ready.0 = Some(time.elapsed_secs());
