@@ -78,3 +78,6 @@ All times are **sim seconds after "viewmodel ready"** (arms + gun meshes spawned
 | Arms/gun meshes + FP animations, BAS viewmodel sway/ADS/offsets, PRAS viewmodel recoil curves | | in progress (mesh export) |
 | Blueprint logic (leaning/auto-lean, stamina, blood on camera, abilities) | | in progress (Kismet decompiler) |
 | BallisticsVFX impacts/muzzle/shells, flashlight/laser, grenades, knife, drop/take, death/hit reactions | | todo |
+
+## Tablet menu (game/src/ui)
+Escape/Tab raises the real tablet (SKM_Tablet + A_FP_Tablet_* clips); bevy_ui screens (HOME/PLAY/LOADOUT/weapon/MENU/SETTINGS/SOCIAL/CREDITS) render to a texture on its screen. Settings -> `%APPDATA%/bodycam-player/settings.json` (BODYCAM_CONFIG overrides). Assets: `assets-local/ui` (Tablet.glb, arms_tablet.glb built with ue-export `all Tablet` + tools/blender/build_glb.py, tex/*.png via ue-export `tex`, Ki fonts). Dev: BODYCAM_AUTO keys Esc Tab F C T Left Right CurR/L/U/D, BODYCAM_CURSOR=x,y, BODYCAM_CLICKS="t:x,y;..." (1920x1080 UI space).

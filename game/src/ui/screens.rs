@@ -306,7 +306,7 @@ fn weapon(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     }
     let st = add(cmd, top, Node { padding: UiRect::all(px(16)), ..col() });
     cmd.entity(st).insert(BackgroundColor(PANEL));
-    for (k, v) in [("DAMAGE", format!("{:.0}", it.damage)), ("FIRE RATE", format!("{:.0}", it.fire_rate)), ("MAGAZINE", format!("{:.0}", it.cap)), ("SLOT", slot_name.into())] {
+    for (k, v) in [("DAMAGE", format!("{:.0}", it.damage)), ("MAGAZINE", format!("{:.0}", it.cap)), ("SLOT", slot_name.into())] {
         let r = add(cmd, st, Node { width: px(320), justify_content: JustifyContent::SpaceBetween, ..row() });
         txt(cmd, r, cx, k, 24.0, GREY, Wt::Medium);
         txt(cmd, r, cx, &v, 24.0, Color::WHITE, Wt::Bold);
