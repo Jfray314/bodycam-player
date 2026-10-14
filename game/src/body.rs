@@ -151,7 +151,7 @@ fn prepare(
 /// Lights also light the shadow-only layer.
 fn light_layers(mut cmd: Commands, new: Query<Entity, Or<(Added<DirectionalLight>, Added<PointLight>, Added<SpotLight>)>>) {
     for e in &new {
-        cmd.entity(e).insert(RenderLayers::from_layers(&[0, SHADOW_LAYER]));
+        cmd.entity(e).insert(RenderLayers::from_layers(&[0, SHADOW_LAYER, crate::attach::VM_LAYER]));
     }
 }
 

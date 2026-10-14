@@ -6,7 +6,13 @@ use crate::player::IgnoreTraces;
 use crate::ui::settings::Settings;
 use crate::viewmodel::{root_of_entity, GunRoot};
 use crate::weapon::{Inventory, Regrip};
-use bevy::camera::visibility::NoFrustumCulling;
+use bevy::camera::visibility::{NoFrustumCulling, RenderLayers};
+use bevy::camera::{ImageRenderTarget, RenderTarget, Viewport};
+use bevy::render::render_resource::TextureFormat;
+use bevy::window::PrimaryWindow;
+
+/// RenderLayers of the arms/gun/attachments: the scope camera renders layer 0 only, so the gun is not in its picture.
+pub const VM_LAYER: usize = 2;
 use bevy::gltf::GltfMaterialName;
 use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
 use bevy::prelude::*;
@@ -119,6 +125,10 @@ pub struct AttState {
     pub aim: Option<(String, Vec3)>,
     /// Magnification of the active scope (1 = none).
     pub zoom: f32,
+    /// Entity of the mounted magnified optic (scope camera attaches at its Viewpoint socket).
+    pub scope: Option<(Entity, Xf)>,
+    /// Eye relief (m) behind the AimPoint of the active optic.
+    pub eye_relief: f32,
 }
 
 #[derive(Component)]
@@ -133,7 +143,10 @@ struct LaserDot;
 pub struct AttachPlugin;
 impl Plugin for AttachPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<AttState>().add_systems(Update, (mount_sys, glass, switch_input, state, laser).chain());
+        app.init_resource::<AttState>()
+            .add_systems(Startup, scope_setup)
+            .add_systems(Update, (mount_sys, glass, switch_input, state, laser).chain())
+            .add_systems(PostUpdate, scope.after(bevy::transform::TransformSystems::Propagate));
     }
 }
 
@@ -159,6 +172,7 @@ fn mount_sys(
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut mats: ResMut<Assets<StandardMaterial>>,
+    mut st: ResMut<AttState>,
 ) {
     let (Some(inv), Some(cfg)) = (inv, cfg) else { return };
     let Some((gun, g)) = guns.iter().next() else { return };
@@ -179,6 +193,7 @@ fn mount_sys(
         cmd.entity(e).despawn();
     }
     *done = (Some(gun), key);
+    st.scope = None;
     let d = data();
     let reticle = reticle_mat(&mut images, &mut mats);
     for id in &ids {
@@ -188,6 +203,9 @@ fn mount_sys(
         let scene: Handle<bevy::world_serialization::WorldAsset> = assets.load(GltfAssetLabel::Scene(0).from_asset(format!("models/attachments/{id}.glb")));
         let root = cmd.spawn((AttMount, Name::new(format!("att_{id}")), WorldAssetRoot(scene), xf.tf())).id();
         cmd.entity(bone).add_child(root);
+        if item.kind == "magnified" && let Some(v) = item.sockets.get("viewpoint") {
+            st.scope = Some((root, v.clone()));
+        }
         // WEP optics: the reticle quad sits on the optic's Reticle socket (MI_ReticleData_*: ReticleColor red, unlit).
         // ponytail: procedural dot/crosshair stands in for the reticle textures of the MI_ReticleData parents.
         if let Some(r) = item.sockets.get("reticle").or_else(|| item.sockets.get("reticle_magnified")).or_else(|| item.sockets.get("reticle_canted")).filter(|_| is_optic(id)) {
@@ -198,6 +216,7 @@ fn mount_sys(
                 r.tf() * Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
                 NoFrustumCulling,
                 IgnoreTraces,
+                RenderLayers::layer(VM_LAYER),
                 ChildOf(root),
             ));
         }
@@ -215,8 +234,8 @@ fn mount_sys(
             // Laser BP: SM_Laser_Beam stretched to the trace hit (x1000 scale when nothing is hit), sphere dot at the hit.
             let col = if id == "laser" { Color::srgb(0.1, 1.0, 0.2) } else { Color::srgb(1.0, 0.05, 0.05) };
             let m = mats.add(StandardMaterial { base_color: col, emissive: col.to_linear() * 8.0, unlit: true, alpha_mode: AlphaMode::Add, ..default() });
-            cmd.spawn((LaserBeam, Mesh3d(meshes.add(Cuboid::new(0.0015, 1.0, 0.0015).mesh().build().translated_by(Vec3::new(0.0, -0.5, 0.0)))), MeshMaterial3d(m.clone()), Visibility::Hidden, l.tf(), NoFrustumCulling, IgnoreTraces, ChildOf(root)));
-            cmd.spawn((AttMount, LaserDot, Mesh3d(meshes.add(Sphere::new(0.012))), MeshMaterial3d(m), Visibility::Hidden, Transform::default(), NoFrustumCulling, IgnoreTraces));
+            cmd.spawn((LaserBeam, Mesh3d(meshes.add(Cuboid::new(0.0015, 1.0, 0.0015).mesh().build().translated_by(Vec3::new(0.0, -0.5, 0.0)))), MeshMaterial3d(m.clone()), Visibility::Hidden, l.tf(), NoFrustumCulling, IgnoreTraces, RenderLayers::layer(VM_LAYER), ChildOf(root)));
+            cmd.spawn((AttMount, LaserDot, Mesh3d(meshes.add(Sphere::new(0.012))), MeshMaterial3d(m), Visibility::Hidden, Transform::default(), NoFrustumCulling, IgnoreTraces, RenderLayers::layer(VM_LAYER)));
         }
     }
 }
@@ -296,6 +315,7 @@ fn state(
     let row = &inv.slots[inv.current].name;
     let ids = loadout(&cfg, row);
     let optic = active_optic(&ids, st.optic);
+    let mut relief = 0.0;
     st.aim = optic.and_then(|id| {
         let (_, xf) = mount(row, id)?;
         let a = data().items[id].sockets.get("aimpoint")?;
@@ -303,8 +323,10 @@ fn state(
         let ads = &inv.slots[inv.current].anims["AdsSettings"];
         let mag = data().items[id].kind == "magnified";
         let d = ads[if mag { "AimMagnifiedSightDistance" } else { "AimSightDistance" }].as_f64().unwrap_or(if mag { 2.5 } else { 12.0 }) as f32;
+        relief = d * 0.01;
         Some((xf.bone.clone(), xf.at(Vec3::from(a.loc)) + Vec3::Y * d * 0.01))
     });
+    st.eye_relief = relief;
     st.zoom = if optic.is_some_and(|o| data().items[o].kind == "magnified") { 4.0 } else { 1.0 };
     let (fl, la) = (st.flashlight, st.laser);
     for mut v in &mut lights {
@@ -338,4 +360,85 @@ fn laser(
         dt.translation = origin + *fwd * hit.unwrap_or(0.0);
         *dv = if hit.is_some() { Visibility::Inherited } else { Visibility::Hidden };
     }
+}
+
+// ---- magnified optic: scope capture (BodycamScopeCaptureComponent at the optic's Viewpoint socket, SetMagnification) ----
+const SCOPE_PX: u32 = 512;
+// ACOG eyepiece glass (acog.glb MI_ScopeOpticGlass_AGO rear slot): radius 1.08 cm, 3.0 cm in front of the AimPoint socket.
+// ponytail: scope-specific numbers; other magnified optics reuse them. UE reads Magnification/ScreenHeightFraction from the reticle MI.
+const LENS_R: f32 = 0.0108;
+const LENS_BEHIND: f32 = 0.030;
+const SCOPE_MAG: f32 = 4.0;
+
+#[derive(Component)]
+struct ScopeCam;
+#[derive(Component)]
+struct ScopeOverlay;
+
+fn scope_setup(mut cmd: Commands, mut images: ResMut<Assets<Image>>) {
+    let img = images.add(Image::new_target_texture(SCOPE_PX, SCOPE_PX, TextureFormat::Rgba8UnormSrgb, None));
+    cmd.spawn((
+        ScopeCam,
+        Camera3d::default(),
+        Camera { order: -5, viewport: Some(Viewport { physical_size: UVec2::ONE, ..default() }), clear_color: ClearColorConfig::Custom(Color::BLACK), ..default() },
+        RenderTarget::Image(ImageRenderTarget { handle: img.clone(), scale_factor: 1.0 }),
+        Projection::Perspective(PerspectiveProjection { near: 0.05, aspect_ratio: 1.0, ..default() }),
+        bevy::core_pipeline::tonemapping::Tonemapping::AcesFitted,
+        Transform::default(),
+    ));
+    let o = cmd
+        .spawn((
+            ScopeOverlay,
+            Node { position_type: PositionType::Absolute, display: Display::None, border_radius: BorderRadius::MAX, overflow: Overflow::clip(), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+            ImageNode::new(img),
+            GlobalZIndex(-10),
+        ))
+        .id();
+    // DotMK1 reticle: thin cross + red dot (MI_ReticleMagnifiedData_DotMK1_Red). ponytail: procedural, not the reticle texture.
+    for (w, h, c) in [(percent(100), px(1), Color::srgba(0.0, 0.0, 0.0, 0.7)), (px(1), percent(100), Color::srgba(0.0, 0.0, 0.0, 0.7)), (px(4), px(4), Color::srgb(1.0, 0.05, 0.05))] {
+        cmd.spawn((Node { position_type: PositionType::Absolute, width: w, height: h, ..default() }, BackgroundColor(c), ChildOf(o)));
+    }
+}
+
+fn scope(
+    st: Res<AttState>,
+    ads: Res<crate::sway::Ads>,
+    globals: Query<&GlobalTransform, Without<ScopeCam>>,
+    main: Single<&Projection, (With<crate::player::BodycamCamera>, Without<ScopeCam>)>,
+    win: Single<&Window, With<PrimaryWindow>>,
+    mut cam: Single<(&mut Camera, &mut Transform, &mut GlobalTransform, &mut Projection), With<ScopeCam>>,
+    mut overlay: Single<(&mut Node, &mut ImageNode), With<ScopeOverlay>>,
+) {
+    let on = st.zoom > 1.0 && ads.alpha > 0.05;
+    let (cam_c, cam_t, cam_g, cam_p) = &mut *cam;
+    let Some((root, vp)) = st.scope.as_ref().filter(|_| on) else {
+        // ponytail: never deactivated (a camera switched on mid-run panics Bevy's directional-light cascades); parked on a 1 px viewport instead.
+        cam_c.viewport = Some(Viewport { physical_size: UVec2::ONE, ..default() });
+        overlay.0.display = Display::None;
+        return;
+    };
+    let Ok(rg) = globals.get(*root) else { return };
+    // camera looks along the optic's forward (joint -Y) with up +Z, like crate::viewmodel::ads_axes
+    let local = Transform { translation: Vec3::from(vp.loc), rotation: Quat::from_array(vp.rot) * Quat::from_mat3(&Mat3::from_cols(Vec3::NEG_X, Vec3::Z, Vec3::Y)), ..default() };
+    let world = rg.mul_transform(local);
+    **cam_t = world.compute_transform();
+    **cam_g = world;
+    cam_c.viewport = None;
+    // eye (camera point) to eyepiece distance: eye relief behind the AimPoint, which is LENS_BEHIND behind the glass
+    let dist = LENS_BEHIND + st.eye_relief;
+    let alpha = (LENS_R / dist).atan();
+    if let Projection::Perspective(p) = &mut **cam_p {
+        p.fov = 2.0 * (alpha.tan() / SCOPE_MAG).atan();
+    }
+    let vfov = if let Projection::Perspective(p) = *main { p.fov } else { 1.0 };
+    let h = win.height();
+    let focal = h * 0.5 / (vfov * 0.5).tan();
+    let r = (focal * LENS_R / dist).min(h * 0.45);
+    let (n, img) = &mut *overlay;
+    n.display = Display::Flex;
+    n.left = px(win.width() * 0.5 - r);
+    n.top = px(h * 0.5 - r);
+    n.width = px(2.0 * r);
+    n.height = px(2.0 * r);
+    img.color = Color::WHITE.with_alpha(((ads.alpha - 0.7) / 0.3).clamp(0.0, 1.0));
 }

@@ -255,7 +255,7 @@ fn spawn_light(cmd: &mut Commands, l: &UeLight) {
 
 /// Shadow maps only on the nearest few shadow-casting local lights (the shadow maps are the cost, not the lights).
 fn shadow_nearest(
-    cam: Query<&GlobalTransform, With<Camera3d>>,
+    cam: Query<&GlobalTransform, With<crate::player::BodycamCamera>>,
     mut points: Query<(Entity, &GlobalTransform, &mut PointLight), With<ShadowCandidate>>,
     mut spots: Query<(Entity, &GlobalTransform, &mut SpotLight), With<ShadowCandidate>>,
 ) {

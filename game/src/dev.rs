@@ -111,6 +111,7 @@ pub(crate) fn autotest(
             let key = match k {
                 "LMB" => Err(MouseButton::Left),
                 "RMB" => Err(MouseButton::Right),
+                "MMB" => Err(MouseButton::Middle),
                 "Ctrl" => Ok(KeyCode::ControlLeft),
                 "Shift" => Ok(KeyCode::ShiftLeft),
                 "1" => Ok(KeyCode::Digit1),
@@ -141,6 +142,7 @@ pub(crate) fn autotest(
                 "Tab" => Ok(KeyCode::Tab),
                 "F" => Ok(KeyCode::KeyF),
                 "C" => Ok(KeyCode::KeyC),
+                "Z" => Ok(KeyCode::KeyZ),
                 "T" => Ok(KeyCode::KeyT),
                 "Left" => Ok(KeyCode::ArrowLeft),
                 "Right" => Ok(KeyCode::ArrowRight),

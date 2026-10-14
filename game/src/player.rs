@@ -185,7 +185,7 @@ fn spawn(mut cmd: Commands) {
     ))
     .with_children(|p| {
         // FOV is owned by postfx::apply_fov (120 horizontal, from the live CameraComponent).
-        p.spawn((BodycamCamera, Camera3d::default(), Projection::Perspective(PerspectiveProjection { near: 0.02, ..default() }), Transform::default()));
+        p.spawn((BodycamCamera, bevy::camera::visibility::RenderLayers::from_layers(&[0, crate::attach::VM_LAYER]), Camera3d::default(), Projection::Perspective(PerspectiveProjection { near: 0.02, ..default() }), Transform::default()));
     });
 }
 
