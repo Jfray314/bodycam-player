@@ -1,6 +1,7 @@
 //! Non-gun inventory items: M67/G67 frag + flashbang (GA_Character_Aim_Grenade / GA_ThrowGrenade / Grenade_C / G67_C / Flash_C),
 //! knife (GA_Character_QuickAttack / GA_TriggerKnife / Knife_C.CloseRangeAttack) and drop/pick up (GA_Character_DropItem).
 //! Slots follow Bodycam_Player IA_Slot1..5: Primary, Secondary, Grenade, Melee, Perk.First (drone: perks.rs).
+use crate::audio::PlayCue;
 use crate::effects::{Explosion, Flashbang};
 use crate::player::{BodycamCamera, IgnoreTraces, Player};
 use crate::status::PlayerDamage;
@@ -172,7 +173,7 @@ struct BlastMesh(Handle<Mesh>);
 pub struct ItemsPlugin;
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Items>().add_message::<Detonate>().add_systems(Startup, |mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>| cmd.insert_resource(BlastMesh(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())))).add_systems(Update, (grenade_input, knife_input, projectiles, detonate, blasts, tag_meshes, drop_pickup).chain());
+        app.init_resource::<Items>().add_message::<Detonate>().add_message::<PlayCue>().add_systems(Startup, |mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>| cmd.insert_resource(BlastMesh(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())))).add_systems(Update, (grenade_input, knife_input, projectiles, detonate, blasts, tag_meshes, drop_pickup).chain());
     }
 }
 
@@ -302,6 +303,8 @@ fn projectiles(
     ignore: Query<(), With<IgnoreTraces>>,
     targets: Query<(), With<Health>>,
     mut out: MessageWriter<Detonate>,
+    mut snd: MessageWriter<PlayCue>,
+    cam: Single<&GlobalTransform, With<BodycamCamera>>,
 ) {
     let dt = time.delta_secs().min(0.05);
     for (e, mut tf, mut g) in &mut q {
@@ -330,6 +333,7 @@ fn projectiles(
                 let vt = g.vel - vn;
                 if g.vel.length() > 3.0 {
                     g.hits += 1; // Hit event only for speed > 300 cm/s
+                    snd.write(PlayCue { cue: "/Game/BallisticsVFX/SFX/Impacts/Grenade/Grenade_Impact".into(), dist_cm: cam.translation().distance(pt) * 100.0 });
                 }
                 g.vel = vt * 0.7 - vn * 0.35;
                 tf.translation = pt + n * 0.04;
@@ -356,12 +360,12 @@ fn detonate(
     mut boom: MessageWriter<Explosion>,
     mut flash: MessageWriter<Flashbang>,
     mut dmg: MessageWriter<PlayerDamage>,
-    assets: Res<AssetServer>,
+    mut snd: MessageWriter<PlayCue>,
     blast: Res<BlastMesh>,
     mut mats: ResMut<Assets<StandardMaterial>>,
 ) {
     for d in ev.read() {
-        explode(&mut cmd, d.at, d.spec, &mut ray, &ignore, &mut targets, player.translation() + Vec3::Y * 1.6, &mut boom, &mut flash, &mut dmg, &assets, &blast.0, &mut mats);
+        explode(&mut cmd, d.at, d.spec, &mut ray, &ignore, &mut targets, player.translation() + Vec3::Y * 1.6, &mut boom, &mut flash, &mut dmg, &mut snd, &blast.0, &mut mats);
     }
 }
 
@@ -377,7 +381,7 @@ fn explode(
     boom: &mut MessageWriter<Explosion>,
     flash: &mut MessageWriter<Flashbang>,
     dmg: &mut MessageWriter<PlayerDamage>,
-    assets: &AssetServer,
+    snd: &mut MessageWriter<PlayCue>,
     sphere: &Handle<Mesh>,
     mats: &mut Assets<StandardMaterial>,
 ) {
@@ -427,10 +431,9 @@ fn explode(
         IgnoreTraces,
     ));
     cmd.spawn((PointLight { intensity: 8_000_000.0, range: 25.0, color: col, ..default() }, Transform::from_translation(at + Vec3::Y * 0.5), Blast { t: 0.0, life: life + 0.1, size: 0.0 }));
-    // Bodycam_Grenade_G67 / Explosions_flash cue stand-ins: the decoded Frag_explosion / Grenade_Flashbang_Explosion waves.
-    let wav = if flash_gren { "audio/BallisticsVFX/SFX/Explodes/Wav/Grenade_Flashbang_Explosion.wav" } else { "audio/BallisticsVFX/SFX/Explodes/Wav/Frag_explosion.wav" };
-    let vol = crate::status::map_range_clamped(dp, 300.0, 6000.0, 1.0, 0.25);
-    cmd.spawn((AudioPlayer::<AudioSource>(assets.load(wav)), PlaybackSettings::DESPAWN.with_volume(bevy::audio::Volume::Linear(vol))));
+    // G67_C: AC_Detonation.DetonationSound = Bodycam_Grenade_G67; Flash_C: Explosions_flash.
+    let cue = if flash_gren { "/Game/BallisticsVFX/SFX/Explodes/Explosions_flash" } else { "/Game/Audio/Grenade/Cue/Bodycam_Grenade_G67" };
+    snd.write(PlayCue { cue: cue.into(), dist_cm: dp });
 }
 
 fn blasts(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Blast, &mut Transform, Option<&mut PointLight>)>) {
@@ -479,6 +482,7 @@ fn knife_input(
     mut ray: MeshRayCast,
     ignore: Query<(), With<IgnoreTraces>>,
     mut out: MessageWriter<MontageStarted>,
+    mut snd: MessageWriter<PlayCue>,
 ) {
     let dt = time.delta_secs();
     if perk.locked() {
@@ -540,6 +544,7 @@ fn knife_input(
             let wall = Dir3::new(d).ok().is_some_and(|dir| ray.cast_ray(Ray3d::new(o, dir), &MeshRayCastSettings::default().with_filter(&filter)).first().is_some_and(|(_, h)| h.distance < along.max(0.0) - 0.05));
             if !wall && let Ok((_, _, mut hp, _)) = targets.get_mut(e) {
                 hp.0 -= KNIFE_DAMAGE * mult;
+                snd.write(PlayCue { cue: "/Game/Audio/Knife/Cue/Bodycam_SFX_Weapon_Knife_Attack_Gore".into(), dist_cm: 60.0 }); // MultiCast-PlayHitSound
                 if hp.0 <= 0.0 {
                     cmd.entity(e).despawn();
                 }

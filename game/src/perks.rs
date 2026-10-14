@@ -7,6 +7,7 @@
 //! (350) fires GameplayEvent.Perk.Crash -> GA_DroneCrash -> GA_ExplodePerk (200 dmg, inner 200 / outer 1000 cm, exp 2). F = GA_LeavePerk
 //! (Drone_Exit montage, back to Primary); battery drain GE_PerkStat_Default IdleBatteryConsumption 0.1 + 0.001 x speed(cm/s) per second,
 //! empty = GA_OutOfBattery -> Perk.Leave; GadgetCooldown after use (GE_Perk_Cooldown).
+use crate::audio::PlayCue;
 use crate::items::{Detonate, DRONE_BLAST, SLOT_PERK};
 use crate::player::{BodycamCamera, IgnoreTraces, Player};
 use crate::viewmodel::{ArmsRoot, GunRoot};
@@ -98,6 +99,9 @@ struct PerkVisual {
 struct PerkAnim(Entity);
 #[derive(Component)]
 struct DroneLight;
+/// Propeller_Drone_Kamikaze: Drone_Idle_Loop at volume 0.4; pitch/volume follow the speed (FC_FPVDrone_SFX curves not decoded).
+#[derive(Component)]
+struct Motor;
 /// The drone's own mesh: hidden from its FPV camera (it sits inside the frame).
 #[derive(Component)]
 struct DroneBody;
@@ -165,7 +169,8 @@ fn deploy_flow(
     (mut guns, mut arms_vis): (Query<(Entity, &GunRoot, &GlobalTransform, &mut Visibility)>, Query<&mut Visibility, (With<ArmsRoot>, Without<GunRoot>)>),
     (drones, visuals, mut visual_cmd): (Query<(Entity, &Transform), With<Drone>>, Query<Entity, With<PerkVisual>>, Query<&mut PerkVisual>),
     cam: Single<&GlobalTransform, With<BodycamCamera>>,
-    (mut fx, settings, mut out): (ResMut<crate::postfx::PostFxState>, Res<crate::ui::settings::Settings>, MessageWriter<MontageStarted>),
+    (mut fx, settings, mut out, mut snd): (ResMut<crate::postfx::PostFxState>, Res<crate::ui::settings::Settings>, MessageWriter<MontageStarted>, MessageWriter<PlayCue>),
+    motors: Query<Entity, With<Motor>>,
 ) {
     let dt = time.delta_secs();
     perk.cooldown = (perk.cooldown - dt).max(0.0);
@@ -238,6 +243,8 @@ fn deploy_flow(
                 perk.fade = 1.0;
                 perk.fade_to = 0.0;
                 p.locked = true;
+                snd.write(PlayCue { cue: "/Game/FPV_Drone/Sfx/Boot/ECS_Boot_Bip_Sound_Cue".into(), dist_cm: 0.0 });
+                cmd.spawn((Motor, AudioPlayer::<AudioSource>(assets.load("audio/FPV_Drone/Sfx/Drone/Drone_Idle_Loop.wav")), PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(0.4))));
                 fx.base_fov_deg = DRONE_FOV;
                 for mut v in &mut arms_vis {
                     *v = Visibility::Hidden;
@@ -253,6 +260,9 @@ fn deploy_flow(
                 // GA_LeavePerk / GA_OutOfBattery: control returns to the body, Drone_Exit montage.
                 perk.phase = Phase::Exit;
                 perk.t = 0.0;
+                for m in &motors {
+                    cmd.entity(m).despawn();
+                }
                 perk.fade = 1.0;
                 perk.fade_to = 0.0;
                 p.locked = false;
@@ -327,6 +337,8 @@ fn drone_fly(
     ignore: Query<(), With<IgnoreTraces>>,
     lights: Query<Entity, With<DroneLight>>,
     mut boom: MessageWriter<Detonate>,
+    mut snd: MessageWriter<PlayCue>,
+    mut motor: Query<&mut AudioSink, With<Motor>>,
 ) {
     let dt = time.delta_secs().min(0.05);
     let Ok((e, mut tf, mut d)) = q.single_mut() else { return };
@@ -392,6 +404,7 @@ fn drone_fly(
         if impact > CRASH_SPEED {
             // GameplayEvent.Perk.Crash -> GA_DroneCrash -> GA_ExplodePerk
             boom.write(Detonate { at: tf.translation, spec: DRONE_BLAST });
+            snd.write(PlayCue { cue: "/Game/FPV_Drone/Sfx/DroneCrash/DroneCrashBipAndPropellerCut_Cue".into(), dist_cm: 0.0 });
             cmd.entity(e).despawn();
             for l in &lights {
                 cmd.entity(l).despawn();
@@ -411,11 +424,17 @@ fn drone_fly(
     let tilt = d.tilt;
     d.tilt += (target - tilt) * (6.0 * dt).min(1.0);
     tf.rotation = yaw_q * Quat::from_rotation_x(-d.tilt.x) * Quat::from_rotation_z(d.tilt.y);
+    for mut m in &mut motor {
+        let k = d.vel.length() / MAX_SPEED;
+        m.set_speed(0.85 + 0.5 * k);
+        m.set_volume(bevy::audio::Volume::Linear(0.4 + 0.3 * k));
+    }
     // battery: IdleBatteryConsumption + SpeedBatteryConsumptionFactor x speed (cm/s) per second
     perk.battery -= (BATTERY_IDLE + BATTERY_SPEED * d.vel.length() * 100.0) * dt;
     // C: GA_Flashlight toggle
     if keys.just_pressed(KeyCode::KeyC) {
         perk.light = !perk.light;
+        snd.write(PlayCue { cue: "/Game/BodycamWeapons/LowPolyShooterPack/Audio/WAV/Weapons/S_WEP_Flashlight_Click".into(), dist_cm: 0.0 });
         for l in &lights {
             cmd.entity(l).despawn();
         }
