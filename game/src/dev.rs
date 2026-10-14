@@ -4,7 +4,7 @@
 //!   BODYCAM_SCREENSHOT=path[.png]   one shot at BODYCAM_SCREENSHOT_AT (default 0.5), then exit
 //!   BODYCAM_SHOTS="0.5,1,2"         numbered shots <prefix>_1.png.. (prefix = BODYCAM_SCREENSHOT minus .png, default shots/shot), then exit
 //!   BODYCAM_RECORD=dir:fps:secs     frame sequence dir/f_0001.png.. at a fixed sim step of 1/fps, then exit
-//!   BODYCAM_POS=x:z:yaw_deg         place the player after start (yaw 0 = -Z)
+//!   BODYCAM_POS=x:z:yaw_deg[:y]         place the player after start (yaw 0 = -Z)
 //!   BODYCAM_SPEED=N                 virtual time speed multiplier
 use crate::viewmodel::{ArmsRoot, GunRoot};
 use bevy::prelude::*;
@@ -29,11 +29,15 @@ impl Plugin for DevPlugin {
         }
         if let Some(v) = env("BODYCAM_POS") { // x:z:yaw_deg spawn override (after the map's own start)
             let n: Vec<f32> = v.split(':').filter_map(|x| x.parse().ok()).collect();
-            app.add_systems(Update, move |mut f: Local<u32>, mut p: Single<(&mut crate::player::Player, &mut Transform)>| {
-                *f += 1;
-                if *f == 5 && n.len() >= 2 {
-                    p.1.translation = Vec3::new(n[0], 0.0, n[1]);
+            app.add_systems(Update, move |mut f: Local<u32>, map: Option<Res<crate::map::MapState>>, mut p: Single<(&mut crate::player::Player, &mut Transform)>| {
+                *f = f.saturating_add(1);
+                // Real map: wait until its start is applied and the scene settled; the player then drops onto the floor at x:z.
+                let ready = map.as_ref().map_or(*f == 5, |m| m.ready() && *f != u32::MAX);
+                if ready && n.len() >= 2 {
+                    p.1.translation = Vec3::new(n[0], n.get(3).copied().unwrap_or(p.1.translation.y.max(0.0) + if map.is_some() { 1.0 } else { 0.0 }), n[1]);
                     p.0.yaw = n.get(2).copied().unwrap_or(0.0).to_radians();
+                    p.0.vel = Vec3::ZERO;
+                    *f = u32::MAX;
                 }
             });
         }

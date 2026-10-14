@@ -311,6 +311,10 @@ pub fn apply(
     }
     if first && !s.lens_fx {
         fx.enabled = false;
+    } else if prev.as_ref().is_some_and(|p| p.lens_fx != s.lens_fx) {
+        // Live toggle (Settings > Camera): swap the lens stack in/out right away.
+        fx.enabled = s.lens_fx;
+        crate::postfx::apply_enabled(&mut cmd, &fx, cams.iter());
     }
 }
 

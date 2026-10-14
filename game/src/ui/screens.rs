@@ -32,7 +32,44 @@ fn add(cmd: &mut Commands, parent: Entity, b: impl Bundle) -> Entity {
     e
 }
 
+/// The Ki font has no "<" / ">" glyphs worth drawing: the game uses T_UI_ArrowLeft / T_UI_ArrowRight icons instead.
+fn arrow_parts(s: &str) -> Option<Vec<&str>> {
+    if !(s == "<" || s == ">" || s.starts_with("< ") || s.ends_with(" >") || s.contains(" > ")) {
+        return None;
+    }
+    let mut out = vec![];
+    let mut cur = 0;
+    for (i, c) in s.char_indices() {
+        if c == '<' || c == '>' {
+            if i > cur {
+                out.push(s[cur..i].trim());
+            }
+            out.push(&s[i..i + 1]);
+            cur = i + 1;
+        }
+    }
+    if cur < s.len() {
+        out.push(s[cur..].trim());
+    }
+    Some(out.into_iter().filter(|x| !x.is_empty()).collect())
+}
+
 fn txt(cmd: &mut Commands, p: Entity, cx: &BuildCx, s: &str, size: f32, color: Color, w: Wt) -> Entity {
+    if let Some(parts) = arrow_parts(s) {
+        let r = add(cmd, p, Node { column_gap: px(size * 0.3), ..row() });
+        for part in parts {
+            match part {
+                "<" | ">" => {
+                    let a = size.max(36.0) * 0.8;
+                    img(cmd, r, cx, if part == "<" { "T_UI_ArrowLeft" } else { "T_UI_ArrowRight" }, a, a, color);
+                }
+                t => {
+                    txt(cmd, r, cx, t, size, color, w);
+                }
+            }
+        }
+        return r;
+    }
     let font = match w {
         Wt::Medium => &cx.f.medium,
         Wt::Bold => &cx.f.bold,
@@ -157,8 +194,8 @@ fn home(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     txt(cmd, tag, cx, "MAJOR UPDATE", 24.0, Color::WHITE, Wt::Bold);
     let t = txt(cmd, body, cx, "WELCOME TO BODYCAM\nWELCOME TO THE MAJOR UPDATE !", 72.0, Color::WHITE, Wt::Extra);
     cmd.entity(t).insert(Node { margin: UiRect::vertical(px(22)), max_width: px(1300), ..default() });
-    let p = txt(cmd, body, cx, "Thanks for playing. This offline build recreates the first-person player: movement, the bodycam lens, weapons and sounds. Pick PLAY to enter the lobby, the test map or the shooting range, and LOADOUT to choose your guns.", 26.0, GREY, Wt::Medium);
-    cmd.entity(p).insert(Node { max_width: px(900), ..default() });
+    let p = txt(cmd, body, cx, "We've almost rebuilt the game from the ground up.\n\nAll animations have been completely redone and massively expanded. A brand new loadout system has been introduced, featuring hundreds of attachments per weapon along with many new weapons. We've also added new gameplay elements like a drone and an RC car, fully redesigned the sound design and the UI, reworked the lobby map, and introduced a brand new map: Trenches.\n\nThis update marks the beginning of a new phase for Bodycam. Our goal is to make the game even more realistic, more immersive, and to push the boundaries of what a realistic FPS can be.", 22.0, GREY, Wt::Medium);
+    cmd.entity(p).insert(Node { max_width: px(1000), ..default() });
     if cx.ui.news {
         let n = add(cmd, body, (Node { margin: UiRect::top(px(24)), padding: UiRect::all(px(20)), max_width: px(900), ..col() }, BackgroundColor(PANEL)));
         txt(cmd, n, cx, "NEWS", 30.0, RED, Wt::Bold);
@@ -170,12 +207,12 @@ fn home(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
 
 const MODES: [(&str, &str, &str, &str, &str, bool); 8] = [
     ("DEATHMATCH", "The first player to 40 kills wins.", "Solo   1-1   5 Min", "T_UI_BannerDeathmatch", "T_UI_GM_Deathmatch", true),
-    ("GUN GAME", "Kill to upgrade your weapon. First to finish the ladder wins.", "Solo   1-1   10 Min", "T_UI_BannerGunGame", "T_UI_GM_GunGame", true),
-    ("TEAM DEATHMATCH", "Two teams fight for the most kills.", "Teams   5-5   10 Min", "T_UI_BannerTeamDeathmatch", "T_UI_GM_TeamDeathmatch", true),
-    ("HARD POINT", "Hold the moving point to score.", "Teams   5-5   12 Min", "T_UI_BannerHardPoint", "T_UI_GM_Hard_Point", true),
-    ("BODYBOMB", "Plant and defuse the bomb.", "Teams   5-5   Rounds", "T_UI_BannerBodybomb", "T_UI_GM_Bodybomb", true),
-    ("WINGMAN", "Two-player teams on small maps.", "Duo   2-2   8 Min", "T_UI_BannerWingma", "T_UI_GM_Wingman", true),
-    ("VERSUS", "Squad against squad.", "Teams   4-4   10 Min", "T_UI_BannerVersus", "T_UI_GM_Versus", true),
+    ("GUN GAME", "For every 1 kills, the weapon changes. The first to kill with all weapons wins.", "Solo   1-1   10 Min", "T_UI_BannerGunGame", "T_UI_GM_GunGame", true),
+    ("TEAM DEATHMATCH", "Team with the most eliminations at the end of the timer wins", "Teams   5-5   10 Min", "T_UI_BannerTeamDeathmatch", "T_UI_GM_TeamDeathmatch", true),
+    ("HARD POINT", "Stay in the hot zone with your team for as long as possible to win the match.", "Teams   5-5   12 Min", "T_UI_BannerHardPoint", "T_UI_GM_Hard_Point", true),
+    ("BODYBOMB", "One team has a bomb the other has to defuse it.", "Teams   5-5   Rounds", "T_UI_BannerBodybomb", "T_UI_GM_Bodybomb", true),
+    ("WINGMAN", "2v2 bomb defusal Bring your most trusted teammate.", "Duo   2-2   8 Min", "T_UI_BannerWingma", "T_UI_GM_Wingman", true),
+    ("VERSUS", "The last team still alive wins.", "Teams   4-4   10 Min", "T_UI_BannerVersus", "T_UI_GM_Versus", true),
     ("ZOMBIES", "Survive the waves together.", "Co-op   1-4", "T_UI_BannerZombie", "T_UI_GM_Zombies", false),
 ];
 
@@ -190,8 +227,8 @@ fn play(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     cmd.entity(body).insert(BackgroundColor(DARK));
     let (title, sub) = match cx.ui.play_tab {
         0 => ("CASUAL MATCHMAKING", "Jump quickly into fast-paced game modes in PvP or PvPvE."),
-        1 => ("COMPETITIVE", "Ranked matches."),
-        _ => ("HOST SERVERS", "Host your own server."),
+        1 => ("COMPETITIVE", "Play tactical, competitive matches where teamwork decide every round. Climb the ranks with a fully visible Elo system."),
+        _ => ("HOST SERVERS", "Create private matches where you can challenge your friends and define your own rules."),
     };
     header(cmd, body, cx, title, sub);
     if cx.ui.play_tab != 0 {
@@ -448,7 +485,7 @@ fn social(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     img(cmd, l, cx, "T_UI_Leader", 22.0, 22.0, Color::WHITE);
     txt(cmd, l, cx, "Party leader", 22.0, GREY, Wt::Medium);
     txt(cmd, body, cx, "FRIENDS", 40.0, Color::WHITE, Wt::Extra);
-    txt(cmd, body, cx, "Online services are offline: no friends to show.", 26.0, GREY, Wt::Medium);
+    txt(cmd, body, cx, "The Party System is in maintenance. To play with a friend, invite them to your Shooting Range, then HOST a match.", 26.0, GREY, Wt::Medium);
 }
 
 fn credits(cmd: &mut Commands, root: Entity, cx: &BuildCx) {

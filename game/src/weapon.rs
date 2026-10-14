@@ -365,17 +365,49 @@ struct Particle {
 /// Default / SurfaceType2 / 50 = Concrete (Concrete_impact_Dyn + Decals_Concrete), 6/36/37/51 = Wood (Wood_impact_Dyn + Decals_Wood),
 /// 15/16 = Metal (MetalDull/Metal_impact_Dyn2 + Decals_Metal). Other rows fall back to concrete.
 #[derive(Clone, Copy)]
-enum Surf {
-    Concrete,
-    Metal,
-    Wood,
+struct Surf(Option<u8>);
+/// Per-surface impact look (FXMaterialDataTable_GenericBullets rows -> *_impact_Dyn systems).
+// ponytail: emitter counts/speeds are in unparsed distributions; colours/counts are eyeballed per material family.
+struct SurfSpec {
+    /// decals atlas: 0 concrete, 1 metal, 2 wood (Decals_Gen1/Paper/Tiles/Fabric aren't exported: nearest family)
+    decal: usize,
+    dust: Color,
+    dust_n: usize,
+    bit: Color,
+    bits: usize,
+    speed: f32,
+    gravity: f32,
+    sparks: bool,
 }
 impl Surf {
     fn of(surface: Option<u8>) -> Self {
-        match surface {
-            Some(15 | 16) => Surf::Metal,
-            Some(6 | 36 | 37 | 51) => Surf::Wood,
-            _ => Surf::Concrete,
+        Surf(surface)
+    }
+    fn spec(self) -> SurfSpec {
+        let c = |r, g, b| Color::srgb(r, g, b);
+        let s = |decal, dust, dust_n, bit, bits, speed, gravity, sparks| SurfSpec { decal, dust, dust_n, bit, bits, speed, gravity, sparks };
+        match self.0 {
+            // Metal_impact_Dyn2 / MetalDull: sparks, tiny dust
+            Some(16) => s(1, c(0.35, 0.35, 0.35), 2, c(0.9, 0.85, 0.7), 10, 4.5, 9.6, true),
+            Some(15) => s(1, c(0.4, 0.4, 0.4), 3, c(0.9, 0.85, 0.7), 6, 3.5, 9.6, true),
+            // Wood_impact_Dyn: tan dust, splinters
+            Some(6 | 36 | 37 | 51) => s(2, c(0.55, 0.42, 0.28), 3, c(0.45, 0.3, 0.15), 6, 2.5, 10.0, false),
+            Some(35 | 34) => s(2, c(0.35, 0.25, 0.15), 3, c(0.3, 0.2, 0.1), 5, 2.0, 10.0, false),
+            // Glass: bright shards, no dust
+            Some(7) => s(0, c(0.8, 0.85, 0.9), 1, c(0.8, 0.9, 0.95), 12, 3.0, 9.8, false),
+            // Ceramic / tiles: white dust + chips
+            Some(19 | 52) => s(0, c(0.75, 0.74, 0.7), 3, c(0.85, 0.85, 0.82), 8, 3.0, 10.0, false),
+            // Plastic / poly / rubber / carbon: small dark chips, little dust
+            Some(11 | 32 | 14 | 20) => s(0, c(0.25, 0.25, 0.25), 1, c(0.2, 0.2, 0.22), 4, 2.0, 9.8, false),
+            // Fabric / leather: puff only
+            Some(10) => s(0, c(0.45, 0.42, 0.4), 2, c(0.4, 0.38, 0.35), 0, 1.0, 9.8, false),
+            // Paper: white flecks
+            Some(21) => s(0, c(0.8, 0.8, 0.75), 1, c(0.9, 0.9, 0.85), 4, 1.5, 6.0, false),
+            // Brick / rock: red-grey dust, chunky bits
+            Some(23) => s(0, c(0.5, 0.35, 0.3), 4, c(0.55, 0.35, 0.3), 8, 2.5, 10.0, false),
+            Some(17) => s(0, c(0.45, 0.43, 0.4), 4, c(0.5, 0.48, 0.45), 7, 2.5, 10.0, false),
+            // Concrete (Default / SurfaceType2 / 50 and unmapped rows)
+            _ => s(0, c(0.4, 0.38, 0.36), 3, c(0.5, 0.48, 0.45), 6, 2.5, 10.0, false),
         }
     }
 }
@@ -930,11 +962,8 @@ fn impact_fx(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial
         return;
     }
     let mut rng = rand::rng();
-    let (i, dust, bit_col) = match surf {
-        Surf::Concrete => (0, Color::srgb(0.4, 0.38, 0.36), Color::srgb(0.5, 0.48, 0.45)),
-        Surf::Metal => (1, Color::srgb(0.35, 0.35, 0.35), Color::srgb(0.9, 0.85, 0.7)),
-        Surf::Wood => (2, Color::srgb(0.55, 0.42, 0.28), Color::srgb(0.45, 0.3, 0.15)),
-    };
+    let sp = surf.spec();
+    let i = sp.decal;
     let (quads, dmat) = &fx.decals[i];
     cmd.spawn((
         Mesh3d(quads[rng.random_range(0..4)].clone()),
@@ -945,15 +974,12 @@ fn impact_fx(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial
         crate::player::IgnoreTraces,
     ));
     let jitter = |rng: &mut rand::rngs::ThreadRng| Vec3::new(rng.random_range(-1.0..1.0), rng.random_range(-1.0..1.0), rng.random_range(-1.0..1.0));
-    for _ in 0..3 {
-        smoke(cmd, fx, soft, pt + n * 0.02, n * rng.random_range(0.2..0.6) + jitter(&mut rng) * 0.2, 0.06, 0.6, 0.45, dust);
+    for _ in 0..sp.dust_n {
+        smoke(cmd, fx, soft, pt + n * 0.02, n * rng.random_range(0.2..0.6) + jitter(&mut rng) * 0.2, 0.06, 0.6, 0.45, sp.dust);
     }
-    let (count, speed, g) = match surf {
-        Surf::Metal => (8, 4.0, 9.6),
-        _ => (6, 2.5, 10.0),
-    };
+    let (count, speed, g) = (sp.bits, sp.speed, sp.gravity);
     for _ in 0..count {
-        let mat = mats.add(StandardMaterial { base_color: bit_col, emissive: if matches!(surf, Surf::Metal) { LinearRgba::rgb(6.0, 4.0, 1.5) } else { LinearRgba::BLACK }, unlit: matches!(surf, Surf::Metal), ..default() });
+        let mat = mats.add(StandardMaterial { base_color: sp.bit, emissive: if sp.sparks { LinearRgba::rgb(6.0, 4.0, 1.5) } else { LinearRgba::BLACK }, unlit: sp.sparks, ..default() });
         let life = rng.random_range(0.3..0.7);
         cmd.spawn((
             Mesh3d(fx.bit.clone()),
