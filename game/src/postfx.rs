@@ -1,7 +1,5 @@
-//! Bodycam camera look. Bodycam_Player's BodycamBorders: an Engine Plane with FishEye_Inst (LENS_VEIW_05, a
-//! photographed round lens housing, alpha = clear centre) on SpringArmBodycamBorders (arm 23 cm, lag speed 50,
-//! rotation lag 65), scaled 1.70 x 0.806 -> at 120 deg only its centre fills the view: black rounded corners
-//! that trail the camera slightly. Then the player CameraComponent blends M_PP_BodycamMaster (lens distortion driven by
+//! Bodycam camera look. Bodycam_Player's BodycamBorders (a photographed lens-housing plane on a spring arm) is drawn
+//! as a smooth circular corner mask in postfx.wesl instead (the photo's rim was lumpy and off-centre). Then the player CameraComponent blends M_PP_BodycamMaster (lens distortion driven by
 //! MPC_PostProcessMaterialSettings + per-channel chromatic aberration) then MI_PP_DiskBlur (priority 400).
 //! Parameter values are the cooked ones; the node graphs themselves are compiled away, so the maths is
 //! reconstructed. The dark rounded frame edge is the distortion sampling off-screen, not a vignette node.
@@ -104,8 +102,7 @@ impl Plugin for PostFxPlugin {
         embedded_asset!(app, "postfx.wesl");
         app.add_plugins((FullscreenMaterialPlugin::<BodycamPostFx>::default(), AutoExposurePlugin))
             .add_systems(Startup, setup)
-            .add_systems(Update, (attach, toggles, motion_state, apply_fov).chain())
-            .add_systems(PostUpdate, borders_follow.after(bevy::transform::TransformSystems::Propagate));
+            .add_systems(Update, (attach, toggles, motion_state, apply_fov).chain());
     }
 }
 
@@ -147,63 +144,10 @@ fn stack(st: &PostFxState) -> impl Bundle {
     )
 }
 
-fn attach(
-    mut cmd: Commands,
-    st: Res<PostFxState>,
-    q: Query<Entity, Added<BodycamCamera>>,
-    assets: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut mats: ResMut<Assets<StandardMaterial>>,
-) {
+fn attach(mut cmd: Commands, st: Res<PostFxState>, q: Query<Entity, Added<BodycamCamera>>) {
     for e in &q {
         cmd.entity(e).insert(stack(&st));
-        // UE Plane is 100x100 uu; RelativeScale3D 1.699687 x 0.805974 (BordersBaseScale) -> metres.
-        let mat = StandardMaterial {
-            base_color_texture: Some(assets.load("textures/LENS_VEIW_05.png")),
-            // Texture is near-black (rgb ~1,2,3 /255) but auto exposure lifts the dim map ~5 EV, which blew its
-            // faint blue tint up to bright blue corners. Black keeps only the shape (alpha); CA adds the rim colour.
-            base_color: Color::BLACK,
-            alpha_mode: AlphaMode::Blend,
-            unlit: true,
-            ..default()
-        };
-        cmd.spawn((
-            BodycamBorders,
-            Mesh3d(meshes.add(Rectangle::new(1.699687, 0.805974))),
-            MeshMaterial3d(mats.add(mat)),
-            Transform::from_scale(Vec3::new(BORDERS_FIT, BORDERS_FIT, 1.0)),
-            bevy::light::NotShadowCaster,
-            crate::player::IgnoreTraces,
-        ));
     }
-}
-
-#[derive(Component)]
-struct BodycamBorders;
-
-/// Calibration: the cooked FishEye material graph is compiled away, so its UV mapping is unknown. Fitted to in-game
-/// captures, where the housing only shades the screen corners (the raw plane at 23 cm puts them deep in the black);
-/// 1.08 (centred, see BORDERS_CENTRE): user in-game refs show the housing only as a dark arc in the extreme corners.
-const BORDERS_FIT: f32 = 1.08;
-/// LENS_VEIW_05's clear window is off-centre (opaque rim 779 px left / 842 right, 210 top / 191 bottom of 3211 x 1807),
-/// which left only the right corners dark. Shift the plane (m, plane space) so the window centres on the view.
-const BORDERS_CENTRE: Vec2 = Vec2::new(31.5 / 3211.0 * 1.699687 * BORDERS_FIT, 9.5 / 1807.0 * 0.805974 * BORDERS_FIT);
-
-/// SpringArmBodycamBorders: TargetArmLength 23 cm forward, CameraLagSpeed 50, CameraRotationLagSpeed 65
-/// (UE spring-arm lag = exponential interp toward the target each frame).
-fn borders_follow(
-    time: Res<Time>,
-    cam: Single<&GlobalTransform, With<BodycamCamera>>,
-    mut b: Single<&mut Transform, With<BodycamBorders>>,
-    mut lagged: Local<Option<(Vec3, Quat)>>,
-) {
-    let dt = time.delta_secs();
-    let (pos, rot) = (cam.translation(), cam.rotation());
-    let (lp, lr) = lagged.get_or_insert((pos, rot));
-    *lp = lp.lerp(pos, (50.0 * dt).min(1.0));
-    *lr = lr.slerp(rot, (65.0 * dt).min(1.0));
-    b.translation = *lp + *lr * BORDERS_CENTRE.extend(-0.23);
-    b.rotation = *lr;
 }
 
 fn toggles(mut cmd: Commands, keys: Res<ButtonInput<KeyCode>>, mut st: ResMut<PostFxState>, cam: Query<Entity, With<BodycamCamera>>) {
