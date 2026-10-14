@@ -286,7 +286,7 @@ struct Particle {
     age: f32,
     life: f32,
     alpha: f32,
-    mat: Option<Handle<StandardMaterial>>,
+    mat: Option<Handle<crate::soft::SoftMat>>,
     billboard: bool,
 }
 
@@ -659,6 +659,7 @@ fn fire(
     mut targets: Query<(Option<&Name>, Option<&SurfaceMat>, Option<&mut Health>, Has<crate::player::IgnoreTraces>)>,
     fx: Res<FireFx>,
     mut mats: ResMut<Assets<StandardMaterial>>,
+    mut soft: ResMut<Assets<crate::soft::SoftMat>>,
     mut fired: MessageWriter<Fired>,
     mut dry: MessageWriter<DryFire>,
     mut regrip: MessageWriter<Regrip>,
@@ -693,7 +694,7 @@ fn fire(
     if trigger && w.ammo == 0 && mouse.just_pressed(MouseButton::Left) && inv.cooldown <= 0.0 && !inv.busy() && !p.sprinting {
         dry.write(DryFire { row: w.name.clone() });
     }
-    if !trigger || inv.cooldown > 0.0 || inv.busy() || p.sprinting || w.ammo == 0 {
+    if !trigger || inv.cooldown > 0.0 || inv.busy() || p.sprinting || p.dead || w.ammo == 0 {
         return;
     }
     let s = w.stats.clone();
@@ -741,7 +742,7 @@ fn fire(
                 }
             }
             let surf = Surf::of(targets.get(e).ok().and_then(|t| t.1.map(|m| m.0)));
-            impact_fx(&mut cmd, &fx, &mut mats, surf, pt, n);
+            impact_fx(&mut cmd, &fx, &mut mats, &mut soft, surf, pt, n);
             if absorb * mult <= MIN_BULLET_MULT {
                 end = pt; // the trail stops where the bullet does
             }
@@ -758,7 +759,7 @@ fn fire(
         let scale = crate::status::map_range_clamped(s.damage.unwrap_or(30.0), 0.0, 100.0, 0.1, 2.0);
         for _ in 0..2 {
             let v = aim_dir * rng.random_range(0.3..0.8) + Vec3::new(rng.random_range(-0.1..0.1), rng.random_range(0.2..0.5), rng.random_range(-0.1..0.1));
-            smoke(&mut cmd, &fx, &mut mats, origin + aim_dir * 0.05, v, 0.05 + 0.06 * scale, 1.0, 0.18, Color::srgb(0.4, 0.4, 0.4));
+            smoke(&mut cmd, &fx, &mut soft, origin + aim_dir * 0.05, v, 0.05 + 0.06 * scale, 1.0, 0.18, Color::srgb(0.4, 0.4, 0.4));
         }
     }
     // WEP.PullSliderLogic: on the shot, or on the Fire montage's PullSlider notify when Settings.bUsePullSliderNotify.
@@ -775,8 +776,10 @@ fn fire(
 
 /// Camera-facing smoke sprite (whisp_One sheet): grows 1.5x its size per second, alpha fades from `alpha` over `life`.
 #[allow(clippy::too_many_arguments)]
-fn smoke(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial>, at: Vec3, vel: Vec3, size: f32, life: f32, alpha: f32, tint: Color) {
-    let mat = mats.add(StandardMaterial { base_color_texture: Some(fx.smoke.clone()), base_color: tint.with_alpha(alpha), perceptual_roughness: 1.0, reflectance: 0.0, alpha_mode: AlphaMode::Blend, cull_mode: None, ..default() });
+fn smoke(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<crate::soft::SoftMat>, at: Vec3, vel: Vec3, size: f32, life: f32, alpha: f32, tint: Color) {
+    let base = StandardMaterial { base_color_texture: Some(fx.smoke.clone()), base_color: tint.with_alpha(alpha), perceptual_roughness: 1.0, reflectance: 0.0, alpha_mode: AlphaMode::Blend, cull_mode: None, ..default() };
+    // soft particle: fade over ~8 cm (or a third of the sprite) from surfaces behind it
+    let mat = mats.add(crate::soft::SoftMat { base, extension: crate::soft::SoftExt { dist: std::env::var("BODYCAM_SOFT").ok().and_then(|v| v.parse().ok()).unwrap_or((size * 0.5).clamp(0.05, 0.3)) } });
     cmd.spawn((
         Mesh3d(fx.quad.clone()),
         MeshMaterial3d(mat.clone()),
@@ -791,7 +794,7 @@ fn smoke(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial>, a
 /// the row's Concrete/Wood/Metal_impact_Dyn Cascade system. Its emitters (counts/velocities are in unparsed distributions, so
 /// the numbers below are ponytail: guesses): Dust x2 (whisp sprites), debris bits (gravity -1000 cm/s2 for concrete,
 /// Spattering -690), Metal adds Sparks (gravity -960 cm/s2, enabled only in the metal row).
-fn impact_fx(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial>, surf: Surf, pt: Vec3, n: Vec3) {
+fn impact_fx(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial>, soft: &mut Assets<crate::soft::SoftMat>, surf: Surf, pt: Vec3, n: Vec3) {
     if n == Vec3::ZERO {
         return;
     }
@@ -812,7 +815,7 @@ fn impact_fx(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial
     ));
     let jitter = |rng: &mut rand::rngs::ThreadRng| Vec3::new(rng.random_range(-1.0..1.0), rng.random_range(-1.0..1.0), rng.random_range(-1.0..1.0));
     for _ in 0..3 {
-        smoke(cmd, fx, mats, pt + n * 0.02, n * rng.random_range(0.2..0.6) + jitter(&mut rng) * 0.2, 0.06, 0.6, 0.45, dust);
+        smoke(cmd, fx, soft, pt + n * 0.02, n * rng.random_range(0.2..0.6) + jitter(&mut rng) * 0.2, 0.06, 0.6, 0.45, dust);
     }
     let (count, speed, g) = match surf {
         Surf::Metal => (8, 4.0, 9.6),
@@ -832,7 +835,7 @@ fn impact_fx(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial
     }
 }
 
-fn particles(time: Res<Time>, cam: Single<&GlobalTransform, With<BodycamCamera>>, mut mats: ResMut<Assets<StandardMaterial>>, mut q: Query<(&mut Transform, &mut Particle)>) {
+fn particles(time: Res<Time>, cam: Single<&GlobalTransform, With<BodycamCamera>>, mut mats: ResMut<Assets<StandardMaterial>>, mut soft: ResMut<Assets<crate::soft::SoftMat>>, mut q: Query<(&mut Transform, &mut Particle)>) {
     let dt = time.delta_secs();
     for (mut t, mut p) in &mut q {
         p.vel.y -= p.gravity * dt;
@@ -842,8 +845,8 @@ fn particles(time: Res<Time>, cam: Single<&GlobalTransform, With<BodycamCamera>>
         if p.billboard {
             t.rotation = cam.rotation();
         }
-        if let Some(mut m) = p.mat.as_ref().and_then(|h| mats.get_mut(h)) {
-            m.base_color.set_alpha(p.alpha * (1.0 - p.age / p.life).clamp(0.0, 1.0));
+        if let Some(mut m) = p.mat.as_ref().and_then(|h| soft.get_mut(h)) {
+            m.base.base_color.set_alpha(p.alpha * (1.0 - p.age / p.life).clamp(0.0, 1.0));
         }
     }
 }
