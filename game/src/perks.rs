@@ -260,9 +260,6 @@ fn deploy_flow(
                 for mut v in &mut arms_vis {
                     *v = Visibility::Inherited;
                 }
-                for (_, _, _, mut v) in &mut guns {
-                    *v = Visibility::Inherited;
-                }
                 if perk.wants_exit {
                     // crash -> GA_PerkDestruction ... drone already exploded
                 } else {
@@ -390,6 +387,7 @@ fn drone_fly(
     // collision sweep (ray of the move + RADIUS)
     let step = d.vel * dt;
     if let Some((dist, n)) = cast(tf.translation, step, step.length() + RADIUS) {
+        let n = if n.dot(d.vel) > 0.0 { -n } else { n }; // face the surface toward the drone (mesh normals are not reliably outward)
         let impact = -d.vel.dot(n);
         if impact > CRASH_SPEED {
             // GameplayEvent.Perk.Crash -> GA_DroneCrash -> GA_ExplodePerk
@@ -423,7 +421,7 @@ fn drone_fly(
         }
         if perk.light {
             // FlashLight SpotLightComponent: OuterConeAngle 75, AttenuationRadius 3000 cm
-            cmd.spawn((SpotLight { intensity: 900_000.0, range: 30.0, outer_angle: 75f32.to_radians().min(1.35), inner_angle: 35f32.to_radians(), color: Color::srgb(1.0, 0.97, 0.9), shadow_maps_enabled: false, ..default() }, Transform::default(), DroneLight));
+            cmd.spawn((SpotLight { intensity: 120_000.0, range: 30.0, outer_angle: 75f32.to_radians().min(1.35), inner_angle: 35f32.to_radians(), color: Color::srgb(1.0, 0.97, 0.9), shadow_maps_enabled: false, ..default() }, Transform::default(), DroneLight));
         }
     }
 }

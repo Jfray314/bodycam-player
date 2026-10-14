@@ -334,6 +334,15 @@ impl Inventory {
     pub fn busy(&self) -> bool {
         self.action.is_some()
     }
+    /// Tablet LOADOUT: replaces an item slot (explosive / melee / gadget) with another DT_PerkItems row.
+    pub fn set_item(&mut self, slot: usize, w: Option<Weapon>) {
+        if let Some(w) = w
+            && slot < self.slots.len()
+            && self.slots[slot].kind == w.kind
+        {
+            self.slots[slot] = w;
+        }
+    }
     /// Starts an item-use montage on the current slot (items.rs); `next_slot` is irrelevant for non-holster actions.
     pub fn use_item(&mut self, m: Option<Montage>, out: &mut MessageWriter<MontageStarted>) {
         let cur = self.current;

@@ -15,19 +15,37 @@ pub const SLOT_GRENADE: usize = 2;
 pub const SLOT_MELEE: usize = 3;
 pub const SLOT_PERK: usize = 4;
 
-/// assets/items/<Row>.json (tools/weapon_data.py: DT_PerkItems rows with AnimationData). Missing rows are skipped.
-pub fn load_items(cfg: &Settings) -> Vec<Weapon> {
+/// assets/items/<Row>.json (tools/weapon_data.py: DT_PerkItems rows with AnimationData).
+pub fn load_item(row: &str) -> Option<Weapon> {
+    let kind = if row.starts_with("Grenade") {
+        ItemKind::Grenade
+    } else if row == "Kamikaze" {
+        ItemKind::Drone
+    } else {
+        ItemKind::Knife
+    };
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../assets/items");
-    [(&cfg.explosive, ItemKind::Grenade), (&cfg.melee, ItemKind::Knife), (&cfg.gadget, ItemKind::Drone)]
-        .into_iter()
-        .filter_map(|(row, kind)| {
-            let v: Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}/{}.json", row.replace(' ', "_"))).ok()?).ok()?;
-            let mut anims = v["anim_set"].clone();
-            anims["Extra"] = v["extra"].clone();
-            anims["Actor"] = v["actor"].clone();
-            Some(Weapon::item(row, kind, anims))
-        })
-        .collect()
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}/{}.json", row.replace(' ', "_"))).ok()?).ok()?;
+    let mut anims = v["anim_set"].clone();
+    anims["Extra"] = v["extra"].clone();
+    anims["Actor"] = v["actor"].clone();
+    Some(Weapon::item(row, kind, anims))
+}
+
+/// The three item slots of the saved loadout; missing rows are skipped.
+pub fn load_items(cfg: &Settings) -> Vec<Weapon> {
+    [&cfg.explosive, &cfg.melee, &cfg.gadget].into_iter().filter_map(|r| load_item(r)).collect()
+}
+
+/// Tablet names (the M67 label is the loadout screen's: the row is the G67).
+pub fn display_name(row: &str) -> &str {
+    match row {
+        "Grenade G67" => "M67 Frag Grenade",
+        "Grenade Flash" => "Flashbang",
+        "Kamikaze" => "Kamikaze",
+        "Knife" => "Knife",
+        r => r,
+    }
 }
 
 /// BP defaults: Grenade_C (OverhandLaunchSpeed 1600, MaxThrowDistance 1500, ...), G67_C / Flash_C explosion data.
@@ -334,7 +352,7 @@ fn detonate(
     mut ray: MeshRayCast,
     ignore: Query<(), With<IgnoreTraces>>,
     mut targets: Query<(Entity, &GlobalTransform, &mut Health)>,
-    cam: Single<&GlobalTransform, With<BodycamCamera>>,
+    player: Single<&GlobalTransform, With<Player>>,
     mut boom: MessageWriter<Explosion>,
     mut flash: MessageWriter<Flashbang>,
     mut dmg: MessageWriter<PlayerDamage>,
@@ -343,7 +361,7 @@ fn detonate(
     mut mats: ResMut<Assets<StandardMaterial>>,
 ) {
     for d in ev.read() {
-        explode(&mut cmd, d.at, d.spec, &mut ray, &ignore, &mut targets, &cam, &mut boom, &mut flash, &mut dmg, &assets, &blast.0, &mut mats);
+        explode(&mut cmd, d.at, d.spec, &mut ray, &ignore, &mut targets, player.translation() + Vec3::Y * 1.6, &mut boom, &mut flash, &mut dmg, &assets, &blast.0, &mut mats);
     }
 }
 
@@ -355,7 +373,7 @@ fn explode(
     ray: &mut MeshRayCast,
     ignore: &Query<(), With<IgnoreTraces>>,
     targets: &mut Query<(Entity, &GlobalTransform, &mut Health)>,
-    cam: &GlobalTransform,
+    head: Vec3,
     boom: &mut MessageWriter<Explosion>,
     flash: &mut MessageWriter<Flashbang>,
     dmg: &mut MessageWriter<PlayerDamage>,
@@ -390,8 +408,8 @@ fn explode(
     } else {
         flash.write(Flashbang { at });
     }
-    let dp = cam.translation().distance(origin) * 100.0;
-    if !blocked(ray, cam.translation(), ignore, targets) {
+    let dp = head.distance(origin) * 100.0; // the body, not the (drone) camera
+    if !blocked(ray, head, ignore, targets) {
         let f = falloff(dp, inner, outer, exp);
         if f > 0.0 && !flash_gren {
             dmg.write(PlayerDamage(base * f));
