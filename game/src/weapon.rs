@@ -581,6 +581,7 @@ fn muzzle_basis(
     assets: &Assets<Mesh>,
     cam: &GlobalTransform,
     aiming: bool,
+    sights: &mut HashMap<String, Vec3>,
 ) -> (Vec3, Vec3) {
     let cam_fwd = cam.forward().as_vec3();
     let Ok((root, rgt, model)) = gun.single() else { return (cam.translation(), cam_fwd) };
@@ -609,8 +610,40 @@ fn muzzle_basis(
         Some(jt.transform_point(Vec3::new(loc.x, -loc.y, loc.z) * 0.01)) // UE cm -> joint frame (x, -y, z) m
     });
     let origin = fire_loc.unwrap_or_else(|| centre + gun_fwd * (if n > 0.0 { far } else { centre.dot(gun_fwd) } - centre.dot(gun_fwd)));
+    // Aimed: UE fires along the bore (BulletSpawnOrigin pitch), but on our models the eye (AimPoint, on the camera when
+    // aimed) sits ~1-3 deg above the bore-parallel line through the front sight, so shots landed above the post. Fire
+    // with the sight line's pitch instead: eye -> front sight tip (highest vertex on the gun's front half, cached per gun in
+    // root space). It moves with the gun, so recoil/sway still steer the shot.
+    // ponytail: no zeroing; the bullet starts at the muzzle, so holes sit ~sight-height (5-7 cm) under the post.
+    // Pitch only: yaw stays the bore's (UE rule), and the highest vertex can be a front-sight wing beside the post.
+    let mut sight_pitch = None;
+    if aiming && n > 0.0 {
+        let tip = match sights.get(model.0) {
+            Some(t) => Some(*t),
+            None => {
+                let up = cam.up().as_vec3();
+                let mut best: Option<(f32, Vec3)> = None;
+                for e in kids.iter_descendants(root) {
+                    let Ok((gt, m)) = meshes.get(e) else { continue };
+                    let Some(pos) = assets.get(&m.0).and_then(|m| m.attribute(Mesh::ATTRIBUTE_POSITION)).and_then(|a| a.as_float3()) else { continue };
+                    for v in pos {
+                        let w = gt.transform_point(Vec3::from(*v));
+                        if (w - centre).dot(gun_fwd) > 0.0 && best.is_none_or(|b| w.dot(up) > b.0) {
+                            best = Some((w.dot(up), w));
+                        }
+                    }
+                }
+                best.map(|(_, w)| {
+                    let t = rgt.affine().inverse().transform_point3(w);
+                    sights.insert(model.0.to_string(), t);
+                    t
+                })
+            }
+        };
+        sight_pitch = tip.map(|t| (rgt.transform_point(t) - cam.translation()).normalize().y.clamp(-1.0, 1.0).asin());
+    }
     let yaw = (-gun_fwd.x).atan2(-gun_fwd.z);
-    let pitch = if aiming { gun_fwd.y.clamp(-1.0, 1.0).asin() } else { cam_fwd.y.clamp(-1.0, 1.0).asin() };
+    let pitch = if aiming { sight_pitch.unwrap_or(gun_fwd.y.clamp(-1.0, 1.0).asin()) } else { cam_fwd.y.clamp(-1.0, 1.0).asin() };
     (origin, Vec3::new(-yaw.sin() * pitch.cos(), pitch.sin(), -yaw.cos() * pitch.cos()))
 }
 
@@ -628,7 +661,7 @@ fn fire(
     mut dry: MessageWriter<DryFire>,
     mut regrip: MessageWriter<Regrip>,
     (gun, kids, gun_meshes, mesh_assets): (Query<(Entity, &GlobalTransform, &GunRoot)>, Query<&Children>, Query<(&GlobalTransform, &Mesh3d)>, Res<Assets<Mesh>>),
-    (joints, parents): (Query<(Entity, &Name, &GlobalTransform)>, Query<&ChildOf>),
+    (joints, parents, mut sights): (Query<(Entity, &Name, &GlobalTransform)>, Query<&ChildOf>, Local<HashMap<String, Vec3>>),
 ) {
     let (inv, p) = &mut *q;
     inv.cooldown -= time.delta_secs();
@@ -669,7 +702,7 @@ fn fire(
     inv.cooldown = s.fire_rate.unwrap_or(0.1);
 
     let gt = *cam;
-    let (origin, aim_dir) = muzzle_basis(&gun, &joints, &parents, &kids, &gun_meshes, &mesh_assets, gt, p.aiming);
+    let (origin, aim_dir) = muzzle_basis(&gun, &joints, &parents, &kids, &gun_meshes, &mesh_assets, gt, p.aiming, &mut sights);
     debug!("shot dir vs camera: yaw {:.2} pitch {:.2} deg", (aim_dir.cross(*gt.forward()).y).asin().to_degrees(), (aim_dir.y.asin() - gt.forward().y.asin()).to_degrees());
     // SpreadX = max yaw, SpreadY = max pitch (GA_Fire_Base), full angles.
     let (sx, sy) = if p.aiming { (s.spread_aim_x, s.spread_aim_y) } else { (s.spread_hip_x, s.spread_hip_y) };
