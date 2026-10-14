@@ -139,6 +139,8 @@ pub struct Player {
     pub pitch: f32,
     pub vel: Vec3,
     pub grounded: bool,
+    /// effects.rs death: input is ignored.
+    pub dead: bool,
     pub crouched: bool,
     pub sprinting: bool,
     pub aiming: bool,
@@ -244,6 +246,9 @@ impl CtlRecoil {
 
 fn look(time: Res<Time>, motion: Res<AccumulatedMouseMotion>, mouse: Res<ButtonInput<MouseButton>>, cursor: Single<&CursorOptions>, mut q: Single<&mut Player>) {
     let p = &mut **q;
+    if p.dead {
+        return;
+    }
     let d = if cursor.grab_mode == CursorGrabMode::Locked { motion.delta } else { Vec2::ZERO };
     let input = Vec2::new(d.x, -d.y) * SENS.to_degrees(); // same sign convention as the recoil step
     let step = p.ctl_recoil.tick(time.delta_secs(), input, mouse.pressed(MouseButton::Left));
@@ -323,6 +328,8 @@ fn movement(
     grid: Option<Res<crate::grid::Colliders>>,
 ) {
     let (p, tf) = &mut *q;
+    let none = ButtonInput::<KeyCode>::default();
+    let keys = if p.dead { &none } else { &*keys }; // dead: no input
     if map.as_ref().is_some_and(|m| !m.ready()) {
         return; // level still spawning: hold the player so they do not fall through unloaded geometry
     }
@@ -464,7 +471,7 @@ fn lean(
 }
 
 /// AC_BodycamCamera replacement: measured idle pose + gait loops + land event + lean, on the chest mount.
-fn bodycam_camera(time: Res<Time>, cm: Res<CameraMotion>, mut player: Single<&mut Player>, mut cam: Single<&mut Transform, With<BodycamCamera>>, mut steps: MessageWriter<Footstep>) {
+pub(crate) fn bodycam_camera(time: Res<Time>, cm: Res<CameraMotion>, mut player: Single<&mut Player>, mut cam: Single<&mut Transform, With<BodycamCamera>>, mut steps: MessageWriter<Footstep>) {
     let p = &mut **player;
     let dt = time.delta_secs();
     let target_center = if p.crouched { CROUCH_HALF_HEIGHT } else { HALF_HEIGHT };

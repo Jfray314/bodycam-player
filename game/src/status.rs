@@ -119,8 +119,6 @@ fn stress_sources(
     mut fired: MessageReader<crate::weapon::Fired>,
     mut whiz: MessageReader<BulletFly>,
     mut dmg: MessageReader<PlayerDamage>,
-    mut dead_for: Local<f32>,
-    time: Res<Time>,
 ) {
     for f in fired.read() {
         s.increase_stress(fire_stress(f.fire_rate));
@@ -130,15 +128,6 @@ fn stress_sources(
     }
     for d in dmg.read() {
         s.health -= d.0;
-    }
-    // Test-bench death: no ragdoll/respawn flow ported, so just refill after 3 s.
-    if s.health <= 0.0 {
-        *dead_for += time.delta_secs();
-        if *dead_for > 3.0 {
-            *dead_for = 0.0;
-            s.health = s.health_max;
-            s.stress = 0.1;
-        }
     }
 }
 

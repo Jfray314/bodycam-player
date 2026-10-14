@@ -2,6 +2,7 @@ mod audio;
 mod body;
 mod camadjust;
 mod curve;
+mod effects;
 mod dev;
 mod bots;
 mod grid;
@@ -29,6 +30,7 @@ fn main() {
         }))
         .add_plugins(body::BodyPlugin)
         .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, sway::SwayPlugin, recoil::RecoilPlugin, map::MapPlugin, gunfight::GunfightPlugin, grid::GridPlugin, bots::BotsPlugin, camadjust::CamAdjustPlugin, dev::DevPlugin))
+        .add_plugins(effects::EffectsPlugin)
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
         .add_systems(Startup, test_range.run_if(|| !map::available()))
         .run();
