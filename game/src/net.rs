@@ -201,10 +201,6 @@ pub struct RemoteState {
 /// Damageable collision shapes of a remote player (excluded from the host's world occlusion ray).
 #[derive(Component)]
 struct RemoteBody;
-#[derive(Component)]
-struct RemoteVis {
-    pivot: Entity,
-}
 
 pub struct NetPlugin;
 impl Plugin for NetPlugin {
@@ -510,6 +506,7 @@ fn apply(
     mut ray: MeshRayCast,
     ignore: Query<(), With<IgnoreTraces>>,
     body: Query<(), With<RemoteBody>>,
+    mut chars: Query<&mut crate::character::CharacterState>,
 ) {
     let now = time.elapsed_secs();
     let tnow = time.elapsed_secs_f64();
@@ -522,6 +519,9 @@ fn apply(
             Ev::Fire { row, supp, origin, dirs } => {
                 let origin = Vec3::from(*origin);
                 let dirs: Vec<Vec3> = dirs.iter().map(|d| Vec3::from(*d)).collect();
+                if let Some(mut c) = net.others.get(from).and_then(|o| o.ent).and_then(|e| chars.get_mut(e).ok()) {
+                    c.fired += 1; // 3P muzzle flash + kick
+                }
                 if *from != my_id {
                     let d_cm = (my_pos + Vec3::Y * 1.6).distance(origin) * 100.0;
                     sfx.write(RemoteSfx { row: row.clone(), kind: if *supp { "FireSuppressed" } else { "Fire" }, dist_cm: d_cm });
@@ -783,20 +783,12 @@ fn tick(
     }
 }
 
-/// THE place where wire state becomes a visual: spawn.
-// ponytail: capsule + gun block placeholder; swap for character::spawn_character(...) after the builder's merge.
+/// THE place where wire state becomes a visual: spawn a third-person character (character.rs) + an invisible hit capsule.
 fn spawn_visual(cmd: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut Assets<StandardMaterial>, id: u8) -> Entity {
-    let hue = (id as f32 * 47.0) % 360.0;
-    let col = Color::hsl(hue, 0.7, 0.5);
-    let body_mat = mats.add(StandardMaterial { base_color: col, perceptual_roughness: 0.8, ..default() });
-    let dark = mats.add(StandardMaterial { base_color: Color::srgb(0.08, 0.08, 0.08), ..default() });
-    let pivot = cmd.spawn((Transform::from_xyz(0.0, 1.5, 0.0), Visibility::default())).id();
-    let gun = cmd.spawn((Mesh3d(meshes.add(Cuboid::new(0.08, 0.1, 0.7))), MeshMaterial3d(dark), Transform::from_xyz(0.2, -0.25, -0.45))).id();
-    let head = cmd.spawn((Mesh3d(meshes.add(Sphere::new(0.12))), MeshMaterial3d(body_mat.clone()), Transform::from_xyz(0.0, 0.0, 0.0))).id();
-    cmd.entity(pivot).add_children(&[gun, head]);
-    let capsule = cmd.spawn((Mesh3d(meshes.add(Capsule3d::new(0.3, 1.2))), MeshMaterial3d(body_mat), Transform::from_xyz(0.0, 0.9, 0.0), RemoteBody, Health(1.0e9))).id();
-    let root = cmd.spawn((Transform::default(), Visibility::default(), RemoteVis { pivot }, RemoteState { id, ..default() })).id();
-    cmd.entity(root).add_children(&[capsule, pivot]);
+    let clear = mats.add(StandardMaterial { base_color: Color::srgba(0.0, 0.0, 0.0, 0.0), alpha_mode: AlphaMode::Blend, ..default() });
+    let root = crate::character::spawn_character(cmd, Transform::default(), crate::character::CharacterState::default());
+    let capsule = cmd.spawn((Mesh3d(meshes.add(Capsule3d::new(0.3, 1.2))), MeshMaterial3d(clear), Transform::from_xyz(0.0, 0.9, 0.0), RemoteBody, Health(1.0e9))).id();
+    cmd.entity(root).insert(RemoteState { id, ..default() }).add_child(capsule);
     root
 }
 
@@ -812,22 +804,20 @@ fn sync_remotes(mut cmd: Commands, mut net: ResMut<Net>, mut meshes: ResMut<Asse
     }
 }
 
-/// Interpolates every remote ~100 ms behind and maps `RemoteState` onto the visual (second half of the one mapping spot).
-fn drive_remotes(net: Res<Net>, time: Res<Time>, mut q: Query<(&mut Transform, &mut RemoteState, &RemoteVis)>, mut tfs: Query<&mut Transform, Without<RemoteVis>>) {
+/// Interpolates every remote ~100 ms behind and maps `RemoteState` onto the character (second half of the one mapping spot).
+fn drive_remotes(net: Res<Net>, time: Res<Time>, mut q: Query<(&mut Transform, &mut RemoteState, &mut crate::character::CharacterState)>) {
     let t = time.elapsed_secs_f64() - INTERP;
-    let dt = time.delta_secs();
     for o in net.others.values() {
         let Some(ent) = o.ent else { continue };
         let Some(s) = sample(&o.buf, t) else { continue };
-        let Ok((mut tf, mut rs, vis)) = q.get_mut(ent) else { continue };
+        let Ok((mut tf, mut rs, mut cs)) = q.get_mut(ent) else { continue };
         *rs = RemoteState { id: rs.id, pos: Vec3::from(s.pos), yaw: s.yaw, pitch: s.pitch, vel: Vec3::from(s.vel), crouch: s.crouch, lean: s.lean, aiming: s.aiming, dead: s.dead, item: s.item, atts: s.atts };
-        let k = (dt * 12.0).min(1.0);
         tf.translation = rs.pos;
-        tf.rotation = Quat::from_rotation_y(rs.yaw) * if rs.dead { Quat::from_rotation_z(1.4) } else { Quat::from_rotation_z(-rs.lean * 0.3) };
-        let sy = if rs.crouch { 0.65 } else { 1.0 };
-        tf.scale.y += (sy - tf.scale.y) * k;
-        if let Ok(mut p) = tfs.get_mut(vis.pivot) {
-            p.rotation = Quat::from_rotation_x(rs.pitch);
+        tf.rotation = Quat::from_rotation_y(rs.yaw);
+        (cs.pitch, cs.vel, cs.crouched, cs.lean, cs.aiming, cs.dead) = (rs.pitch, rs.vel, rs.crouch, rs.lean, rs.aiming, rs.dead);
+        cs.sprinting = rs.vel.xz().length() > 4.0;
+        if cs.item != rs.item {
+            cs.item = rs.item.clone();
         }
     }
 }
