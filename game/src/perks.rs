@@ -340,6 +340,7 @@ fn drone_fly(
     ignore: Query<(), With<IgnoreTraces>>,
     lights: Query<Entity, With<DroneLight>>,
     mut boom: MessageWriter<Detonate>,
+    mut crashed: MessageWriter<crate::items::DroneCrashed>,
     mut snd: MessageWriter<PlayCue>,
     mut motor: Query<&mut AudioSink, With<Motor>>,
 ) {
@@ -407,6 +408,7 @@ fn drone_fly(
         if impact > CRASH_SPEED {
             // GameplayEvent.Perk.Crash -> GA_DroneCrash -> GA_ExplodePerk
             boom.write(Detonate { at: tf.translation, spec: DRONE_BLAST });
+            crashed.write(crate::items::DroneCrashed { at: tf.translation });
             snd.write(PlayCue { cue: "/Game/FPV_Drone/Sfx/DroneCrash/DroneCrashBipAndPropellerCut_Cue".into(), dist_cm: 0.0 });
             cmd.entity(e).despawn();
             for l in &lights {

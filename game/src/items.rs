@@ -57,9 +57,9 @@ const MAX_THROW_DIST: f32 = 15.0;
 const G: f32 = 9.8;
 const THROW_DELAY: f32 = 0.2; // Grenade_C.Throw: Delay 0.2 before the physics impulse
 const FUSE: f32 = 3.0; // DT_GrenadeInfo FuseDelay (counted from the Throw event, which fires before the 0.2 s delay)
-const KNIFE_RANGE: f32 = 1.25; // Knife_C.CloseAttackRange 125 cm
-const KNIFE_RADIUS: f32 = 0.5; // sphere trace radius 50 cm
-const KNIFE_DAMAGE: f32 = 100.0; // GE_KnifeStat_Default Damage
+pub const KNIFE_RANGE: f32 = 1.25; // Knife_C.CloseAttackRange 125 cm
+pub const KNIFE_RADIUS: f32 = 0.5; // sphere trace radius 50 cm
+pub const KNIFE_DAMAGE: f32 = 100.0; // GE_KnifeStat_Default Damage
 
 /// RadialDamageWithFalloff(Base, Inner, Outer, Exponent): full damage inside Inner, 0 beyond Outer, power falloff between (cm).
 // ponytail: BFL_Explosion.RadialDamageWithFalloff body is not decompiled; this is UE's ApplyRadialDamageWithFalloff shape.
@@ -113,6 +113,19 @@ pub struct Thrown {
     pub start: Vec3,
     pub vel: Vec3,
     pub flash: bool,
+}
+
+/// The local player swung the knife from `origin` along `dir` (net.rs: host resolves hits on other players).
+#[derive(Message)]
+pub struct Melee {
+    pub origin: Vec3,
+    pub dir: Vec3,
+}
+
+/// The local player's drone crashed at `at` (net.rs replicates the blast).
+#[derive(Message)]
+pub struct DroneCrashed {
+    pub at: Vec3,
 }
 
 pub fn spawn_grenade(cmd: &mut Commands, assets: &AssetServer, start: Vec3, vel: Vec3, flash: bool) {
@@ -192,7 +205,7 @@ struct BlastMesh(Handle<Mesh>);
 pub struct ItemsPlugin;
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Items>().add_message::<Detonate>().add_message::<Thrown>().add_message::<PlayCue>().add_systems(Startup, |mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>| cmd.insert_resource(BlastMesh(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())))).add_systems(Update, (grenade_input, knife_input, projectiles, detonate, blasts, tag_meshes, drop_pickup).chain());
+        app.init_resource::<Items>().add_message::<Detonate>().add_message::<Thrown>().add_message::<Melee>().add_message::<DroneCrashed>().add_message::<PlayCue>().add_systems(Startup, |mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>| cmd.insert_resource(BlastMesh(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())))).add_systems(Update, (grenade_input, knife_input, projectiles, detonate, blasts, tag_meshes, drop_pickup).chain());
     }
 }
 
@@ -499,6 +512,7 @@ fn knife_input(
     ignore: Query<(), With<IgnoreTraces>>,
     mut out: MessageWriter<MontageStarted>,
     mut snd: MessageWriter<PlayCue>,
+    mut melee: MessageWriter<Melee>,
 ) {
     let dt = time.delta_secs();
     if perk.locked() {
@@ -546,6 +560,7 @@ fn knife_input(
         inv.use_item(m, &mut out);
         // Knife_C.CloseRangeAttack: SphereTrace 50 cm from the camera 125 cm ahead -> GE_Knife_Damage (100, bone multiplier).
         let (o, d) = (cam.translation(), cam.forward().as_vec3());
+        melee.write(Melee { origin: o, dir: d });
         let best = targets
             .iter()
             .filter_map(|(e, t, _, n)| {

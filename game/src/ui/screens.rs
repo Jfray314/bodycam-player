@@ -176,6 +176,7 @@ pub fn build(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
         Screen::Settings => settings_screen(cmd, root, cx),
         Screen::Social => social(cmd, root, cx),
         Screen::Credits => credits(cmd, root, cx),
+        Screen::Scoreboard => scoreboard(cmd, root, cx),
     }
     // Toast line at the bottom.
     if !cx.ui.toast.0.is_empty() {
@@ -400,6 +401,22 @@ fn weapon(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     }
 }
 
+/// W_ScoreboardSubmenu stand-in: deathmatch table (kills / deaths), first to 40 wins (DA_GameModeDeathmatch).
+fn scoreboard(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
+    let body = frame(cmd, root, cx, "[ESC] BACK", None, &[], 0, &|_| Act::Noop);
+    cmd.entity(body).insert(BackgroundColor(DARK));
+    header(cmd, body, cx, "DEATHMATCH", "First to 40 kills wins.");
+    let rows = crate::net::SCORES.lock().map(|t| t.clone()).unwrap_or_default();
+    let me = crate::net::MY_ID.load(std::sync::atomic::Ordering::Relaxed);
+    if rows.is_empty() {
+        txt(cmd, body, cx, "No kills yet.", 28.0, Color::WHITE, Wt::Medium);
+    }
+    for (id, k, d) in rows {
+        let who = if id == me { "YOU".to_string() } else { format!("PLAYER {id}") };
+        txt(cmd, body, cx, &format!("{who}    {k} kills    {d} deaths"), 30.0, if id == me { GREEN } else { Color::WHITE }, Wt::Bold);
+    }
+}
+
 fn menu(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     let body = frame(cmd, root, cx, "[ESC] BACK", None, &[], 0, &|_| Act::Noop);
     cmd.entity(body).insert(BackgroundColor(DARK));
@@ -411,6 +428,7 @@ fn menu(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
         ("EXIT GAME", "T_UI_ExitIcon", Act::Exit),
         ("REPORT BUG", "T_UI_Bug", Act::Toast("Bug reports are sent online: offline.".into())),
         ("FEATURES UPVOTE", "T_UI_Vote", Act::Toast("Feature voting is online only.".into())),
+        ("SCOREBOARD", "T_UI_Leader", Act::Push(Screen::Scoreboard)),
         ("CREDITS", "T_UI_Leader", Act::Push(Screen::Credits)),
     ] {
         let t = button(cmd, grid, Node { width: px(400), height: px(260), flex_direction: FlexDirection::Column, justify_content: JustifyContent::Center, align_items: AlignItems::Center, row_gap: px(18), ..default() }, act, None, PANEL, PANEL_HOVER, Some(Color::srgb(0.2, 0.2, 0.22)));

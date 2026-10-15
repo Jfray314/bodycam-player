@@ -5,6 +5,7 @@
 //! Start: env BODYCAM_HOST=port, BODYCAM_JOIN=ip[:port], or the tablet PLAY > HOST SERVERS screen (`Connect`).
 // ponytail: no NAT traversal (forward the UDP port), no lag compensation beyond a fixed 100 ms rewind, host trusts client positions,
 // grenade blast damage on clients is applied by the victim's own simulation, a hit is a capsule test + one world ray (no penetration).
+use crate::items::{KNIFE_DAMAGE, KNIFE_RADIUS, KNIFE_RANGE};
 use crate::audio::{PlayCue, RemoteSfx};
 use crate::player::{IgnoreTraces, Player};
 use crate::status::{PlayerDamage, SurvivorStatus};
@@ -20,7 +21,13 @@ pub const PORT: u16 = 7777;
 const SEND_DT: f32 = 1.0 / 30.0;
 const INTERP: f64 = 0.1;
 const TIMEOUT: f32 = 6.0;
-const MAX_PLAYERS: u8 = 8;
+/// DA_GameModeDeathmatch: TeamConfig.MaxPlayers 7, ScoringConfig.ScoreLimit 40 (a kill = 1 point).
+const MAX_PLAYERS: u8 = 7;
+const SCORE_LIMIT: u32 = 40;
+
+/// Deathmatch table for the tablet scoreboard: (player id, kills, deaths), best first; my id.
+pub static SCORES: std::sync::Mutex<Vec<(u8, u32, u32)>> = std::sync::Mutex::new(Vec::new());
+pub static MY_ID: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 const FIRE_RANGE: f32 = 5000.0;
 const KILL_CREDIT_S: f32 = 10.0;
 
@@ -54,6 +61,10 @@ pub enum Ev {
     /// Reload / mag check / draw ... : the montage's sound notifies (seconds from now, cue).
     Sounds(Vec<(f32, String)>),
     Grenade { start: [f32; 3], vel: [f32; 3], flash: bool },
+    /// Knife swing (host resolves the hit).
+    Melee { origin: [f32; 3], dir: [f32; 3] },
+    /// Drone crash blast.
+    Blast { at: [f32; 3] },
     /// Host -> victim: apply damage (from = attacker).
     Damage(f32),
     Kill { killer: u8, victim: u8 },
@@ -76,6 +87,10 @@ pub struct Pkt {
     pub ack: u32,
     /// (event id, originating player, event) not yet acked.
     pub evs: Vec<(u32, u8, Ev)>,
+    /// Lag compensation clock: sender time, echo of the peer's last `ts`, sender's measured round trip.
+    pub ts: f32,
+    pub echo: f32,
+    pub rtt: f32,
     pub body: Body,
 }
 
@@ -102,7 +117,7 @@ impl Link {
         }
     }
     fn pkt(&self, from: u8, body: Body) -> Pkt {
-        Pkt { magic: MAGIC, from, ack: self.got, evs: self.out.clone(), body }
+        Pkt { magic: MAGIC, from, ack: self.got, evs: self.out.clone(), ts: 0.0, echo: 0.0, rtt: 0.0, body }
     }
     /// Drops acked events; returns the newly received in-order ones.
     fn recv(&mut self, p: &Pkt) -> Vec<(u8, Ev)> {
@@ -128,10 +143,13 @@ struct Other {
     last_by: Option<(u8, f32)>,
     dead: bool,
     ent: Option<Entity>,
+    /// Host: peer's last `ts` (echoed back) and its reported round trip.
+    last_ts: f32,
+    rtt: f32,
 }
 impl Other {
     fn new(addr: Option<SocketAddr>, now: f32) -> Self {
-        Other { addr, link: Link::default(), seen: now, buf: VecDeque::new(), hp: 100.0, last_by: None, dead: false, ent: None }
+        Other { addr, link: Link::default(), seen: now, buf: VecDeque::new(), hp: 100.0, last_by: None, dead: false, ent: None, last_ts: 0.0, rtt: 0.0 }
     }
 }
 
@@ -152,6 +170,9 @@ struct Net {
     snd: Vec<(f32, String, u8)>,
     host_dead: bool,
     host_last_by: Option<(u8, f32)>,
+    /// Client: measured round trip. Host: own recent positions (time, feet, crouch) for lag compensation.
+    rtt: f32,
+    hist: VecDeque<(f64, Vec3, bool)>,
 }
 
 /// A packet's events, delivered to `apply` (also the host's own events, from = 0).
@@ -248,6 +269,8 @@ fn connect(mut cmd: Commands, mut ev: MessageReader<Connect>, net: Option<Res<Ne
                 snd: vec![],
                 host_dead: false,
                 host_last_by: None,
+                rtt: 0.0,
+                hist: VecDeque::new(),
             });
         }
         Err(e) => warn!("net: {e}"),
@@ -284,20 +307,21 @@ fn recv(mut net: ResMut<Net>, time: Res<Time>, mut out: MessageWriter<NetEv>) {
                     let known = net.others.iter().find(|(_, o)| o.addr == Some(addr)).map(|(i, _)| *i);
                     let id = known.or_else(|| (1..MAX_PLAYERS).find(|i| !net.others.contains_key(i)));
                     let Some(id) = id else {
-                        send(net, addr, &Pkt { magic: MAGIC, from: 0, ack: 0, evs: vec![], body: Body::Bye });
+                        send(net, addr, &Pkt { magic: MAGIC, from: 0, ack: 0, evs: vec![], ts: 0.0, echo: 0.0, rtt: 0.0, body: Body::Bye });
                         continue;
                     };
                     if known.is_none() {
                         info!("net: player {id} joined from {addr}");
                         net.others.insert(id, Other::new(Some(addr), now));
                     }
-                    send(net, addr, &Pkt { magic: MAGIC, from: 0, ack: 0, evs: vec![], body: Body::Welcome { id, map: net.map.clone() } });
+                    send(net, addr, &Pkt { magic: MAGIC, from: 0, ack: 0, evs: vec![], ts: 0.0, echo: 0.0, rtt: 0.0, body: Body::Welcome { id, map: net.map.clone() } });
                     continue;
                 }
                 _ => p.from,
             };
             let Some(o) = net.others.get_mut(&id).filter(|o| o.addr == Some(addr)) else { continue };
             o.seen = now;
+            (o.last_ts, o.rtt) = (p.ts, p.rtt.clamp(0.0, 1.0));
             let evs = o.link.recv(&p);
             match p.body {
                 Body::State(s) => {
@@ -342,6 +366,7 @@ fn recv(mut net: ResMut<Net>, time: Res<Time>, mut out: MessageWriter<NetEv>) {
                     if !net.joined {
                         net.joined = true;
                         net.id = *id;
+                        MY_ID.store(*id, std::sync::atomic::Ordering::Relaxed);
                         net.map = map.clone();
                         info!("net: joined as player {id} (map '{map}')");
                         if map != map_name() && std::env::var("BODYCAM_RELAUNCHED").is_err() {
@@ -373,6 +398,9 @@ fn recv(mut net: ResMut<Net>, time: Res<Time>, mut out: MessageWriter<NetEv>) {
                 }
                 _ => {}
             }
+            if p.echo > 0.0 {
+                net.rtt = (now - p.echo).clamp(0.0, 1.0);
+            }
             let evs = net.up.as_mut().map(|(_, l)| l.recv(&p)).unwrap_or_default();
             for (from, ev) in evs {
                 out.write(NetEv { from, ev });
@@ -387,6 +415,8 @@ fn local_events(
     mut fired: MessageReader<Fired>,
     mut mont: MessageReader<MontageStarted>,
     mut thrown: MessageReader<crate::items::Thrown>,
+    mut melee: MessageReader<crate::items::Melee>,
+    mut crashed: MessageReader<crate::items::DroneCrashed>,
     mut out: MessageWriter<NetEv>,
 ) {
     let net = &mut *net;
@@ -408,12 +438,18 @@ fn local_events(
     for t in thrown.read() {
         evs.push(Ev::Grenade { start: t.start.to_array(), vel: t.vel.to_array(), flash: t.flash });
     }
+    for m in melee.read() {
+        evs.push(Ev::Melee { origin: m.origin.to_array(), dir: m.dir.to_array() });
+    }
+    for c in crashed.read() {
+        evs.push(Ev::Blast { at: c.at.to_array() });
+    }
     for ev in evs {
         if net.host {
             for o in net.others.values_mut() {
                 o.link.push(id, ev.clone());
             }
-            if matches!(ev, Ev::Fire { .. }) {
+            if matches!(ev, Ev::Fire { .. } | Ev::Melee { .. }) {
                 out.write(NetEv { from: id, ev });
             }
         } else if let Some((_, l)) = net.up.as_mut() {
@@ -468,6 +504,7 @@ fn apply(
     mut shots: MessageWriter<RemoteShot>,
     mut sfx: MessageWriter<RemoteSfx>,
     mut dmg: MessageWriter<PlayerDamage>,
+    mut blast: MessageWriter<crate::items::Detonate>,
     mut st: ResMut<SurvivorStatus>,
     me: Single<(&Transform, &Player)>,
     mut ray: MeshRayCast,
@@ -493,12 +530,8 @@ fn apply(
                 if !net.host || (*from != my_id && origin.distance(from_pos(net) + Vec3::Y * 1.6) > 4.0) {
                     continue;
                 }
-                // Host: resolve the hit. Targets = every other player (rewound 100 ms for remotes) + the host's own body.
                 let dmg_base = net.stats.get(row).and_then(|s| s.damage).unwrap_or(30.0);
-                let mut targets: Vec<(u8, Vec3, bool)> = net.others.iter().filter(|(i, o)| **i != *from && !o.dead).filter_map(|(i, o)| Some((*i, Vec3::from(sample(&o.buf, tnow - INTERP)?.pos), o.buf.back()?.1.crouch))).collect();
-                if *from != 0 && !st.health.is_nan() && st.health > 0.0 {
-                    targets.push((0, my_pos, me.1.crouched));
-                }
+                let targets = targets_at(net, *from, tnow, my_pos, me.1.crouched, st.health > 0.0);
                 for dir in &dirs {
                     let Ok(d3) = Dir3::new(*dir) else { continue };
                     let filter = |e: Entity| !ignore.contains(e) && !body.contains(e);
@@ -513,15 +546,34 @@ fn apply(
                     let Some((victim, _, frac)) = best else { continue };
                     let bone = if frac < 0.5 { "thigh" } else if frac < 0.72 { "spine_01" } else if frac < 0.85 { "spine_02" } else { "head" };
                     let amount = dmg_base * crate::weapon::bone_multiplier(bone);
-                    info!("net: player {from} hit player {victim} ({bone}) for {amount:.0}");
-                    if victim == 0 {
-                        dmg.write(PlayerDamage(amount));
-                        net.host_last_by = Some((*from, now));
-                    } else if let Some(o) = net.others.get_mut(&victim) {
-                        o.hp -= amount;
-                        o.last_by = Some((*from, now));
-                        o.link.push(*from, Ev::Damage(amount));
+                    deal(net, &mut dmg, *from, victim, amount, now, bone);
+                }
+            }
+            Ev::Melee { origin, dir } => {
+                if net.host {
+                    let (o, d) = (Vec3::from(*origin), Vec3::from(*dir));
+                    let targets = targets_at(net, *from, tnow, my_pos, me.1.crouched, st.health > 0.0);
+                    let best = targets
+                        .iter()
+                        .filter_map(|(i, feet, crouch)| {
+                            let h = if *crouch { 1.15 } else { 1.8 };
+                            let mid = *feet + Vec3::Y * h * 0.6;
+                            let v = mid - o;
+                            let along = v.dot(d);
+                            let perp = (v - d * along.clamp(0.0, KNIFE_RANGE)).length();
+                            (along > -KNIFE_RADIUS && perp <= KNIFE_RADIUS + 0.3).then_some((*i, along))
+                        })
+                        .min_by(|a, b| a.1.total_cmp(&b.1));
+                    let wall = Dir3::new(d).ok().and_then(|dir| ray.cast_ray(Ray3d::new(o, dir), &MeshRayCastSettings::default().with_filter(&|e: Entity| !ignore.contains(e) && !body.contains(e))).first().map(|(_, h)| h.distance));
+                    if let Some((victim, along)) = best && wall.is_none_or(|w| w > along.max(0.0) - 0.05) {
+                        deal(net, &mut dmg, *from, victim, KNIFE_DAMAGE, now, "melee");
                     }
+                }
+            }
+            Ev::Blast { at } => {
+                info!("net: player {from} drone blast");
+                if *from != my_id {
+                    blast.write(crate::items::Detonate { at: Vec3::from(*at), spec: crate::items::DRONE_BLAST });
                 }
             }
             Ev::Sounds(list) => {
@@ -530,6 +582,7 @@ fn apply(
                 }
             }
             Ev::Grenade { start, vel, flash } => {
+                info!("net: player {from} threw a grenade");
                 if *from != my_id {
                     crate::items::spawn_grenade(&mut cmd, &assets, Vec3::from(*start), Vec3::from(*vel), *flash);
                 }
@@ -539,11 +592,52 @@ fn apply(
             }
             Ev::Kill { killer, victim } => {
                 info!("kill feed: player {killer} killed player {victim}");
+                if let Ok(mut t) = SCORES.lock() {
+                    let mut bump = |id: u8, k: u32, d: u32| match t.iter_mut().find(|r| r.0 == id) {
+                        Some(r) => (r.1, r.2) = (r.1 + k, r.2 + d),
+                        None => t.push((id, k, d)),
+                    };
+                    if *killer != 255 && killer != victim {
+                        bump(*killer, 1, 0);
+                    }
+                    bump(*victim, 0, 1);
+                    t.sort_by_key(|r| std::cmp::Reverse(r.1));
+                    if t.first().is_some_and(|r| r.1 >= SCORE_LIMIT) {
+                        info!("match over: player {} reached the score limit {SCORE_LIMIT}", t[0].0);
+                        t.clear(); // next match
+                    }
+                }
                 if *victim == my_id {
                     st.health = st.health.min(0.0);
                 }
             }
         }
+    }
+}
+
+/// Everyone `from` can hit, positioned where `from` saw them: lag compensation = interpolation delay + its round trip, read from
+/// the per-peer state buffers (clients) and the host's own position history.
+fn targets_at(net: &Net, from: u8, tnow: f64, my_pos: Vec3, my_crouch: bool, host_alive: bool) -> Vec<(u8, Vec3, bool)> {
+    let back = INTERP + if from == net.id { 0.0 } else { net.others.get(&from).map_or(0.0, |o| o.rtt) as f64 };
+    let tt = tnow - back;
+    let mut t: Vec<_> = net.others.iter().filter(|(i, o)| **i != from && !o.dead).filter_map(|(i, o)| Some((*i, Vec3::from(sample(&o.buf, tt)?.pos), o.buf.back()?.1.crouch))).collect();
+    if from != 0 && host_alive {
+        let h = net.hist.iter().rev().find(|h| h.0 <= tt).or(net.hist.front()).map_or((my_pos, my_crouch), |h| (h.1, h.2));
+        t.push((0, h.0, h.1));
+    }
+    t
+}
+
+/// Host: apply `amount` to `victim` (the host itself or a client) and remember who hit last (kill credit).
+fn deal(net: &mut Net, dmg: &mut MessageWriter<PlayerDamage>, from: u8, victim: u8, amount: f32, now: f32, what: &str) {
+    info!("net: player {from} hit player {victim} ({what}) for {amount:.0}");
+    if victim == 0 {
+        dmg.write(PlayerDamage(amount));
+        net.host_last_by = Some((from, now));
+    } else if let Some(o) = net.others.get_mut(&victim) {
+        o.hp -= amount;
+        o.last_by = Some((from, now));
+        o.link.push(from, Ev::Damage(amount));
     }
 }
 
@@ -568,6 +662,13 @@ fn tick(
     let now = time.elapsed_secs();
     let net = &mut *net;
     let mine = local_state(me.0, me.1, me.2, cfg.as_deref());
+    if net.host {
+        let t = time.elapsed_secs_f64();
+        net.hist.push_back((t, me.1.translation, me.0.crouched));
+        while net.hist.front().is_some_and(|h| t - h.0 > 1.5) {
+            net.hist.pop_front();
+        }
+    }
     // Pending remote item sounds, attenuated by distance to where that player stands.
     let snd = std::mem::take(&mut net.snd);
     for (t, cue, from) in snd {
@@ -614,7 +715,7 @@ fn tick(
         if net.join_t <= 0.0 {
             net.join_t = 0.5;
             if let Some((a, _)) = net.up {
-                send(net, a, &Pkt { magic: MAGIC, from: 0, ack: 0, evs: vec![], body: Body::Join });
+                send(net, a, &Pkt { magic: MAGIC, from: 0, ack: 0, evs: vec![], ts: 0.0, echo: 0.0, rtt: 0.0, body: Body::Join });
             }
         }
         return;
@@ -634,11 +735,15 @@ fn tick(
         for (i, o) in &net.others {
             if let Some(a) = o.addr {
                 let snap = all.iter().filter(|(j, _)| j != i).cloned().collect();
-                send(net, a, &o.link.pkt(0, Body::Snap(snap)));
+                let mut p = o.link.pkt(0, Body::Snap(snap));
+                (p.ts, p.echo) = (now, o.last_ts);
+                send(net, a, &p);
             }
         }
     } else if let Some((a, l)) = &net.up {
-        send(net, *a, &l.pkt(net.id, Body::State(mine)));
+        let mut p = l.pkt(net.id, Body::State(mine));
+        (p.ts, p.rtt) = (now, net.rtt);
+        send(net, *a, &p);
     }
 }
 

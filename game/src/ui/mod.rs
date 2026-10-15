@@ -51,6 +51,7 @@ pub enum Screen {
     Settings,
     Social,
     Credits,
+    Scoreboard,
 }
 
 #[derive(Clone, Debug, PartialEq)]
