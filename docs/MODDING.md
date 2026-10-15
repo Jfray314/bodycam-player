@@ -107,6 +107,30 @@ Data: read the JSON files in the host (any language), pass the whole text. One `
 Build: `cargo build -p bodycam-core --release` gives `target/release/bodycam_core.dll` (`.so` on Linux). The header is hand-written
 (no cbindgen dependency); `ffi::tests::header_declares_every_export` fails if an export is missing from it.
 
+### C smoke test
+
+`bodycam-core/examples/c/main.c` loads a weapon JSON, runs 2 s at 60 fps (fire held, ADS from t=1 s, look +-2 deg, walking) and prints
+spread, viewmodel (sway) offsets and recoil offsets. Build (gcc/MinGW; MSVC: `cl main.c /I..\..\include ..\..\..\target\release\bodycam_core.dll.lib`):
+
+```
+cargo build -p bodycam-core --release
+cd bodycam-core/examples/c
+gcc main.c -I../../include -L../../../target/release -l:bodycam_core.dll.lib -o ../../../target/release/ffi_smoke.exe
+cd ../../.. && target/release/ffi_smoke.exe assets/weapon_stats.json assets/weapons/Benelli.json
+```
+
+Output (the dll must sit next to the exe, as in `target/release`):
+
+```
+damage 15.0 rate 0.180s pellets 8 ammo 7 auto 0
+spread hip 5.00/6.00 deg, aim 5.00/5.00 deg
+t=0.48 ads=0.00 vm=(-0.0096 -0.0007 -0.0002) rot=(0.00 0.40 0.00) recoil=(-0.0115 0.0388 -0.0389) shots=1 last_dir=(0.0789 -0.0155 -0.9968)
+t=0.98 ads=0.00 vm=(0.0106 -0.0008 0.0004) rot=(0.00 -0.90 0.00) recoil=(0.0002 0.0155 -0.0099) shots=1 last_dir=(0.0789 -0.0155 -0.9968)
+t=1.48 ads=1.00 vm=(0.0013 -0.0014 0.0000) rot=(0.00 -0.16 0.22) recoil=(-0.0001 0.0044 -0.0016) shots=1 last_dir=(0.0789 -0.0155 -0.9968)
+t=1.98 ads=1.00 vm=(-0.0020 -0.0015 -0.0000) rot=(0.00 0.20 -0.66) recoil=(-0.0001 0.0017 -0.0007) shots=1 last_dir=(0.0789 -0.0155 -0.9968)
+ammo left 6
+```
+
 ## Roadmap
 
 1. Packaging: an installer script that runs the extraction against the user's Bodycam install, drops the core dll, the adapter, and the ReShade file.
