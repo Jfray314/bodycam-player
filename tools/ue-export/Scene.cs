@@ -334,7 +334,9 @@ static class SceneExport
                     var ekt = p.Textures.Keys.FirstOrDefault(x => EmisKey.IsMatch(x) && !x.Contains("mask", StringComparison.OrdinalIgnoreCase)) ?? p.Textures.Keys.FirstOrDefault(x => EmisKey.IsMatch(x));
                     if (ekt != null && p.Textures[ekt].Load<UTexture2D>() is UTexture2D et) m.EmisTex = LoadTex(et, false, texList, texIdx);
                     if (ek != null && p.Colors[ek] is { } ec && (ec.R + ec.G + ec.B) * es > 0.0001f) m.Emis = [ec.R * es, ec.G * es, ec.B * es];
-                    else if (m.EmisTex >= 0 && p.Scalars.Keys.Any(x => EmisKey.IsMatch(x)) && es > 0.0001f) m.Emis = [es, es, es]; // texture-only needs an explicit strength scalar (PM_Emissive defaults would light everything)
+                    else if (ek == null && m.EmisTex >= 0 && p.Scalars.Keys.Any(x => EmisKey.IsMatch(x)) && es > 0.0001f) m.Emis = [es, es, es]; // texture-only needs an explicit strength scalar (PM_Emissive defaults would light everything)
+                    // "Emissive Color Multi" multiplies the emissive TEXTURE: without one (MI_Production_Slate_01a, the white desk slab) the cooked default is black.
+                    if (ek != null && ek.Contains("Multi") && ekt == null) m.Emis = null;
                     if (m.Emis == null) m.EmisTex = -1;
                 }
                 m.Surface = PhysSurface(mi);
@@ -342,6 +344,11 @@ static class SceneExport
                 if (tintKey != null && p.Colors.TryGetValue(tintKey, out var c)) m.Color = [c.R, c.G, c.B, 1];
                 else if (m.Tex < 0) m.Color = [0.5f, 0.5f, 0.5f, 1];
                 else m.Color = [1, 1, 1, 1];
+                // M_BaseTilingMaterial / Mi_Junks multiply albedo by Brightness / AlbedoBrightness (MI_TargetBoardMetal01 0.75, wood boards 0.5): darkening only (>1 blows out under the map lights).
+                var br = new[] { "Brightness", "AlbedoBrightness" }.Where(x => p.Scalars.ContainsKey(x)).Select(x => p.Scalars[x]).DefaultIfEmpty(1f).Min();
+                // ponytail: the Dust layer (Albedo_Dust x Dust Color, blended on up-facing faces: desk tops) is not ported; dark-dust materials lose 30% albedo instead.
+                if (p.Colors.TryGetValue("Dust Color", out var dc) && dc.R + dc.G + dc.B < 0.6f && p.Scalars.GetValueOrDefault("Dust High", 0f) > 0.3f) br = Math.Min(br, 0.7f);
+                if (br < 1f && m.Tex >= 0) for (int i = 0; i < 3; i++) m.Color[i] *= br;
                 if (trans) { m.Alpha = "BLEND"; m.Color[3] = p.Scalars.TryGetValue("Opacity", out var op) ? Math.Clamp(op, 0.15f, 1f) : 0.4f; }
             }
             catch (Exception e) { Console.WriteLine("  mat fail " + m.Name + " " + e.Message); }
