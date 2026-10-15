@@ -537,7 +537,7 @@ impl Plugin for WeaponPlugin {
 }
 
 /// Every DT_WeaponItems row that has an animation set, with stats from its GE_WeaponStat_* effect.
-fn load_weapons() -> Vec<Weapon> {
+pub(crate) fn load_weapons() -> Vec<Weapon> {
     let stats = load_stats();
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../assets/weapons");
     let mut out = vec![];

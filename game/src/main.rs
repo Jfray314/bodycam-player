@@ -1,6 +1,7 @@
 mod attach;
 mod audio;
 mod body;
+mod character;
 mod bodyik;
 mod camadjust;
 mod curve;
@@ -34,7 +35,7 @@ fn main() {
             file_path: std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into()),
             ..default()
         }))
-        .add_plugins(body::BodyPlugin)
+        .add_plugins((body::BodyPlugin, character::CharacterPlugin))
         .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, sway::SwayPlugin, recoil::RecoilPlugin, map::MapPlugin, gunfight::GunfightPlugin, grid::GridPlugin, bots::BotsPlugin, camadjust::CamAdjustPlugin, dev::DevPlugin))
         .add_plugins((effects::EffectsPlugin, soft::SoftPlugin, attach::AttachPlugin, items::ItemsPlugin, perks::PerksPlugin))
         .add_plugins(ui::UiPlugin)

@@ -64,7 +64,7 @@ struct ViewmodelAssets {
 /// glb under models/guns for a weapon: rows that reuse another gun's clips but have their own receiver (CZ-P-09, Kobra, M1911 on the
 /// Glock set) by row name, else from the BAS animation folder (e.g. Animations/M4a1/...). The gun-side clip folder wins over the arms
 /// one (the MP9 row fires the UZI arms clip but is the Mp9 model).
-fn gun_model(row: &str, anims: &serde_json::Value) -> Option<&'static str> {
+pub(crate) fn gun_model(row: &str, anims: &serde_json::Value) -> Option<&'static str> {
     match row {
         "CZ-P-09" => return Some("CZ-P-09"),
         "Kobra" => return Some("Kobra"),
@@ -135,7 +135,7 @@ fn aim_point(gun: &str) -> Option<(&'static str, Vec3)> {
 
 /// Gun joint axes -> arms space when squared to the view (columns = where joint X, Y, Z go; view forward = -Z, up = +Y).
 /// Joint = UE (x, -y, z). Most guns: UE +Y muzzle, +Z up. Revolver: UE +Z muzzle, +X up.
-fn ads_axes(gun: &str) -> Mat3 {
+pub(crate) fn ads_axes(gun: &str) -> Mat3 {
     match gun {
         "Revolver" => Mat3::from_cols(Vec3::Y, Vec3::X, Vec3::NEG_Z),
         _ => Mat3::from_cols(Vec3::NEG_X, Vec3::Z, Vec3::Y),
