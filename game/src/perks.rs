@@ -367,6 +367,9 @@ fn drone_fly(
         }
         if perk.phase == Phase::Piloting {
             d.flying = true;
+            if let Some(y) = std::env::var("BODYCAM_DRONE_YAW").ok().and_then(|v| v.parse::<f32>().ok()) {
+                d.yaw = y.to_radians(); // dev: start the flight looking this way (180 = back at the player)
+            }
             tf.rotation = Quat::from_rotation_y(d.yaw);
             perk.battery = 100.0;
         }

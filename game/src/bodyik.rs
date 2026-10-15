@@ -124,9 +124,12 @@ fn two_bone(root: Entity, [a, b, c]: [Entity; 3], target: Vec3, pole: Vec3, end_
     let (pc, rc) = pose(c, root, q);
     let (l1, l2) = ((pb - pa).length(), (pc - pb).length());
     let to = target - pa;
+    if l1 + l2 < 1e-3 {
+        return;
+    }
     let d = to.length().clamp(0.01, (l1 + l2) * 0.999);
     let u = to.normalize_or_zero();
-    if u == Vec3::ZERO || l1 < 1e-4 || l2 < 1e-4 {
+    if u == Vec3::ZERO || l1 < 1e-3 || l2 < 1e-3 {
         return;
     }
     let x = (l1 * l1 - l2 * l2 + d * d) / (2.0 * d);
