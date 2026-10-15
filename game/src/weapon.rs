@@ -267,6 +267,17 @@ pub struct Fired {
     pub fire_rate: f32,
     /// Suppressor mounted: audio plays Cosmetic.Weapon.SFX.FireSuppressed.
     pub suppressed: bool,
+    /// Muzzle origin and one direction per pellet (net.rs replicates them).
+    pub origin: Vec3,
+    pub dirs: Vec<Vec3>,
+}
+
+/// Another player's shot (net.rs): impact FX + muzzle light, no damage.
+#[derive(Message, Clone, Debug)]
+pub struct RemoteShot {
+    pub origin: Vec3,
+    pub dirs: Vec<Vec3>,
+    pub suppressed: bool,
 }
 
 /// AC_BodycamAnimationComponent.PlayEndFireRegripMotion / ForceReGripMotion(delay): play a random ReGripMotions
@@ -532,7 +543,7 @@ impl Plugin for WeaponPlugin {
             .add_message::<ShellLanded>()
             .add_systems(Startup, setup_fx)
             .add_systems(PostStartup, give_loadout)
-            .add_systems(Update, ((actions, swap, aim, fire, eject_shells, fade, particles, shells).chain(), log_montages));
+            .add_message::<RemoteShot>().add_systems(Update, ((actions, swap, aim, fire, eject_shells, fade, particles, shells).chain(), log_montages, remote_shots));
     }
 }
 
@@ -948,8 +959,10 @@ fn fire(
     let (sx, sy) = if p.aiming { (s.spread_aim_x, s.spread_aim_y) } else { (s.spread_hip_x, s.spread_hip_y) };
     let (sx, sy) = (sx.unwrap_or(0.0), sy.unwrap_or(0.0));
     let mut rng = rand::rng();
+    let mut dirs = vec![];
     for _ in 0..s.pellet_count.unwrap_or(1.0) as u32 {
         let dir = random_in_elliptical_cone(aim_dir, sx, sy, &mut rng);
+        dirs.push(dir);
         let hits: Vec<(Entity, Vec3, Vec3, f32)> = {
             let filter = |e: Entity| targets.get(e).is_ok_and(|t| !t.3);
             let settings = MeshRayCastSettings::default().with_filter(&filter).with_early_exit_test(&|_| false);
@@ -1008,7 +1021,33 @@ fn fire(
         inv.pull_slider.push(0.0);
     }
     let w = &inv.slots[cur];
-    fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming, fire_rate: s.fire_rate.unwrap_or(0.1), suppressed });
+    fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming, fire_rate: s.fire_rate.unwrap_or(0.1), suppressed, origin, dirs });
+}
+
+/// Another player's shot: impact dust at where each pellet ends and a muzzle flash light.
+fn remote_shots(
+    mut cmd: Commands,
+    mut ev: MessageReader<RemoteShot>,
+    mut ray: MeshRayCast,
+    surf: Query<Option<&SurfaceMat>>,
+    ignore: Query<(), With<crate::player::IgnoreTraces>>,
+    fx: Res<FireFx>,
+    mut mats: ResMut<Assets<StandardMaterial>>,
+    mut soft: ResMut<Assets<crate::soft::SoftMat>>,
+) {
+    for s in ev.read() {
+        for d in &s.dirs {
+            let Ok(dir) = Dir3::new(*d) else { continue };
+            let filter = |e: Entity| !ignore.contains(e);
+            let hit = ray.cast_ray(Ray3d::new(s.origin, dir), &MeshRayCastSettings::default().with_filter(&filter)).first().map(|(e, h)| (*e, h.point, h.normal.normalize_or_zero(), h.distance));
+            if let Some((e, pt, n, dist)) = hit && dist <= FIRE_RANGE {
+                impact_fx(&mut cmd, &fx, &mut mats, &mut soft, Surf::of(surf.get(e).ok().flatten().map(|m| m.0)), pt, n);
+            }
+        }
+        if let Some(d) = s.dirs.first() {
+            cmd.spawn((PointLight { intensity: 40_000.0, range: 6.0, color: Color::srgb(1.0, 0.55, 0.2), ..default() }, Transform::from_translation(s.origin + *d * 0.3), Fading(0.03)));
+        }
+    }
 }
 
 /// Camera-facing smoke sprite (whisp_One sheet): grows 1.5x its size per second, alpha fades from `alpha` over `life`.

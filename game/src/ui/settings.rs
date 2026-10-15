@@ -39,6 +39,8 @@ pub struct Settings {
     pub explosive: String,
     pub melee: String,
     pub gadget: String,
+    /// Last JOIN address (ip[:port]) typed on the PLAY screen.
+    pub join_ip: String,
 }
 
 impl Default for Settings {
@@ -62,6 +64,7 @@ impl Default for Settings {
             explosive: "Grenade G67".into(),
             melee: "Knife".into(),
             gadget: "Kamikaze".into(),
+            join_ip: "127.0.0.1:7777".into(),
         }
     }
 }

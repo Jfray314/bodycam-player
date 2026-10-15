@@ -107,6 +107,23 @@ pub const FLASH_BLAST: BlastSpec = BlastSpec { base: 50.0, inner: 250.0, outer: 
 /// GA_ExplodePerk: ExplosionDamage 200, Inner 200, Outer 1000, exponent 2.0.
 pub const DRONE_BLAST: BlastSpec = BlastSpec { base: 200.0, inner: 200.0, outer: 1000.0, exp: 2.0, flash: false };
 
+/// The local player threw a grenade (net.rs replicates it).
+#[derive(Message)]
+pub struct Thrown {
+    pub start: Vec3,
+    pub vel: Vec3,
+    pub flash: bool,
+}
+
+pub fn spawn_grenade(cmd: &mut Commands, assets: &AssetServer, start: Vec3, vel: Vec3, flash: bool) {
+    let path = if flash { "models/guns/Flashbang.glb" } else { "models/guns/G67.glb" };
+    cmd.spawn((
+        Grenade { vel, fuse: FUSE - THROW_DELAY, flash, hits: 0, spin: Vec3::new(9.0, 3.0, 7.0), rest: false },
+        WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(path))),
+        Transform::from_translation(start),
+    ));
+}
+
 /// Ask for a blast (grenade fuse, drone crash).
 #[derive(Message)]
 pub struct Detonate {
@@ -175,7 +192,7 @@ struct BlastMesh(Handle<Mesh>);
 pub struct ItemsPlugin;
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Items>().add_message::<Detonate>().add_message::<PlayCue>().add_systems(Startup, |mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>| cmd.insert_resource(BlastMesh(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())))).add_systems(Update, (grenade_input, knife_input, projectiles, detonate, blasts, tag_meshes, drop_pickup).chain());
+        app.init_resource::<Items>().add_message::<Detonate>().add_message::<Thrown>().add_message::<PlayCue>().add_systems(Startup, |mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>| cmd.insert_resource(BlastMesh(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())))).add_systems(Update, (grenade_input, knife_input, projectiles, detonate, blasts, tag_meshes, drop_pickup).chain());
     }
 }
 
@@ -202,6 +219,7 @@ fn grenade_input(
     mut ray: MeshRayCast,
     ignore: Query<(), With<IgnoreTraces>>,
     mut out: MessageWriter<MontageStarted>,
+    mut thrown: MessageWriter<Thrown>,
 ) {
     let dt = time.delta_secs();
     let cur = inv.current;
@@ -275,12 +293,8 @@ fn grenade_input(
                     .and_then(|d| ray.cast_ray(Ray3d::new(c.translation, d), &MeshRayCastSettings::default().with_filter(&filter)).first().map(|(_, h)| h.point))
                     .unwrap_or(end);
                 let vel = toss_velocity(start, target, OVERHAND_SPEED).unwrap_or(fwd * OVERHAND_SPEED);
-                let path = if flash { "models/guns/Flashbang.glb" } else { "models/guns/G67.glb" };
-                cmd.spawn((
-                    Grenade { vel, fuse: FUSE - THROW_DELAY, flash, hits: 0, spin: Vec3::new(9.0, 3.0, 7.0), rest: false },
-                    WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(path))),
-                    Transform::from_translation(start),
-                ));
+                spawn_grenade(&mut cmd, &assets, start, vel, flash);
+                thrown.write(Thrown { start, vel, flash });
                 // Grenade_C: RemoveItemInSlot(Grenade) -> the slot is empty and the inventory switches to the best other slot.
                 inv.slots[cur].ammo = 0;
             }

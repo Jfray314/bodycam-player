@@ -76,6 +76,10 @@ pub enum Act {
     Gear(usize, String),
     Mode(usize),
     Search,
+    /// PLAY > HOST SERVERS: host a match / join the typed address / focus the address field.
+    Host,
+    Join,
+    IpField,
     Offline(usize),
     News,
     Toast(String),
@@ -171,6 +175,9 @@ pub struct Ui {
     pub modes: [bool; 8],
     pub offline: usize,
     pub search_t: Option<f32>,
+    pub ip_focus: bool,
+    /// Some(true) = host, Some(false) = join: sent as net::Connect after the frame's input.
+    net_req: Option<bool>,
     pub news: bool,
     pub help: Option<Set>,
     pub rebinding: Option<usize>,
@@ -192,6 +199,8 @@ impl Default for Ui {
             modes: [true; 8],
             offline: 0,
             search_t: None,
+            ip_focus: false,
+            net_req: None,
             news: false,
             help: None,
             rebinding: None,
@@ -524,6 +533,9 @@ fn handle(act: Act, cx: &mut Cx, rect: Option<(f32, f32)>) {
         }
         Act::Mode(i) => cx.ui.modes[i] = !cx.ui.modes[i],
         Act::Offline(i) => cx.ui.offline = i,
+        Act::Host => cx.ui.net_req = Some(true),
+        Act::Join => cx.ui.net_req = Some(false),
+        Act::IpField => cx.ui.ip_focus = !cx.ui.ip_focus,
         Act::Search => {
             cx.ui.search_t = Some(0.0);
             cx.ui.toast = ("Online matchmaking is offline: starting a local session.".into(), 3.0);
@@ -553,6 +565,7 @@ fn ui_input(
     btns: Query<(Entity, &Btn, &ComputedNode, &UiGlobalTransform, Option<&CalculatedClip>)>,
     mut scrollers: Query<(&Scroller, &mut ScrollPosition, &ComputedNode, &UiGlobalTransform)>,
     mut exit: MessageWriter<AppExit>,
+    mut connect: MessageWriter<crate::net::Connect>,
     ready: Res<crate::dev::Ready>,
     mut script: Local<Option<(Vec<(f32, Vec2)>, usize)>>,
 ) {
@@ -609,7 +622,37 @@ fn ui_input(
             ui.help = Some(set);
         }
     }
-    if let Some(i) = ui.rebinding {
+    if ui.ip_focus {
+        // JOIN address field: digits, '.', ':' (Semicolon), Backspace; Enter/Escape leave it, a click acts as usual.
+        for k in &mi.pressed {
+            let c = match k {
+                KeyCode::Period | KeyCode::NumpadDecimal => Some('.'),
+                KeyCode::Semicolon => Some(':'),
+                KeyCode::Digit0 | KeyCode::Numpad0 => Some('0'),
+                KeyCode::Digit1 | KeyCode::Numpad1 => Some('1'),
+                KeyCode::Digit2 | KeyCode::Numpad2 => Some('2'),
+                KeyCode::Digit3 | KeyCode::Numpad3 => Some('3'),
+                KeyCode::Digit4 | KeyCode::Numpad4 => Some('4'),
+                KeyCode::Digit5 | KeyCode::Numpad5 => Some('5'),
+                KeyCode::Digit6 | KeyCode::Numpad6 => Some('6'),
+                KeyCode::Digit7 | KeyCode::Numpad7 => Some('7'),
+                KeyCode::Digit8 | KeyCode::Numpad8 => Some('8'),
+                KeyCode::Digit9 | KeyCode::Numpad9 => Some('9'),
+                _ => None,
+            };
+            if let Some(c) = c && ps.join_ip.len() < 40 {
+                ps.join_ip.push(c);
+            } else if *k == KeyCode::Backspace {
+                ps.join_ip.pop();
+            } else if matches!(k, KeyCode::Enter | KeyCode::Escape) {
+                ui.ip_focus = false;
+            }
+            ui.dirty = true;
+        }
+        if mi.click && let Some((_, b, n, g, _)) = hit {
+            act = Some((b.act.clone(), Some(rect_of(n, g))));
+        }
+    } else if let Some(i) = ui.rebinding {
         // Rebind prompt: the next key becomes the bind (Escape cancels).
         if let Some(k) = mi.pressed.first().copied() {
             ui.rebinding = None;
@@ -663,6 +706,11 @@ fn ui_input(
         handle(a, &mut cx, r);
     }
     let quit = cx.quit;
+    if let Some(host) = ui.net_req.take() {
+        connect.write(crate::net::Connect { host, addr: ps.join_ip.clone() });
+        ui.toast = (if host { "Hosting a match.".into() } else { format!("Joining {}...", ps.join_ip) }, 3.0);
+        ui.dirty = true;
+    }
     if quit {
         exit.write(AppExit::Success);
     }
