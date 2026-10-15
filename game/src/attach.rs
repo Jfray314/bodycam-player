@@ -127,6 +127,14 @@ pub fn loadout(s: &Settings, row: &str) -> Vec<String> {
     s.attachments.get(row).into_iter().flatten().filter(|id| mount(row, id).is_some()).cloned().collect()
 }
 
+/// FireLocation socket of a mounted muzzle device (suppressor): (gun bone, point in that bone's joint frame, m).
+pub fn fire_location(s: &Settings, row: &str) -> Option<(String, Vec3)> {
+    loadout(s, row).iter().find_map(|id| {
+        let (_, xf) = mount(row, id)?;
+        Some((xf.bone.clone(), xf.at(Vec3::from(data().items[id.as_str()].sockets.get("firelocation")?.loc))))
+    })
+}
+
 fn is_optic(id: &str) -> bool {
     matches!(data().items.get(id).map(|i| i.kind.as_str()), Some("optic" | "magnified" | "canted"))
 }
@@ -283,15 +291,29 @@ fn glass(mut mats: ResMut<Assets<StandardMaterial>>, new: Query<(&GltfMaterialNa
 }
 
 /// C / Z toggles (GA_ToggleAttachment_*), MMB = SwitchUsedOptic (+ ForceReGripMotion(0.1)).
-fn switch_input(keys: Res<ButtonInput<KeyCode>>, mouse: Res<ButtonInput<MouseButton>>, tablet: Res<crate::ui::Tablet>, mut st: ResMut<AttState>, mut regrip: MessageWriter<Regrip>, cfg: Option<Res<Settings>>, inv: Option<Single<&Inventory>>, player: Option<Single<&crate::player::Player>>) {
+fn switch_input(keys: Res<ButtonInput<KeyCode>>, mouse: Res<ButtonInput<MouseButton>>, tablet: Res<crate::ui::Tablet>, mut st: ResMut<AttState>, mut regrip: MessageWriter<Regrip>, mut snd: MessageWriter<crate::audio::PlayCue>, cfg: Option<Res<Settings>>, inv: Option<Single<&Inventory>>, player: Option<Single<&crate::player::Player>>) {
     if tablet.shown || player.is_some_and(|p| p.locked) { // piloting the drone: C is the drone's own light (perks.rs)
         return;
     }
+    // Flashlight.OnRep_bIsFlashlightOn / Laser.OnRep_bIsLaserOn: S_WEP_*_Click_Cue on every toggle (only with the device mounted).
+    let has = |f: &dyn Fn(&str) -> bool| match (&cfg, &inv) {
+        (Some(c), Some(i)) => loadout(c, &i.slots[i.current].name).iter().any(|id| f(id)),
+        _ => false,
+    };
+    let click = |snd: &mut MessageWriter<crate::audio::PlayCue>, k: &str| {
+        snd.write(crate::audio::PlayCue { cue: format!("/Game/BodycamWeapons/LowPolyShooterPack/Audio/WAV/Weapons/S_WEP_{k}_Click_Cue"), dist_cm: 0.0 });
+    };
     if keys.just_pressed(KeyCode::KeyC) {
         st.flashlight = !st.flashlight;
+        if has(&|id| data().items[id].sockets.contains_key("light")) {
+            click(&mut snd, "Flashlight");
+        }
     }
     if keys.just_pressed(KeyCode::KeyZ) {
         st.laser = !st.laser;
+        if has(&|id| data().items[id].sockets.contains_key("socket_laser")) {
+            click(&mut snd, "Laser");
+        }
     }
     if mouse.just_pressed(MouseButton::Middle)
         && let (Some(cfg), Some(inv)) = (cfg, inv)
