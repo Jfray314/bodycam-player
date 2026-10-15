@@ -170,6 +170,8 @@ struct Anim {
     action: bool,
     /// The running montage is the GoPro camera adjust: the hand must reach the lens, so the BAS hip pose offset fades out.
     no_pose: bool,
+    /// Knife throw: no camera clip exists and the clip swings the head bone 33 deg / 75 cm (UE keeps the view steady) -> camera ignores the head.
+    no_follow: bool,
     /// Blend-out time of the last montage, used for the crossfade back to the base loop.
     blend_out: f32,
     after_montage: bool,
@@ -433,6 +435,7 @@ fn play_events(
                 anim.action_pitch = s.pitch;
                 anim.action = s.action;
                 anim.no_pose = s.arms.contains("GoPro_Adjust");
+                anim.no_follow = s.arms.contains("Knife_Throw");
                 anim.blend_out = s.blend_out;
                 anim.after_montage = true;
             }
@@ -661,7 +664,7 @@ fn follow_head(
         });
     }
     let Some(idle) = *idle else { return };
-    *weight = crate::status::finterp_to(*weight, if montage { 1.0 } else { 0.0 }, time.delta_secs(), 1.0 / BLEND.as_secs_f32());
+    *weight = crate::status::finterp_to(*weight, if montage && !anim.no_follow { 1.0 } else { 0.0 }, time.delta_secs(), 1.0 / BLEND.as_secs_f32());
     let d = Transform::from_matrix(rel.to_matrix() * idle.to_matrix().inverse());
     let d = Transform { translation: d.translation * *weight, rotation: Quat::IDENTITY.slerp(d.rotation, *weight), ..default() };
     let to_socket = Transform::from_translation(FP_CAMERA_SOCKET);

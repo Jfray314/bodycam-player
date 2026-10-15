@@ -600,7 +600,7 @@ fn knife_input(
             return;
         }
         if mouse.just_pressed(MouseButton::Right) && !st.knife_aim && !inv.busy() {
-            // ponytail: no Windup/WindDown clips (the AnimBP holds the aim pose; played one-shot they tilt the head-mounted camera ~80 deg), only the flag.
+            // ponytail: no Windup/WindDown clips (the AnimBP holds the aim pose), only the flag.
             st.knife_aim = true;
         } else if st.knife_aim && !mouse.pressed(MouseButton::Right) {
             st.knife_aim = false;
