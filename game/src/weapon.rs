@@ -118,6 +118,8 @@ pub enum ItemKind {
     Grenade,
     Knife,
     Drone,
+    /// Bombe_C (Inventory.Slots.Special, bomb.rs).
+    Bomb,
 }
 
 pub struct Weapon {
@@ -360,6 +362,13 @@ impl Inventory {
     pub fn use_item(&mut self, m: Option<Montage>, out: &mut MessageWriter<MontageStarted>) {
         let cur = self.current;
         self.start(ActionKind::Use, m, cur, out);
+    }
+    /// Aborts the running item montage (plant/defuse cancelled): the Draw montage puts the item back in hand.
+    pub fn cancel_to_draw(&mut self, out: &mut MessageWriter<MontageStarted>) {
+        let cur = self.current;
+        self.action = None;
+        let m = self.slots[cur].one("Draw");
+        self.start(ActionKind::Draw, m, cur, out);
     }
     /// Swaps to `slot` through the normal holster -> draw chain (GA_Character_SwapItem).
     pub fn swap_to(&mut self, slot: usize, out: &mut MessageWriter<MontageStarted>) {

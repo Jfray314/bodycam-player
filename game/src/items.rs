@@ -24,6 +24,8 @@ pub fn load_item(row: &str) -> Option<Weapon> {
         ItemKind::Grenade
     } else if row == "Kamikaze" {
         ItemKind::Drone
+    } else if row == "Bomb" {
+        ItemKind::Bomb
     } else {
         ItemKind::Knife
     };
