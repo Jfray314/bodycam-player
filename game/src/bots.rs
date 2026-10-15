@@ -28,6 +28,7 @@ const PLAYER_HP: f32 = 100.0;
 const RESPAWN_DELAY: f32 = 6.0; // s after death
 const TURN: f32 = 5.0; // rad/s
 const REMEMBER: f32 = 3.0; // s a bot keeps facing the player after losing sight
+const BLIND_S: f32 = 18.0; // GE_Flashed duration (see effects.rs)
 
 pub struct BotSpec {
     /// Patrol waypoints (feet); the first is also the spawn point.
@@ -75,6 +76,8 @@ struct Bot {
     accuracy: f32,
     kills: i32,
     hit_dmg: f32,
+    /// Seconds left blinded by a flashbang (no sight, no shooting, no moving).
+    blind: f32,
 }
 
 pub fn setup(cmd: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut Assets<StandardMaterial>, specs: Vec<BotSpec>) {
@@ -161,6 +164,7 @@ fn lifecycle(time: Res<Time>, mut bots: ResMut<Bots>, mut cmd: Commands, alive: 
             accuracy: bot_accuracy(s.kills, s.deaths),
             kills: s.kills,
             hit_dmg: 0.0,
+            blind: 0.0,
         });
         s.e = Some(e);
         s.timer = RESPAWN_DELAY; // the Bot component shows up next frame; until then `alive` would read it as dead
@@ -174,13 +178,31 @@ fn think(
     cam: Single<&GlobalTransform, With<BodycamCamera>>,
     mut bots: Query<(Entity, &mut Bot, &mut Transform)>,
     mut gun: BotGun,
+    mut flash: MessageReader<crate::effects::Flashbang>,
 ) {
     let (dt, now) = (time.delta_secs(), time.elapsed_secs());
     let target = cam.translation();
     let mut rng = rand::rng();
+    // GameplayCue.Player.Flashed on a bot: same distance falloff as the player (250..1000 cm -> 1..0) x GE_Flashed 18 s, needs a clear line to the burst.
+    // ponytail: the bot AI's flash reaction is not in the dump; blinded bots simply stop (no sight, shots or movement).
+    let bursts: Vec<Vec3> = flash.read().map(|f| f.at).collect();
     for (e, mut b, mut tf) in &mut bots {
         let own = [e, b.parts[0], b.parts[1], b.parts[2]];
         let eye = tf.translation + Vec3::Y * 1.5;
+        for at in &bursts {
+            let k = crate::status::map_range_clamped(eye.distance(*at) * 100.0, 250.0, 1000.0, 1.0, 0.0);
+            if k > 0.0 && gun.sees(&own, eye, *at) {
+                b.blind = b.blind.max(BLIND_S * k);
+                info!("bot flashed: {:.1} s", b.blind);
+            }
+        }
+        if b.blind > 0.0 {
+            b.blind -= dt;
+            b.los = false;
+            b.aware = 0.0;
+            b.burst_left = 0;
+            continue;
+        }
         let to = target - eye;
         let flat = Vec2::new(to.x, to.z);
         // Notice: range + view cone (or already aware / very close) + line of sight, re-checked 5x per second.
