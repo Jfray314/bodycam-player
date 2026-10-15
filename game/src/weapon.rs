@@ -1001,8 +1001,9 @@ fn fire(
         let _ = end;
     }
     // WEP.PointLight: orange (1800 K), visible for 1.5 frames (RetriggerableDelay(1.5 * WorldDeltaSeconds)) on SpawnFireParticles.
-    // UE places it 50 cm ahead of the gun; Intensity 40 cd there is not comparable to Bevy lumens (ponytail: 40k lm at 30 cm, tuned by eye: 200k at 50 cm blew the exposure out).
-    cmd.spawn((PointLight { intensity: 40_000.0, range: 6.0, color: Color::srgb(1.0, 0.55, 0.2), ..default() }, Transform::from_translation(origin + aim_dir * 0.3), Fading(time.delta_secs() * 1.5)));
+    // UE: 50 cm ahead of the gun, Intensity 40 Unitless (= 40/625 cd, same conversion as map lights), attenuation 10 m.
+    // ponytail: x4 over the literal 0.8 lm so it stays visible in dim rooms; the old 40000 lm blew the auto-exposure out.
+    cmd.spawn((PointLight { intensity: 40.0 / 625.0 * 4.0 * std::f32::consts::PI * 4.0, range: 10.0, radius: 0.2, shadow_maps_enabled: false, color: Color::srgb(1.0, 0.55, 0.2), ..default() }, Transform::from_translation(origin + aim_dir * 0.5), Fading((time.delta_secs() * 1.5).min(0.03))));
     // SpawnFireParticles: MuzzleSmoke ParticleSystem at BulletSpawnOrigin, scale = MapRange(Damage, 0..100 -> 0.1..2.0); skipped while aiming.
     // ponytail: the system asset (cosmetic tag, default per skin) is not in the dump; two drifting smoke sprites stand in.
     if !p.aiming && !suppressed {
