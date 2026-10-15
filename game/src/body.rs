@@ -313,6 +313,12 @@ pub(crate) fn hide_bones(
         if !tp.on && (if shadow { &SHADOW_HIDDEN_BONES[..] } else { &HIDDEN_BONES[..] }).contains(&name) {
             t.scale = Vec3::ZERO;
         }
+        // ponytail: not UE (its owner mesh is camera-attached at the head); the camera here sits in front of the chest, so the
+        // owner copy's torso (spine_01 and up) is scaled away as the view tips down: full at -65 deg, untouched above -40 deg.
+        if !shadow && !tp.on && name == "spine_01" {
+            let k = ((p.pitch.to_degrees() + 40.0) / -25.0).clamp(0.0, 1.0);
+            t.scale = Vec3::splat((1.0 - k * k * (3.0 - 2.0 * k)).max(0.001)); // 0 panics the skinned bounds
+        }
         if SPINE.contains(&name) {
             let inv = g.rotation().inverse();
             let pitch = if shadow { p.pitch * AIM_PITCH_SHARE / 3.0 } else { 0.0 };
