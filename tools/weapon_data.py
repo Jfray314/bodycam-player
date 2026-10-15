@@ -105,7 +105,7 @@ print('wrote', n)
 # Non-gun items (DT_PerkItems: Knife, Grenade G67/Flash, Kamikaze drone...) -> assets/items/<Row>.json (same anim_set shape)
 IT = os.path.join(os.path.dirname(os.path.normpath(OUT)), 'items'); os.makedirs(IT, exist_ok=True)
 for name, row in load('/Game/BodycamCore/ItemsDefinition/Gameplay/DT_PerkItems.DT_PerkItems')['exports'][0]['properties']['_rows'].items():
-    bas_path = row.get('AnimationData')
+    bas_path = row.get('AnimationData') or ('/BodycamAnimationFramework/Animations/Bomb/BAS_Bomb.BAS_Bomb' if name == 'Bomb' else '')  # Bombe_C.SetupAnimations hard-codes BAS_Bomb
     bas = export(load(bas_path), bas_path.split('.')[-1]) if bas_path else None
     if not bas:
         continue
@@ -116,6 +116,9 @@ for name, row in load('/Game/BodycamCore/ItemsDefinition/Gameplay/DT_PerkItems.D
     if name == 'Knife':  # Knife_C.PlayThrowAnimation (A_FP_Knife_Throw_Montage); RMB aim = Windup hold, release = WindDown (no montages: sequences)
         K = '/BodycamAnimationFramework/Animations/Knife/Character/A_FP_Knife_'
         extra = {k: expand({'Character': K + v + '.A_FP_Knife_' + v}) for k, v in (('Throw', 'Throw_Montage'), ('Windup', 'Windup'), ('WindDown', 'WindDown'))}
+    if name == 'Bomb':  # GA_TriggerBomb.HandleFuse: plant montage (event GameplayEvent.Bomb.Initiated -> Start Fuse), defuse montage (Defused -> Defuse)
+        B = '/BodycamAnimationFramework/Animations/Bomb/Character/A_FP_C4_'
+        extra = {k: expand({'Character': B + k + '_Montage.A_FP_C4_' + k + '_Montage'}) for k in ('Plant', 'Defuse')}
     if name == 'Kamikaze':  # GA_LaunchPerk leave: A_FP_Drone_Exit_Montage (its DeployDrone(bIsDeploy=false) notify plays the goggles/controller exit clips)
         extra = {'Exit': expand({'Character': '/BodycamAnimationFramework/Animations/Drone/Character/A_FP_Drone_Exit_Montage.A_FP_Drone_Exit_Montage'})}
     json.dump({'extra': extra, 'row': name, 'item_class': row.get('ItemClassID'), 'actor': row.get('ActorClassOverride'),
