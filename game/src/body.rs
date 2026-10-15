@@ -1,12 +1,13 @@
-//! Full-body player character (Bodycam_Player.Mesh = DefaultOperator on the ALS mannequin skeleton) so the player has legs
-//! when looking down and a shadow. UE (SetUpCharacterMeshesVisibility, owner): Mesh hides bones head/UpperArm_L/UpperArm_R
-//! (the FP Arms replace them) and CastShadow=false, while a hidden `Shadow` mesh (bCastHiddenShadow) casts the full-body shadow.
-//! Same here: a visible copy with those bones scaled to 0 and no shadow, plus a shadow-only copy on RenderLayers 1
-//! (the camera only draws layer 0; every light also lights layer 1). Model/clips: tools/build_models.py -> models/body.glb.
-//! Upper body: WEP/BP_EquippableItem.GetOverlay is Default for every weapon, so the body's arms follow the FP animation, not an
-//! ALS gun overlay. The shadow copy therefore also hides its upper arms and the FP arms + gun cast that part of the shadow
-//! (same pose, every gun, every montage).
-use crate::player::Player;
+//! Full-body character (Bodycam_Player.Mesh = DefaultOperator on the ALS mannequin skeleton): the local player's owner view (legs
+//! when looking down) and the world copy every other camera sees (character.rs: spawn_character, driven by CharacterState).
+//! UE (SetUpCharacterMeshesVisibility, owner): Mesh hides bones head/UpperArm_L/UpperArm_R (the FP Arms replace them) and
+//! CastShadow=false, while a hidden `Shadow` mesh (bCastHiddenShadow) casts the full-body shadow.
+//! Same here: an owner copy (visible, those bones scaled to 0, no shadow) plus a world copy on RenderLayers 1 (shadow only in the
+//! owner's FP view; every light also lights layer 1). When the camera is detached (drone / 3P orbit) the owner copy is hidden and
+//! the world copy is drawn on layer 0 with head, arms and gun, exactly like a remote player. Model/clips: tools/build_models.py.
+//! Upper body: WEP/BP_EquippableItem.GetOverlay is Default for every weapon, so the owner's FP arms follow the FP animation, not an
+//! ALS gun overlay; in the FP view the local world copy hides its upper arms and the FP arms + gun cast that part of the shadow.
+use crate::character::{CharGun, CharacterState, NeedsBody};
 use bevy::animation::AnimationTargetId;
 use bevy::camera::visibility::{NoFrustumCulling, RenderLayers};
 use bevy::gltf::Gltf;
@@ -17,12 +18,14 @@ use std::collections::HashMap;
 
 const SHADOW_LAYER: usize = 1;
 const HIDDEN_BONES: [&str; 3] = ["head", "upperarm_l", "upperarm_r"];
-/// Shadow copy: keeps the head; the FP arms cast the arms' shadow.
+/// Local world copy in the FP view: keeps the head; the FP arms cast the arms' shadow.
 const SHADOW_HIDDEN_BONES: [&str; 2] = ["upperarm_l", "upperarm_r"];
-/// ALS spine rotation: aim pitch shared over the three spine bones (shadow copy; the owner copy stays upright so the chest
-/// doesn't swing into the camera, which here is not parented to the head). Lean roll (Q/E) on both copies.
+/// ALS spine rotation: aim pitch (AimOffset stand-in) shared over spine (total), neck and head on the world copies (the owner copy
+/// stays upright so the chest doesn't swing into the camera, which here is not parented to the head). Lean roll (Q/E) on all.
 const SPINE: [&str; 3] = ["spine_01", "spine_02", "spine_03"];
-const AIM_PITCH_SHARE: f32 = 0.5;
+const SPINE_SHARE: f32 = 0.45;
+const NECK_SHARE: f32 = 0.15;
+const HEAD_SHARE: f32 = 0.25;
 const LEAN_ROLL_DEG: f32 = 18.0;
 /// Forward speed (m/s) at which each ALS clip plays at rate 1 (ALS defaults: walk 165, run 375, crouch 150 cm/s).
 const WALK_REF: f32 = 1.65;
@@ -35,14 +38,18 @@ const LAND_HEAVY: f32 = 6.0;
 pub struct BodyPlugin;
 impl Plugin for BodyPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(crate::bodyik::IkPlugin).init_resource::<BodyAnim>().init_resource::<ThirdPerson>().add_systems(Startup, |mut cmd: Commands, a: Res<AssetServer>| cmd.insert_resource(BodyAsset(a.load("models/body.glb"))))
-            .add_systems(Update, (spawn, prepare, light_layers, drive).chain())
+        app.add_plugins(crate::bodyik::IkPlugin)
+            .init_resource::<ClipDurs>()
+            .init_resource::<ThirdPerson>()
+            .init_resource::<Detached>()
+            .add_systems(Startup, |mut cmd: Commands, a: Res<AssetServer>| cmd.insert_resource(BodyAsset(a.load("models/body.glb"))))
+            .add_systems(Update, (detached_view, build_bodies, prepare, light_layers, body_layers, anim_state, drive).chain())
             .add_systems(PostUpdate, (hide_bones.after(bevy::app::AnimationSystems), third_person_cam).before(bevy::transform::TransformSystems::Propagate));
     }
 }
 
-/// Debug third-person orbit view (Insert toggles; BODYCAM_3P="dist:yaw_deg:height" starts it): camera orbits the player, the owner
-/// body copy shows its head and arms. For checking the body as a third-person model.
+/// Debug third-person orbit view (Insert toggles; BODYCAM_3P="dist:yaw_deg:height" starts it): the camera orbits the player (or the
+/// test puppet when there is one) and sees the world copy: head, helmet, IK arms and the gun.
 #[derive(Resource)]
 pub struct ThirdPerson {
     pub on: bool,
@@ -57,7 +64,26 @@ impl Default for ThirdPerson {
     }
 }
 
-fn third_person_cam(keys: Res<ButtonInput<KeyCode>>, mut tp: ResMut<ThirdPerson>, mut cam: Single<&mut Transform, With<crate::player::BodycamCamera>>) {
+/// The camera is not at the owner's head (3P orbit / piloting the drone): owner copy hidden, world copy + gun drawn on layer 0,
+/// camera without the viewmodel layer.
+#[derive(Resource, Default)]
+pub struct Detached(pub bool);
+
+fn detached_view(tp: Res<ThirdPerson>, perk: Option<Res<crate::perks::Perk>>, mut det: ResMut<Detached>, mut cam: Single<&mut RenderLayers, With<crate::player::BodycamCamera>>) {
+    let d = tp.on || perk.is_some_and(|p| p.phase == crate::perks::Phase::Piloting);
+    if det.0 != d {
+        det.0 = d;
+        **cam = if d { RenderLayers::layer(0) } else { RenderLayers::from_layers(&[0, crate::attach::VM_LAYER]) };
+    }
+}
+
+fn third_person_cam(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut tp: ResMut<ThirdPerson>,
+    puppet: Query<&GlobalTransform, With<crate::character::Puppet>>,
+    player: Single<&GlobalTransform, With<crate::player::Player>>,
+    mut cam: Single<&mut Transform, With<crate::player::BodycamCamera>>,
+) {
     if keys.just_pressed(KeyCode::Insert) {
         tp.on = !tp.on;
     }
@@ -68,46 +94,87 @@ fn third_person_cam(keys: Res<ButtonInput<KeyCode>>, mut tp: ResMut<ThirdPerson>
         tp.yaw += 0.03;
     }
     if tp.on {
-        // player space: -Z forward, so yaw 0 = camera in front looking back? yaw 180 = behind.
-        **cam = Transform::from_xyz(tp.yaw.sin() * tp.dist, tp.height, -tp.yaw.cos() * tp.dist).looking_at(Vec3::new(0.0, 0.9, 0.0), Vec3::Y);
+        // Orbit centre + frame (player space): the puppet if there is one, else the player. Facing -Z: yaw 0 = camera in front
+        // looking back, 180 = behind.
+        let (c, rot) = puppet.single().map_or((Vec3::ZERO, Quat::IDENTITY), |p| {
+            let (_, r, t) = (player.affine().inverse() * p.affine()).to_scale_rotation_translation();
+            (t, r)
+        });
+        let o = rot * Vec3::new(tp.yaw.sin() * tp.dist, 0.0, -tp.yaw.cos() * tp.dist);        **cam = Transform::from_translation(c + o + Vec3::Y * tp.height).looking_at(c + Vec3::Y * 0.9, Vec3::Y);
     }
 }
 
 #[derive(Resource)]
 struct BodyAsset(Handle<Gltf>);
 
-/// `shadow`: the shadow-only copy (full body); otherwise the owner-visible one (no head/upper arms, no shadow).
+/// Clip name -> length (s).
+#[derive(Resource, Default)]
+pub(crate) struct ClipDurs(HashMap<String, f32>);
+
+/// `world`: the full-body copy every other camera sees; otherwise the owner-only one (no head/upper arms, no shadow).
+/// `local`: belongs to the local player (foot IK from the level; its world copy hides arms and gun in the FP view).
 #[derive(Component)]
 pub struct BodyRoot {
-    pub(crate) shadow: bool,
+    pub(crate) world: bool,
+    pub(crate) local: bool,
     nodes: HashMap<String, AnimationNodeIndex>,
     /// Bone name -> entity (filled by bodyik).
     pub(crate) bones: HashMap<String, Entity>,
 }
 
-fn spawn(mut cmd: Commands, asset: Res<BodyAsset>, gltfs: Res<Assets<Gltf>>, mut graphs: ResMut<Assets<AnimationGraph>>, clips: Res<Assets<AnimationClip>>, mut st: ResMut<BodyAnim>, player: Single<Entity, With<Player>>, mut done: Local<bool>) {
-    if *done {
+/// A mesh of a body copy (or its gun): `root` is the BodyRoot entity, whose kind decides the RenderLayers.
+#[derive(Component)]
+struct BodyMesh {
+    root: Entity,
+    gun: bool,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_bodies(
+    mut cmd: Commands,
+    asset: Res<BodyAsset>,
+    gltfs: Res<Assets<Gltf>>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+    clips: Res<Assets<AnimationClip>>,
+    mut durs: ResMut<ClipDurs>,
+    mut shared: Local<Option<(Handle<AnimationGraph>, HashMap<String, AnimationNodeIndex>)>>,
+    pending: Query<(Entity, &NeedsBody)>,
+) {
+    if pending.is_empty() {
         return;
     }
     let Some(g) = gltfs.get(&asset.0) else { return };
-    *done = true;
-    let mut graph = AnimationGraph::new();
-    let nodes: HashMap<String, AnimationNodeIndex> = g.named_animations.iter().map(|(n, c)| (n.to_string(), graph.add_clip(c.clone(), 1.0, graph.root))).collect();
-    st.dur = g.named_animations.iter().map(|(n, c)| (n.to_string(), clips.get(c).map_or(1.0, |c| c.duration().max(0.01)))).collect();
-    let graph = graphs.add(graph);
-    for shadow in [false, true] {
-        let mut e = cmd.spawn((
-            BodyRoot { shadow, nodes: nodes.clone(), bones: default() },
-            WorldAssetRoot(g.scenes[0].clone()),
-            AnimationGraphHandle(graph.clone()),
-            Transform::default(),
-            crate::player::IgnoreTraces,
-        ));
-        if shadow {
-            e.insert(RenderLayers::layer(SHADOW_LAYER));
+    let (graph, nodes) = shared
+        .get_or_insert_with(|| {
+            let mut graph = AnimationGraph::new();
+            let nodes: HashMap<String, AnimationNodeIndex> = g.named_animations.iter().map(|(n, c)| (n.to_string(), graph.add_clip(c.clone(), 1.0, graph.root))).collect();
+            durs.0 = g.named_animations.iter().map(|(n, c)| (n.to_string(), clips.get(c).map_or(1.0, |c| c.duration().max(0.01)))).collect();
+            (graphs.add(graph), nodes)
+        })
+        .clone();
+    for (ch, nb) in &pending {
+        cmd.entity(ch).remove::<NeedsBody>();
+        for world in [false, true] {
+            if !world && !nb.local {
+                continue; // remote characters only have the full copy
+            }
+            let mut e = cmd.spawn((
+                BodyRoot { world, local: nb.local, nodes: nodes.clone(), bones: default() },
+                BodyAnim::default(),
+                WorldAssetRoot(g.scenes[0].clone()),
+                AnimationGraphHandle(graph.clone()),
+                Transform::default(),
+                Visibility::default(),
+            ));
+            if nb.local {
+                e.insert(crate::player::IgnoreTraces);
+            }
+            if world {
+                e.insert(RenderLayers::layer(SHADOW_LAYER));
+            }
+            let id = e.id();
+            cmd.entity(ch).add_child(id);
         }
-        let id = e.id();
-        cmd.entity(*player).add_child(id);
     }
 }
 
@@ -120,19 +187,35 @@ fn root_of(mut e: Entity, parents: &Query<&ChildOf>, roots: &Query<&BodyRoot>) -
     }
 }
 
-/// Per new scene node: meshes (skinned bounds go stale under animation; shadow copy off-camera; owner copy casts no shadow) and animation players.
+/// `e` is inside a CharGun scene (its AnimationPlayer must not get the body graph, its joints are not the body's).
+pub(crate) fn under_gun(mut e: Entity, parents: &Query<&ChildOf>, guns: &Query<(), With<CharGun>>) -> bool {
+    while let Ok(c) = parents.get(e) {
+        e = c.parent();
+        if guns.contains(e) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Per new scene node: meshes (skinned bounds go stale under animation; the local copies are ignored by traces) and animation players.
 fn prepare(
     mut cmd: Commands,
     meshes: Query<Entity, Added<Mesh3d>>,
     players: Query<Entity, Added<AnimationPlayer>>,
     parents: Query<&ChildOf>,
     roots: Query<&BodyRoot>,
+    guns: Query<(), With<CharGun>>,
     graphs: Query<&AnimationGraphHandle>,
 ) {
     for e in &meshes {
         if let Some(r) = root_of(e, &parents, &roots) {
-            cmd.entity(e).insert((NoFrustumCulling, crate::player::IgnoreTraces));
-            if roots.get(r).unwrap().shadow {
+            let b = roots.get(r).unwrap();
+            cmd.entity(e).insert((NoFrustumCulling, BodyMesh { root: r, gun: under_gun(e, &parents, &guns) }));
+            if b.local {
+                cmd.entity(e).insert(crate::player::IgnoreTraces);
+            }
+            if b.world {
                 cmd.entity(e).insert(RenderLayers::layer(SHADOW_LAYER));
             } else {
                 cmd.entity(e).insert(NotShadowCaster);
@@ -141,6 +224,7 @@ fn prepare(
     }
     for e in &players {
         if let Some(r) = root_of(e, &parents, &roots)
+            && !under_gun(e, &parents, &guns)
             && let Ok(g) = graphs.get(r)
         {
             cmd.entity(e).insert(g.clone());
@@ -155,22 +239,49 @@ fn light_layers(mut cmd: Commands, new: Query<Entity, Or<(Added<DirectionalLight
     }
 }
 
-/// ALS-style locomotion blend. Every clip plays at once with a smoothed weight (the ALS CycleBlending / BlendListBy* graph):
-/// ground = two nearest move directions of the walk/run (gait blend) or crouch set, idle pose, jump/fall loop in the air,
-/// land overlay after a fall. The loops share one normalised phase (every clip seeks phase * its length), which stands in for
+/// Which camera sees which copy: owner copy on layer 0 (hidden when detached); local world copy shadow-only (layer 1) until the
+/// camera is detached, its gun not at all (the FP gun casts the shadow); remote world copies always on layers 0 + 1.
+fn body_layers(det: Res<Detached>, roots: Query<&BodyRoot>, mut meshes: Query<(&BodyMesh, &mut RenderLayers)>) {
+    for (m, mut l) in &mut meshes {
+        let Ok(r) = roots.get(m.root) else { continue };
+        let want = match (r.world, r.local && !det.0) {
+            (false, _) if det.0 => RenderLayers::none(),
+            (false, _) => RenderLayers::layer(0),
+            (true, true) if m.gun => RenderLayers::none(),
+            (true, true) => RenderLayers::layer(SHADOW_LAYER),
+            (true, false) => RenderLayers::from_layers(&[0, SHADOW_LAYER]),
+        };
+        if *l != want {
+            *l = want;
+        }
+    }
+}
+
+/// ALS-style locomotion blend, one per body copy. Every clip plays at once with a smoothed weight (the ALS CycleBlending /
+/// BlendListBy* graph): ground = two nearest move directions of the walk/run (gait blend) or crouch set, idle pose, jump/fall loop in
+/// the air, land overlay after a fall. The loops share one normalised phase (every clip seeks phase * its length), which stands in for
 /// the ALS foot sync markers; the phase rate is CalculateStandingPlayRate (speed over the gait's animated speed, lerped by gait).
 // ponytail: normalised-time sync, not the ALS sync markers; no turn-in-place (the local player's actor rotation is the control
 // yaw: UpdateGroudedRotation IsLocallyControlled branch) and no Stop transitions.
-#[derive(Resource, Default)]
+// Event layers (kick/hit/reload/death) are procedural: no third-person fire/reload/hit/death montages are exported from the game.
+#[derive(Component, Default)]
 pub(crate) struct BodyAnim {
     w: HashMap<&'static str, f32>,
-    dur: HashMap<String, f32>,
     phase: f32,
     gait: f32,
     land_t: f32,
     land_heavy: bool,
     was_air: bool,
     fall: f32,
+    /// Smoothed ADS 0..1, recoil kick 1 -> 0, hit flinch 1 -> 0, death fall 0..1.
+    pub(crate) ads: f32,
+    pub(crate) kick: f32,
+    pub(crate) hit: f32,
+    death: f32,
+    /// Reload / mag check: seconds into the action and its length (None = idle).
+    pub(crate) reload: Option<(f32, f32)>,
+    /// Event counters of CharacterState already consumed (fired, hits, reload).
+    seen: (u32, u32, u32),
 }
 
 type Dirs = [(&'static str, f32)];
@@ -216,57 +327,78 @@ fn targets(grounded: bool, vy: f32, crouched: bool, gait: f32, speed: f32, a: f3
     (w, (speed / WALK_REF) * (1.0 - gait) + (speed / RUN_REF) * gait)
 }
 
+/// Per body copy: smoothed locomotion weights, event layers (shots, hits, reloads), death pose.
+fn anim_state(time: Res<Time>, durs: Res<ClipDurs>, mut roots: Query<(&ChildOf, &mut BodyAnim, &mut Transform), With<BodyRoot>>, chars: Query<(&CharacterState, &Transform), Without<BodyRoot>>) {
+    let dt = time.delta_secs().min(0.1);
+    for (co, mut st, mut rt) in &mut roots {
+        let Ok((p, tf)) = chars.get(co.parent()) else { continue };
+        let local = tf.rotation.inverse() * Vec3::new(p.vel.x, 0.0, p.vel.z);
+        let speed = local.length();
+        st.gait += ((p.sprinting as i32 as f32) - st.gait) * (1.0 - (-dt * 6.0).exp());
+        // Land overlay: the fall speed seen while airborne decides light/heavy (ALS Land_Light/Land_Heavy).
+        if !p.grounded {
+            st.was_air = true;
+            st.fall = st.fall.min(p.vel.y);
+        } else if st.was_air {
+            st.was_air = false;
+            if st.fall < -LAND_MIN {
+                st.land_t = 0.0;
+                st.land_heavy = st.fall < -LAND_HEAVY;
+            }
+            st.fall = 0.0;
+        }
+        st.land_t += dt;
+        let (tg, rate) = targets(p.grounded, p.vel.y, p.crouched, st.gait, speed, local.x.atan2(-local.z).to_degrees());
+        for (n, _) in &tg {
+            st.w.entry(n).or_insert(0.0);
+        }
+        let k = 1.0 - (-dt * BLEND_RATE).exp();
+        for (n, w) in st.w.iter_mut() {
+            let t = tg.iter().filter(|(c, _)| c == n).map(|c| c.1).sum::<f32>();
+            *w += (t - *w) * k;
+        }
+        // Shared phase: rate / blended loop length over the moving clips.
+        let (mut dsum, mut wsum) = (0.0, 0.0);
+        for (n, w) in st.w.iter().filter(|(n, _)| n.contains("Walk") || n.contains("Run")) {
+            dsum += w * durs.0.get(*n).copied().unwrap_or(1.0);
+            wsum += w;
+        }
+        if wsum > 0.01 {
+            st.phase = (st.phase + dt * rate.clamp(0.0, 3.0) * wsum / dsum).rem_euclid(1.0);
+        }
+        // Event layers: counters in CharacterState tick up per shot / hit / reload.
+        let seen = st.seen;
+        if p.fired != seen.0 {
+            st.kick = 1.0;
+        }
+        if p.hits != seen.1 {
+            st.hit = 1.0;
+        }
+        if p.reload != seen.2 {
+            st.reload = Some((0.0, p.reload_len.max(0.5)));
+        }
+        st.seen = (p.fired, p.hits, p.reload);
+        st.kick *= (-dt * 25.0).exp();
+        st.hit *= (-dt * 5.0).exp();
+        st.ads = crate::status::finterp_to(st.ads, p.aiming as i32 as f32, dt, 12.0);
+        st.reload = st.reload.map(|(t, l)| (t + dt, l)).filter(|(t, l)| t < l);
+        st.death = crate::status::finterp_to(st.death, p.dead as i32 as f32, dt, 3.0);
+        // Death: fall backwards about the feet and lie on the back (ponytail: no ragdoll / death montage).
+        *rt = Transform { rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2 * st.death), translation: Vec3::Y * 0.12 * st.death, ..default() };
+    }
+}
+
 pub(crate) fn drive(
-    time: Res<Time>,
-    player: Single<(&Player, &Transform)>,
-    mut st: ResMut<BodyAnim>,
-    roots: Query<&BodyRoot>,
+    durs: Res<ClipDurs>,
+    roots: Query<(&BodyRoot, &BodyAnim)>,
     mut players: Query<(Entity, &mut AnimationPlayer)>,
     parents: Query<&ChildOf>,
+    guns: Query<(), With<CharGun>>,
 ) {
-    let dt = time.delta_secs().min(0.1);
-    let (p, tf) = *player;
-    let local = tf.rotation.inverse() * Vec3::new(p.vel.x, 0.0, p.vel.z);
-    let speed = local.length();
-    st.gait += ((p.sprinting as i32 as f32) - st.gait) * (1.0 - (-dt * 6.0).exp());
-    // Land overlay: the fall speed seen while airborne decides light/heavy (ALS Land_Light/Land_Heavy).
-    if !p.grounded {
-        st.was_air = true;
-        st.fall = st.fall.min(p.vel.y);
-    } else if st.was_air {
-        st.was_air = false;
-        if st.fall < -LAND_MIN {
-            st.land_t = 0.0;
-            st.land_heavy = st.fall < -LAND_HEAVY;
-            info!("landing at {:.1} m/s: {}", -st.fall, if st.land_heavy { "ALS_N_Land_Heavy" } else { "ALS_N_Land_Light" });
-        }
-        st.fall = 0.0;
-    }
-    st.land_t += dt;
-    let land_clip = if st.land_heavy && st.dur.contains_key("ALS_N_Land_Heavy") { "ALS_N_Land_Heavy" } else { "ALS_N_Land_Light" };
-    let land_dur = st.dur.get(land_clip).copied().unwrap_or(0.5);
-    let land = if st.land_t < land_dur { (st.land_t / 0.06).min(1.0) * ((land_dur - st.land_t) / 0.25).min(1.0) } else { 0.0 };
-
-    let (tg, rate) = targets(p.grounded, p.vel.y, p.crouched, st.gait, speed, local.x.atan2(-local.z).to_degrees());
-    for (n, _) in &tg {
-        st.w.entry(n).or_insert(0.0);
-    }
-    let k = 1.0 - (-dt * BLEND_RATE).exp();
-    for (n, w) in st.w.iter_mut() {
-        let t = tg.iter().filter(|(c, _)| c == n).map(|c| c.1).sum::<f32>();
-        *w += (t - *w) * k;
-    }
-    // Shared phase: rate / blended loop length over the moving clips.
-    let (mut dsum, mut wsum) = (0.0, 0.0);
-    for (n, w) in st.w.iter().filter(|(n, _)| n.contains("Walk") || n.contains("Run")) {
-        dsum += w * st.dur.get(*n).copied().unwrap_or(1.0);
-        wsum += w;
-    }
-    if wsum > 0.01 {
-        st.phase = (st.phase + dt * rate.clamp(0.0, 3.0) * wsum / dsum).rem_euclid(1.0);
-    }
-    let (phase, land_t) = (st.phase, st.land_t);
     for (pe, mut ap) in &mut players {
+        if under_gun(pe, &parents, &guns) {
+            continue;
+        }
         let mut e = pe;
         let root = loop {
             if roots.contains(e) {
@@ -277,7 +409,10 @@ pub(crate) fn drive(
                 Err(_) => break None,
             }
         };
-        let Some(r) = root.and_then(|r| roots.get(r).ok()) else { continue };
+        let Some((r, st)) = root.and_then(|r| roots.get(r).ok()) else { continue };
+        let land_clip = if st.land_heavy && durs.0.contains_key("ALS_N_Land_Heavy") { "ALS_N_Land_Heavy" } else { "ALS_N_Land_Light" };
+        let land_dur = durs.0.get(land_clip).copied().unwrap_or(0.5);
+        let land = if st.land_t < land_dur { (st.land_t / 0.06).min(1.0) * ((land_dur - st.land_t) / 0.25).min(1.0) } else { 0.0 };
         for (name, &node) in &r.nodes {
             let is_land = name.starts_with("ALS_N_Land");
             let w = if is_land { if name == land_clip { land } else { 0.0 } } else { st.w.get(name.as_str()).copied().unwrap_or(0.0) * (1.0 - land) };
@@ -286,39 +421,53 @@ pub(crate) fn drive(
             }
             let a = ap.animation_mut(node).unwrap();
             a.set_weight(w);
-            let dur = st.dur.get(name).copied().unwrap_or(1.0);
+            let dur = durs.0.get(name).copied().unwrap_or(1.0);
             if name.contains("Walk") || name.contains("Run") {
-                a.set_speed(0.0).set_seek_time(phase * dur);
+                a.set_speed(0.0).set_seek_time(st.phase * dur);
             } else if is_land {
-                a.set_speed(0.0).set_seek_time(land_t.min(dur));
+                a.set_speed(0.0).set_seek_time(st.land_t.min(dur));
             }
         }
     }
 }
 
-/// HideBoneByName: collapse the bone (and, through the hierarchy, everything under it); then ALS spine rotation (aim pitch,
-/// shadow copy) and lean roll. Axes come from last frame's bone GlobalTransform (the pose is about to be propagated).
+/// HideBoneByName: collapse the bone (and, through the hierarchy, everything under it); then ALS spine rotation (aim pitch on the
+/// world copies, hit flinch) and lean roll. Axes come from last frame's bone GlobalTransform (the pose is about to be propagated).
 pub(crate) fn hide_bones(
-    player: Single<(&Player, &GlobalTransform)>,
-    mut joints: Query<(Entity, &Name, &mut Transform, &GlobalTransform), With<AnimationTargetId>>,
+    det: Res<Detached>,
+    chars: Query<(&CharacterState, &GlobalTransform), Without<BodyRoot>>,
+    mut joints: Query<(Entity, &Name, &mut Transform, &GlobalTransform), (With<AnimationTargetId>, Without<BodyRoot>)>,
     parents: Query<&ChildOf>,
-    roots: Query<&BodyRoot>,
-    tp: Res<ThirdPerson>,
+    roots: Query<(&BodyRoot, &BodyAnim, &ChildOf)>,
+    root_only: Query<&BodyRoot>,
+    guns: Query<(), With<CharGun>>,
 ) {
-    let (p, pg) = *player;
-    let (right, fwd) = (pg.right().as_vec3(), pg.forward().as_vec3());
     for (e, n, mut t, g) in &mut joints {
-        let Some(shadow) = root_of(e, &parents, &roots).map(|r| roots.get(r).unwrap().shadow) else { continue };
         let name = n.as_str();
-        if !tp.on && (if shadow { &SHADOW_HIDDEN_BONES[..] } else { &HIDDEN_BONES[..] }).contains(&name) {
-            t.scale = Vec3::ZERO;
+        if !(SPINE.contains(&name) || name == "neck_01" || HIDDEN_BONES.contains(&name)) {
+            continue;
         }
-        if SPINE.contains(&name) {
-            let inv = g.rotation().inverse();
-            let pitch = if shadow { p.pitch * AIM_PITCH_SHARE / 3.0 } else { 0.0 };
-            let roll = -p.lean * LEAN_ROLL_DEG.to_radians() / 3.0;
-            t.rotation = t.rotation * Quat::from_axis_angle((inv * right).normalize(), pitch) * Quat::from_axis_angle((inv * fwd).normalize(), roll);
+        let Some((r, an, co)) = root_of(e, &parents, &root_only).and_then(|r| roots.get(r).ok()) else { continue };
+        if under_gun(e, &parents, &guns) {
+            continue;
         }
+        let Ok((p, pg)) = chars.get(co.parent()) else { continue };
+        if HIDDEN_BONES.contains(&name) {
+            // the camera is at the owner's head: the FP arms replace the body's
+            t.scale = if r.local && !det.0 && (if r.world { &SHADOW_HIDDEN_BONES[..] } else { &HIDDEN_BONES[..] }).contains(&name) { Vec3::ZERO } else { Vec3::ONE };
+        }
+        // Owner copy stays upright (the chest would swing into the camera, which is not parented to the head).
+        let pitch = if r.world { p.pitch } else { 0.0 };
+        let (share, flinch, lean) = if SPINE.contains(&name) {
+            (SPINE_SHARE / 3.0, an.hit * 0.25 / 3.0, -p.lean * LEAN_ROLL_DEG.to_radians() / 3.0)
+        } else if name == "neck_01" {
+            (NECK_SHARE + HEAD_SHARE, 0.0, 0.0) // ponytail: the head follows the neck bone (no separate head pass)
+        } else {
+            continue;
+        };
+        let (right, fwd) = (pg.right().as_vec3(), pg.forward().as_vec3());
+        let inv = g.rotation().inverse();
+        t.rotation = t.rotation * Quat::from_axis_angle((inv * right).normalize(), pitch * share - flinch) * Quat::from_axis_angle((inv * fwd).normalize(), lean);
     }
 }
 
