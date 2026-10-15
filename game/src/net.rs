@@ -154,7 +154,7 @@ impl Other {
 }
 
 #[derive(Resource)]
-struct Net {
+pub struct Net {
     sock: UdpSocket,
     host: bool,
     id: u8,
@@ -211,7 +211,7 @@ impl Plugin for NetPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Connect>().add_message::<NetEv>().add_message::<RemoteSfx>().add_systems(Startup, env_start).add_systems(
             Update,
-            (connect, (recv, local_events, apply, tick, sync_remotes, drive_remotes).chain().run_if(resource_exists::<Net>)).chain(),
+            (connect, (recv, local_events, apply, blast_damage, tick, sync_remotes, drive_remotes).chain().run_if(resource_exists::<Net>)).chain(),
         );
     }
 }
@@ -504,7 +504,7 @@ fn apply(
     mut shots: MessageWriter<RemoteShot>,
     mut sfx: MessageWriter<RemoteSfx>,
     mut dmg: MessageWriter<PlayerDamage>,
-    mut blast: MessageWriter<crate::items::Detonate>,
+    mut blast: MessageWriter<crate::items::DetonateFor>,
     mut st: ResMut<SurvivorStatus>,
     me: Single<(&Transform, &Player)>,
     mut ray: MeshRayCast,
@@ -573,7 +573,7 @@ fn apply(
             Ev::Blast { at } => {
                 info!("net: player {from} drone blast");
                 if *from != my_id {
-                    blast.write(crate::items::Detonate { at: Vec3::from(*at), spec: crate::items::DRONE_BLAST });
+                    blast.write(crate::items::DetonateFor { at: Vec3::from(*at), spec: crate::items::DRONE_BLAST, owner: *from });
                 }
             }
             Ev::Sounds(list) => {
@@ -584,7 +584,7 @@ fn apply(
             Ev::Grenade { start, vel, flash } => {
                 info!("net: player {from} threw a grenade");
                 if *from != my_id {
-                    crate::items::spawn_grenade(&mut cmd, &assets, Vec3::from(*start), Vec3::from(*vel), *flash);
+                    crate::items::spawn_grenade(&mut cmd, &assets, Vec3::from(*start), Vec3::from(*vel), *flash, *from);
                 }
             }
             Ev::Damage(a) => {
@@ -610,6 +610,42 @@ fn apply(
                 if *victim == my_id {
                     st.health = st.health.min(0.0);
                 }
+            }
+        }
+    }
+}
+
+/// Host: radial blast damage for every player (host included) with line of sight, credited to the blast's owner.
+fn blast_damage(
+    mut net: ResMut<Net>,
+    time: Res<Time>,
+    mut ev: MessageReader<crate::items::BlastDamage>,
+    mut dmg: MessageWriter<PlayerDamage>,
+    st: Res<SurvivorStatus>,
+    me: Single<&Transform, With<Player>>,
+    mut ray: MeshRayCast,
+    ignore: Query<(), With<IgnoreTraces>>,
+    body: Query<(), With<RemoteBody>>,
+) {
+    let net = &mut *net;
+    let now = time.elapsed_secs();
+    for b in ev.read() {
+        if !net.host {
+            continue;
+        }
+        let crate::items::BlastSpec { base, inner, outer, exp, .. } = b.spec;
+        let mut victims: Vec<(u8, Vec3)> = net.others.iter().filter(|(_, o)| !o.dead).filter_map(|(i, o)| Some((*i, Vec3::from(o.buf.back()?.1.pos)))).collect();
+        if st.health > 0.0 {
+            victims.push((0, me.translation));
+        }
+        for (v, feet) in victims {
+            let head = feet + Vec3::Y * 1.6;
+            let d = head - b.origin;
+            let f = crate::items::falloff(d.length() * 100.0, inner, outer, exp);
+            let filter = |e: Entity| !ignore.contains(e) && !body.contains(e);
+            let blocked = Dir3::new(d).ok().is_some_and(|dir| ray.cast_ray(Ray3d::new(b.origin, dir), &MeshRayCastSettings::default().with_filter(&filter)).first().is_some_and(|(_, h)| h.distance < d.length() - 0.15));
+            if f > 0.0 && !blocked {
+                deal(net, &mut dmg, b.owner, v, base * f, now, "blast");
             }
         }
     }

@@ -128,10 +128,10 @@ pub struct DroneCrashed {
     pub at: Vec3,
 }
 
-pub fn spawn_grenade(cmd: &mut Commands, assets: &AssetServer, start: Vec3, vel: Vec3, flash: bool) {
+pub fn spawn_grenade(cmd: &mut Commands, assets: &AssetServer, start: Vec3, vel: Vec3, flash: bool, owner: u8) {
     let path = if flash { "models/guns/Flashbang.glb" } else { "models/guns/G67.glb" };
     cmd.spawn((
-        Grenade { vel, fuse: FUSE - THROW_DELAY, flash, hits: 0, spin: Vec3::new(9.0, 3.0, 7.0), rest: false },
+        Grenade { vel, fuse: FUSE - THROW_DELAY, flash, hits: 0, spin: Vec3::new(9.0, 3.0, 7.0), rest: false, owner },
         WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(path))),
         Transform::from_translation(start),
     ));
@@ -142,6 +142,22 @@ pub fn spawn_grenade(cmd: &mut Commands, assets: &AssetServer, start: Vec3, vel:
 pub struct Detonate {
     pub at: Vec3,
     pub spec: BlastSpec,
+}
+
+/// A blast owned by another player (remote grenade / drone): same as `Detonate` with `owner` = their net id.
+#[derive(Message)]
+pub struct DetonateFor {
+    pub at: Vec3,
+    pub spec: BlastSpec,
+    pub owner: u8,
+}
+
+/// Radial damage for the networked host to apply to every player (origin = blast point + 50 cm), crediting `owner`.
+#[derive(Message)]
+pub struct BlastDamage {
+    pub origin: Vec3,
+    pub spec: BlastSpec,
+    pub owner: u8,
 }
 
 #[derive(Default, PartialEq, Clone, Copy)]
@@ -183,6 +199,8 @@ struct Grenade {
     hits: u32,
     spin: Vec3,
     rest: bool,
+    /// Thrower's net id (kill credit).
+    owner: u8,
 }
 
 #[derive(Component)]
@@ -205,7 +223,7 @@ struct BlastMesh(Handle<Mesh>);
 pub struct ItemsPlugin;
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Items>().add_message::<Detonate>().add_message::<Thrown>().add_message::<Melee>().add_message::<DroneCrashed>().add_message::<PlayCue>().add_systems(Startup, |mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>| cmd.insert_resource(BlastMesh(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())))).add_systems(Update, (grenade_input, knife_input, projectiles, detonate, blasts, tag_meshes, drop_pickup).chain());
+        app.init_resource::<Items>().add_message::<Detonate>().add_message::<DetonateFor>().add_message::<BlastDamage>().add_message::<Thrown>().add_message::<Melee>().add_message::<DroneCrashed>().add_message::<PlayCue>().add_systems(Startup, |mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>| cmd.insert_resource(BlastMesh(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())))).add_systems(Update, (grenade_input, knife_input, projectiles, detonate, blasts, tag_meshes, drop_pickup).chain());
     }
 }
 
@@ -306,7 +324,7 @@ fn grenade_input(
                     .and_then(|d| ray.cast_ray(Ray3d::new(c.translation, d), &MeshRayCastSettings::default().with_filter(&filter)).first().map(|(_, h)| h.point))
                     .unwrap_or(end);
                 let vel = toss_velocity(start, target, OVERHAND_SPEED).unwrap_or(fwd * OVERHAND_SPEED);
-                spawn_grenade(&mut cmd, &assets, start, vel, flash);
+                spawn_grenade(&mut cmd, &assets, start, vel, flash, crate::net::MY_ID.load(std::sync::atomic::Ordering::Relaxed));
                 thrown.write(Thrown { start, vel, flash });
                 // Grenade_C: RemoveItemInSlot(Grenade) -> the slot is empty and the inventory switches to the best other slot.
                 inv.slots[cur].ammo = 0;
@@ -331,7 +349,7 @@ fn projectiles(
     mut ray: MeshRayCast,
     ignore: Query<(), With<IgnoreTraces>>,
     targets: Query<(), With<Health>>,
-    mut out: MessageWriter<Detonate>,
+    mut out: MessageWriter<DetonateFor>,
     mut snd: MessageWriter<PlayCue>,
     cam: Single<&GlobalTransform, With<BodycamCamera>>,
 ) {
@@ -339,7 +357,7 @@ fn projectiles(
     for (e, mut tf, mut g) in &mut q {
         g.fuse -= dt;
         if g.fuse <= 0.0 {
-            out.write(Detonate { at: tf.translation, spec: if g.flash { FLASH_BLAST } else { G67_BLAST } });
+            out.write(DetonateFor { at: tf.translation, spec: if g.flash { FLASH_BLAST } else { G67_BLAST }, owner: g.owner });
             cmd.entity(e).despawn();
             continue;
         }
@@ -382,6 +400,9 @@ fn projectiles(
 fn detonate(
     mut cmd: Commands,
     mut ev: MessageReader<Detonate>,
+    mut ev_for: MessageReader<DetonateFor>,
+    mut bd: MessageWriter<BlastDamage>,
+    net: Option<Res<crate::net::Net>>,
     mut ray: MeshRayCast,
     ignore: Query<(), With<IgnoreTraces>>,
     mut targets: Query<(Entity, &GlobalTransform, &mut Health)>,
@@ -393,8 +414,10 @@ fn detonate(
     blast: Res<BlastMesh>,
     mut mats: ResMut<Assets<StandardMaterial>>,
 ) {
-    for d in ev.read() {
-        explode(&mut cmd, d.at, d.spec, &mut ray, &ignore, &mut targets, player.translation() + Vec3::Y * 1.6, &mut boom, &mut flash, &mut dmg, &mut snd, &blast.0, &mut mats);
+    let me = crate::net::MY_ID.load(std::sync::atomic::Ordering::Relaxed);
+    let all: Vec<_> = ev.read().map(|d| (d.at, d.spec, me)).chain(ev_for.read().map(|d| (d.at, d.spec, d.owner))).collect();
+    for (at, spec, owner) in all {
+        explode(&mut cmd, at, spec, owner, net.is_some(), &mut ray, &ignore, &mut targets, player.translation() + Vec3::Y * 1.6, &mut boom, &mut flash, &mut dmg, &mut bd, &mut snd, &blast.0, &mut mats);
     }
 }
 
@@ -403,6 +426,8 @@ fn explode(
     cmd: &mut Commands,
     at: Vec3,
     spec: BlastSpec,
+    owner: u8,
+    networked: bool,
     ray: &mut MeshRayCast,
     ignore: &Query<(), With<IgnoreTraces>>,
     targets: &mut Query<(Entity, &GlobalTransform, &mut Health)>,
@@ -410,6 +435,7 @@ fn explode(
     boom: &mut MessageWriter<Explosion>,
     flash: &mut MessageWriter<Flashbang>,
     dmg: &mut MessageWriter<PlayerDamage>,
+    bd: &mut MessageWriter<BlastDamage>,
     snd: &mut MessageWriter<PlayCue>,
     sphere: &Handle<Mesh>,
     mats: &mut Assets<StandardMaterial>,
@@ -442,7 +468,12 @@ fn explode(
         flash.write(Flashbang { at });
     }
     let dp = head.distance(origin) * 100.0; // the body, not the (drone) camera
-    if !blocked(ray, head, ignore, targets) {
+    if networked {
+        // players: the host applies it to everyone (LOS + falloff) and credits the owner
+        if !flash_gren {
+            bd.write(BlastDamage { origin, spec, owner });
+        }
+    } else if !blocked(ray, head, ignore, targets) {
         let f = falloff(dp, inner, outer, exp);
         if f > 0.0 && !flash_gren {
             dmg.write(PlayerDamage(base * f));
