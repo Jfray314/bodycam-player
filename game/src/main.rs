@@ -24,6 +24,8 @@ mod status;
 mod viewmodel;
 mod sway;
 mod weapon;
+#[cfg(test)]
+mod core_parity;
 
 use bevy::prelude::*;
 

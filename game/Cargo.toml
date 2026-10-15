@@ -9,3 +9,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rand = "0.9"
 bincode = "1"
+
+[dev-dependencies]
+bodycam-core = { path = "../bodycam-core" }

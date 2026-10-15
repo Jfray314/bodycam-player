@@ -52,17 +52,65 @@ with the game's `player.rs` over a 6 second walk/sprint/land/fire/crouch/lean se
 
 Note: `bodycam-core` embeds `assets/camera_motion.json` and `fire_shake.json` with `include_str!`; if the data moves, update the paths.
 
+## Slices 2-6 (done): everything pure
+
+Rust module / C prefix / what it does (all in `bodycam_core.h`; each is tested, and `game/src/core_parity.rs` runs the game's own
+code against the core on the same inputs, so they cannot drift apart silently):
+
+| Module | C prefix | Slice |
+|---|---|---|
+| `weapon_data` | `bc_stats_*`, `bc_weapon_*` | Loads `assets/weapon_stats.json` (Default row folded in) and `assets/weapons/<Row>.json` from text the host passes. Nothing is embedded: the files come from the user's own install via `tools/extract`. |
+| `sway` | `bc_sway_*` | ADS progress (AdsSpeed, sinusoidal ease), look/move spring sway, LowReadySway. Output: arms-root transform and `ads_alpha`. |
+| `recoil` | `bc_recoil_*` | Weapon (gun kick) recoil animation: curves, noise, pushback, Z progress, recoil sway, fire sway. Output: arms-root transform. Camera/controller recoil is `bc_fire` from slice 1. |
+| `gunfire` | `bc_gun_*` | Fire-rate cooldown, full/semi auto, dry fire, ammo, regrip roll on trigger release, elliptical spread cone per pellet. |
+| `ballistics` | `bc_penetrate`, `bc_bone_multiplier`, `bc_surface_absorbance`, `bc_hit_damage` | GA_Fire_Base hit loop. Note: the game has no distance falloff; damage only changes through penetration and the bone hit. |
+| `cues` | `bc_cues_*` | Footstep surface row (with Default fallback) plus foley layers, and weapon cue lookup, from the baked `audio.json` tables. Returns names only. |
+| `lens` | `bc_lens_*`, `bc_vertical_fov_deg` | `LensParams` presets (game / ReShade; a test checks the ReShade preset equals the uniform defaults in `Bodycam.fx`), exposure-pump spring, H-FOV to V-FOV. |
+
+Not in the core (needs the engine): mesh/bone driving, raycasts and the muzzle origin, animation montage playback and notifies,
+reload/inventory rules, magnified-optic sway, `postfx.wesl` itself (use `mods/reshade/Bodycam.fx` or port the shader).
+
+### Per-frame recipe (any engine)
+
+```
+every frame:
+  step   = bc_step(core, input)                       -> camera pos/rot, footstep event
+  if step.footstep: names = bc_cues_footstep(cues, kind, stride_start, surface_index) -> play each
+  bc_gun_step(gun, dt, now, flags)                    -> fired / dry / regrip_delay
+  if fired: bc_fire(core, ...bc_weapon_controller_recoil...)   // camera recoil
+            bc_recoil_play(recoil, weapon, aiming)             // gun kick
+            n = bc_gun_dirs(gun, muzzle_dir, aiming, dirs)     // host raycasts each dir
+            for each dir: hits -> bc_penetrate(...) -> bc_hit_damage(base, mult, bone_name)
+            bc_cues_weapon(cues, row, "Fire"/"FireSuppressed"/"FireDry", ...) -> play
+  bc_sway_step(sway, weapon, look, velocity, aiming)  -> arms transform A, ads_alpha
+  bc_recoil_tick(recoil, dt)                          -> arms transform B
+  arms root = A then B (the game applies sway offset and recoil offset to the same root)
+  lens: bc_lens_motion_step(m, dt, camera_angular_velocity) -> yaw_rate, pitch_rate, pump into your shader
+```
+
+Data: read the JSON files in the host (any language), pass the whole text. One `BcStats` can serve every weapon; make one
+`BcSway`/`BcRecoil`/`BcGun` per equipped weapon (recreate the sway when the weapon changes).
+
+### Engines
+
+- **UE4SS C++**: `LoadLibrary("bodycam_core.dll")` + `GetProcAddress`, or link `bodycam_core.dll.lib`; include the header. Units: cm = m * 100,
+  axes x right, y up, z back become UE (X fwd, Y right, Z up) as `(-z, x, y)`. Read weapon JSON with `std::ifstream`.
+- **Unity** (BepInEx / MelonLoader): P/Invoke the same names (`[DllImport("bodycam_core")]`), `StringBuilder` for the `char*` outputs,
+  `[StructLayout(LayoutKind.Sequential)]` structs matching the header. Unity is left handed with z forward: negate z, flip the sign of yaw
+  and roll. Put the dll in the plugin folder (`Plugins/x86_64` for a normal build).
+- **Godot 4**: a small GDExtension (Rust `libloading` or C++) wrapping the C functions, or call them directly from C# with `NativeLibrary`.
+  Godot is right handed with -Z forward, x right, y up: the public convention is already that, only radians vs degrees and the
+  character basis differ.
+- **Anything else**: native plugin or injected DLL calling the C ABI; no callbacks, no allocation from the host side, handles are plain pointers
+  you must destroy.
+
+Build: `cargo build -p bodycam-core --release` gives `target/release/bodycam_core.dll` (`.so` on Linux). The header is hand-written
+(no cbindgen dependency); `ffi::tests::header_declares_every_export` fails if an export is missing from it.
+
 ## Roadmap
 
-1. Viewmodel pose: port `sway.rs` and the viewmodel layer of `viewmodel.rs` (weapon sway, stress, ADS blend, regrip additives) so the core
-   outputs arm/gun root transforms per frame. Host provides the arms mesh bone driving (the animation clips stay in the
-   extracted assets; the core only outputs poses/blend weights).
-2. ADS: aim alpha, FOV handling (Bodycam keeps FOV constant at 120 horizontal; distortion is post), sensitivity scaling.
-3. Gunfire and ballistics: `weapon.rs` fire rates, spread, ballistic model; core outputs shots (origin, direction, weapon row)
-   and the host does the raycasts and applies damage. Muzzle flash, ejection sockets as events.
-4. Audio events: footsteps (already emitted as `footstep`), gunshot, reload, ADS. Event IDs plus the sound names; the host
-   plays them from the extracted audio.
-5. Packaging: an installer script that runs the extraction against the user's Bodycam install, drops the core dll, the adapter, and the ReShade file.
+1. Packaging: an installer script that runs the extraction against the user's Bodycam install, drops the core dll, the adapter, and the ReShade file.
+2. Optional: magnified optic sway, spread bloom/other fire modes (burst) if the DT data gets them, a cbindgen header.
 
 ## UE4SS example adapter (UNTESTED)
 
