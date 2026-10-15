@@ -176,6 +176,7 @@ pub fn build(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
         Screen::Settings => settings_screen(cmd, root, cx),
         Screen::Social => social(cmd, root, cx),
         Screen::Credits => credits(cmd, root, cx),
+        Screen::Scoreboard => scoreboard(cmd, root, cx),
     }
     // Toast line at the bottom.
     if !cx.ui.toast.0.is_empty() {
@@ -231,6 +232,19 @@ fn play(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
         _ => ("HOST SERVERS", "Create private matches where you can challenge your friends and define your own rules."),
     };
     header(cmd, body, cx, title, sub);
+    if cx.ui.play_tab == 2 {
+        // LAN / internet play (net.rs): HOST opens a match on port 7777; JOIN connects to the typed address.
+        let r = add(cmd, body, Node { margin: UiRect::top(px(24)), column_gap: px(24), align_items: AlignItems::Center, ..row() });
+        let b = button(cmd, r, Node { width: px(300), height: px(90), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, Act::Host, None, PANEL, PANEL_HOVER, Some(GREEN));
+        txt(cmd, b, cx, "HOST MATCH (7777)", 30.0, Color::WHITE, Wt::Bold);
+        let f = button(cmd, r, Node { width: px(420), height: px(90), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, Act::IpField, None, PANEL, PANEL_HOVER, Some(if cx.ui.ip_focus { GREEN } else { RED }));
+        let shown = format!("{}{}", cx.s.join_ip, if cx.ui.ip_focus { "_" } else { "" });
+        txt(cmd, f, cx, &shown, 30.0, Color::WHITE, Wt::Medium);
+        let j = button(cmd, r, Node { width: px(300), height: px(90), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, Act::Join, None, PANEL, PANEL_HOVER, Some(GREEN));
+        txt(cmd, j, cx, "JOIN", 30.0, Color::WHITE, Wt::Bold);
+        txt(cmd, body, cx, "Click the address to edit it (digits, '.' and ';' for ':'). Both players need the same map.", 20.0, Color::WHITE, Wt::Medium);
+        return;
+    }
     if cx.ui.play_tab != 0 {
         txt(cmd, body, cx, "Maintenance in progress - Coming back soon", 34.0, RED, Wt::Bold);
         return;
@@ -387,6 +401,22 @@ fn weapon(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     }
 }
 
+/// W_ScoreboardSubmenu stand-in: deathmatch table (kills / deaths), first to 40 wins (DA_GameModeDeathmatch).
+fn scoreboard(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
+    let body = frame(cmd, root, cx, "[ESC] BACK", None, &[], 0, &|_| Act::Noop);
+    cmd.entity(body).insert(BackgroundColor(DARK));
+    header(cmd, body, cx, "DEATHMATCH", "First to 40 kills wins.");
+    let rows = crate::net::SCORES.lock().map(|t| t.clone()).unwrap_or_default();
+    let me = crate::net::MY_ID.load(std::sync::atomic::Ordering::Relaxed);
+    if rows.is_empty() {
+        txt(cmd, body, cx, "No kills yet.", 28.0, Color::WHITE, Wt::Medium);
+    }
+    for (id, k, d) in rows {
+        let who = if id == me { "YOU".to_string() } else { format!("PLAYER {id}") };
+        txt(cmd, body, cx, &format!("{who}    {k} kills    {d} deaths"), 30.0, if id == me { GREEN } else { Color::WHITE }, Wt::Bold);
+    }
+}
+
 fn menu(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     let body = frame(cmd, root, cx, "[ESC] BACK", None, &[], 0, &|_| Act::Noop);
     cmd.entity(body).insert(BackgroundColor(DARK));
@@ -398,6 +428,7 @@ fn menu(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
         ("EXIT GAME", "T_UI_ExitIcon", Act::Exit),
         ("REPORT BUG", "T_UI_Bug", Act::Toast("Bug reports are sent online: offline.".into())),
         ("FEATURES UPVOTE", "T_UI_Vote", Act::Toast("Feature voting is online only.".into())),
+        ("SCOREBOARD", "T_UI_Leader", Act::Push(Screen::Scoreboard)),
         ("CREDITS", "T_UI_Leader", Act::Push(Screen::Credits)),
     ] {
         let t = button(cmd, grid, Node { width: px(400), height: px(260), flex_direction: FlexDirection::Column, justify_content: JustifyContent::Center, align_items: AlignItems::Center, row_gap: px(18), ..default() }, act, None, PANEL, PANEL_HOVER, Some(Color::srgb(0.2, 0.2, 0.22)));

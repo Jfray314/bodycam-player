@@ -355,7 +355,7 @@ impl Plugin for AudioPlugin {
             .insert_resource(Tremor(0.0))
             .init_resource::<Loops>()
             .add_systems(PostStartup, preload_player)
-            .add_systems(Update, (footsteps, weapon_sfx, near_miss_sfx, shell_sfx, montage_sfx, play_cues, run_queue, aim_sfx, start_pending, preload_weapons, loops, selftest).chain());
+            .add_systems(Update, (footsteps, weapon_sfx, remote_sfx, near_miss_sfx, shell_sfx, montage_sfx, play_cues, run_queue, aim_sfx, start_pending, preload_weapons, loops, selftest).chain());
     }
 }
 
@@ -456,6 +456,22 @@ fn footsteps(mut cmd: Commands, mut ev: MessageReader<Footstep>, mut bank: ResMu
             if when == "step" || f.stride_start {
                 trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &format!("{prefix}{gait}"), &Params::default(), 50.0);
             }
+        }
+    }
+}
+
+/// Another player's weapon sound (net.rs): `kind` Fire / FireSuppressed, attenuated by `dist_cm`.
+#[derive(Message, Clone)]
+pub struct RemoteSfx {
+    pub row: String,
+    pub kind: &'static str,
+    pub dist_cm: f32,
+}
+
+fn remote_sfx(mut cmd: Commands, mut ev: MessageReader<RemoteSfx>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>) {
+    for e in ev.read() {
+        if let Some(c) = bank.weapon_cue(&e.row, e.kind).map(str::to_string) {
+            trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &c, &Params::default(), e.dist_cm);
         }
     }
 }

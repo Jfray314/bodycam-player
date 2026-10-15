@@ -123,11 +123,17 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     // Lens dirt: scatters light above the threshold (sun, lamps, muzzle flash).
     var scatter = vec3<f32>(0.0);
     let mx = vec2<i32>(dims) - 1;
+    // Each ring tap is a 5-tap blur (plus shape, spread 0.07): single taps ghosted high-contrast slats (skylight) into striped copies.
     for (var k = 0; k < 8; k++) {
         let a = f32(k) * 0.7854;
         let dir = vec2<f32>(cos(a), sin(a) / aspect);
-        scatter += max(textureLoad(tex, clamp(vec2<i32>((uv_g + dir * 0.10) * dims), vec2<i32>(0), mx), 0).rgb - fx.dirt_threshold, vec3<f32>(0.0));
-        scatter += max(textureLoad(tex, clamp(vec2<i32>((uv_g + dir * 0.28) * dims), vec2<i32>(0), mx), 0).rgb - fx.dirt_threshold, vec3<f32>(0.0));
+        for (var r = 0; r < 2; r++) {
+            let c = uv_g + dir * select(0.10, 0.28, r == 1);
+            for (var j = 0; j < 5; j++) {
+                let o = select(vec2<f32>(0.0), vec2<f32>(select(-1.0, 1.0, j % 2 == 0) * f32(j < 3), select(-1.0, 1.0, j % 2 == 0) * f32(j >= 3)), j > 0) * 0.07;
+                scatter += clamp(textureLoad(tex, clamp(vec2<i32>((c + o) * dims), vec2<i32>(0), mx), 0).rgb - fx.dirt_threshold, vec3<f32>(0.0), vec3<f32>(1.5)) * 0.2; // clamp: the 300-nit sky would otherwise paint the whole mask
+            }
+        }
     }
     scatter = scatter / 16.0 * fx.dirt_gain * (1.0 + fx.dirt_boost * 6.0);
     col += scatter * dirt_mask(in.uv, aspect) * fx.dirt;

@@ -267,6 +267,17 @@ pub struct Fired {
     pub fire_rate: f32,
     /// Suppressor mounted: audio plays Cosmetic.Weapon.SFX.FireSuppressed.
     pub suppressed: bool,
+    /// Muzzle origin and one direction per pellet (net.rs replicates them).
+    pub origin: Vec3,
+    pub dirs: Vec<Vec3>,
+}
+
+/// Another player's shot (net.rs): impact FX + muzzle light, no damage.
+#[derive(Message, Clone, Debug)]
+pub struct RemoteShot {
+    pub origin: Vec3,
+    pub dirs: Vec<Vec3>,
+    pub suppressed: bool,
 }
 
 /// AC_BodycamAnimationComponent.PlayEndFireRegripMotion / ForceReGripMotion(delay): play a random ReGripMotions
@@ -532,7 +543,7 @@ impl Plugin for WeaponPlugin {
             .add_message::<ShellLanded>()
             .add_systems(Startup, setup_fx)
             .add_systems(PostStartup, give_loadout)
-            .add_systems(Update, ((actions, swap, aim, fire, eject_shells, fade, particles, shells).chain(), log_montages));
+            .add_message::<RemoteShot>().add_systems(Update, ((actions, swap, aim, fire, eject_shells, fade, particles, shells).chain(), log_montages, remote_shots));
     }
 }
 
@@ -814,6 +825,7 @@ fn muzzle_basis(
     cam: &GlobalTransform,
     aiming: bool,
     sights: &mut HashMap<String, Vec3>,
+    att_fire: Option<(String, Vec3)>,
 ) -> (Vec3, Vec3) {
     let cam_fwd = cam.forward().as_vec3();
     let Ok((root, rgt, model)) = gun.single() else { return (cam.translation(), cam_fwd) };
@@ -836,10 +848,11 @@ fn muzzle_basis(
         }
     }
     let centre = if n > 0.0 { sum / n } else { rgt.translation() };
-    let socket = FIRE_SOCKETS.with(|m| m.get(model.0).cloned());
+    // BP_StaticFireLocationAttachment (suppressor): InitFireLocationTarget moves the fire location to the attachment's FireLocation socket.
+    let socket = att_fire.or_else(|| FIRE_SOCKETS.with(|m| m.get(model.0).cloned()).map(|(b, l)| (b, Vec3::new(l.x, -l.y, l.z) * 0.01))); // UE cm -> joint frame (x, -y, z) m
     let fire_loc = socket.and_then(|(bone, loc)| {
         let (_, _, jt) = joints.iter().find(|(e, n, _)| n.as_str().eq_ignore_ascii_case(&bone) && crate::viewmodel::root_of_entity(*e, root, parents))?;
-        Some(jt.transform_point(Vec3::new(loc.x, -loc.y, loc.z) * 0.01)) // UE cm -> joint frame (x, -y, z) m
+        Some(jt.transform_point(loc))
     });
     let origin = fire_loc.unwrap_or_else(|| centre + gun_fwd * (if n > 0.0 { far } else { centre.dot(gun_fwd) } - centre.dot(gun_fwd)));
     // Aimed: UE fires along the bore (BulletSpawnOrigin pitch), but on our models the eye (AimPoint, on the camera when
@@ -942,14 +955,16 @@ fn fire(
     inv.cooldown = s.fire_rate.unwrap_or(0.1);
 
     let gt = *cam;
-    let (origin, aim_dir) = muzzle_basis(&gun, &joints, &parents, &kids, &gun_meshes, &mesh_assets, gt, p.aiming, &mut sights);
+    let (origin, aim_dir) = muzzle_basis(&gun, &joints, &parents, &kids, &gun_meshes, &mesh_assets, gt, p.aiming, &mut sights, cfg.as_ref().and_then(|c| crate::attach::fire_location(c, &inv.slots[inv.current].name)));
     debug!("shot dir vs camera: yaw {:.2} pitch {:.2} deg", (aim_dir.cross(*gt.forward()).y).asin().to_degrees(), (aim_dir.y.asin() - gt.forward().y.asin()).to_degrees());
     // SpreadX = max yaw, SpreadY = max pitch (GA_Fire_Base), full angles.
     let (sx, sy) = if p.aiming { (s.spread_aim_x, s.spread_aim_y) } else { (s.spread_hip_x, s.spread_hip_y) };
     let (sx, sy) = (sx.unwrap_or(0.0), sy.unwrap_or(0.0));
     let mut rng = rand::rng();
+    let mut dirs = vec![];
     for _ in 0..s.pellet_count.unwrap_or(1.0) as u32 {
         let dir = random_in_elliptical_cone(aim_dir, sx, sy, &mut rng);
+        dirs.push(dir);
         let hits: Vec<(Entity, Vec3, Vec3, f32)> = {
             let filter = |e: Entity| targets.get(e).is_ok_and(|t| !t.3);
             let settings = MeshRayCastSettings::default().with_filter(&filter).with_early_exit_test(&|_| false);
@@ -988,8 +1003,9 @@ fn fire(
         let _ = end;
     }
     // WEP.PointLight: orange (1800 K), visible for 1.5 frames (RetriggerableDelay(1.5 * WorldDeltaSeconds)) on SpawnFireParticles.
-    // UE places it 50 cm ahead of the gun; Intensity 40 cd there is not comparable to Bevy lumens (ponytail: 40k lm at 30 cm, tuned by eye: 200k at 50 cm blew the exposure out).
-    cmd.spawn((PointLight { intensity: 40_000.0, range: 6.0, color: Color::srgb(1.0, 0.55, 0.2), ..default() }, Transform::from_translation(origin + aim_dir * 0.3), Fading(time.delta_secs() * 1.5)));
+    // UE: 50 cm ahead of the gun, Intensity 40 Unitless (= 40/625 cd, same conversion as map lights), attenuation 10 m.
+    // ponytail: x4 over the literal 0.8 lm so it stays visible in dim rooms; the old 40000 lm blew the auto-exposure out.
+    cmd.spawn((PointLight { intensity: 40.0 / 625.0 * 4.0 * std::f32::consts::PI * 4.0, range: 10.0, radius: 0.2, shadow_maps_enabled: false, color: Color::srgb(1.0, 0.55, 0.2), ..default() }, Transform::from_translation(origin + aim_dir * 0.5), Fading((time.delta_secs() * 1.5).min(0.03))));
     // SpawnFireParticles: MuzzleSmoke ParticleSystem at BulletSpawnOrigin, scale = MapRange(Damage, 0..100 -> 0.1..2.0); skipped while aiming.
     // ponytail: the system asset (cosmetic tag, default per skin) is not in the dump; two drifting smoke sprites stand in.
     if !p.aiming && !suppressed {
@@ -1008,7 +1024,33 @@ fn fire(
         inv.pull_slider.push(0.0);
     }
     let w = &inv.slots[cur];
-    fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming, fire_rate: s.fire_rate.unwrap_or(0.1), suppressed });
+    fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming, fire_rate: s.fire_rate.unwrap_or(0.1), suppressed, origin, dirs });
+}
+
+/// Another player's shot: impact dust at where each pellet ends and a muzzle flash light.
+fn remote_shots(
+    mut cmd: Commands,
+    mut ev: MessageReader<RemoteShot>,
+    mut ray: MeshRayCast,
+    surf: Query<Option<&SurfaceMat>>,
+    ignore: Query<(), With<crate::player::IgnoreTraces>>,
+    fx: Res<FireFx>,
+    mut mats: ResMut<Assets<StandardMaterial>>,
+    mut soft: ResMut<Assets<crate::soft::SoftMat>>,
+) {
+    for s in ev.read() {
+        for d in &s.dirs {
+            let Ok(dir) = Dir3::new(*d) else { continue };
+            let filter = |e: Entity| !ignore.contains(e);
+            let hit = ray.cast_ray(Ray3d::new(s.origin, dir), &MeshRayCastSettings::default().with_filter(&filter)).first().map(|(e, h)| (*e, h.point, h.normal.normalize_or_zero(), h.distance));
+            if let Some((e, pt, n, dist)) = hit && dist <= FIRE_RANGE {
+                impact_fx(&mut cmd, &fx, &mut mats, &mut soft, Surf::of(surf.get(e).ok().flatten().map(|m| m.0)), pt, n);
+            }
+        }
+        if let Some(d) = s.dirs.first() {
+            cmd.spawn((PointLight { intensity: 40_000.0, range: 6.0, color: Color::srgb(1.0, 0.55, 0.2), ..default() }, Transform::from_translation(s.origin + *d * 0.3), Fading(0.03)));
+        }
+    }
 }
 
 /// Camera-facing smoke sprite (whisp_One sheet): grows 1.5x its size per second, alpha fades from `alpha` over `life`.

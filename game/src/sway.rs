@@ -191,7 +191,7 @@ const PIVOT_ADS_UE: Vec3 = Vec3::new(12.4, 0.2, -14.2);
 /// Pure spring-bank step used by the system and the tests. Inputs: LookDeltaInput (yaw + = turn right, pitch + = look up, UE
 /// signs; already in node units, this frame's value) and the move axes (fwd, right; +-1). The node parameters switch instantly with IsAiming: aiming uses the
 /// Look* tables, hip the HipLook* tables, on the same springs (recording: node params flip on the key frame).
-fn run(sw: &mut Sway, anims: &Value, ldi: Vec2, mv: Vec2, aiming: bool, dt: f32) {
+pub(crate) fn run(sw: &mut Sway, anims: &Value, ldi: Vec2, mv: Vec2, aiming: bool, dt: f32) {
     let (pos_t, rot_t) = if aiming { ("LookPositionSway", "LookRotationSway") } else { ("HipLookPositionSway", "HipLookRotationSway") };
     let ads_k = |k: f32| 1.0 + (k - 1.0) * sw.alpha;
     let pp = axis_params(&anims[pos_t], GAIN_POS * ads_k(ADS_K_POS), false);

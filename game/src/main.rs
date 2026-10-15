@@ -17,6 +17,7 @@ mod hud;
 mod items;
 mod perks;
 mod map;
+mod net;
 mod player;
 mod postfx;
 mod recoil;
@@ -24,6 +25,8 @@ mod status;
 mod viewmodel;
 mod sway;
 mod weapon;
+#[cfg(test)]
+mod core_parity;
 
 use bevy::prelude::*;
 
@@ -37,7 +40,7 @@ fn main() {
         }))
         .add_plugins((body::BodyPlugin, character::CharacterPlugin))
         .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, sway::SwayPlugin, recoil::RecoilPlugin, map::MapPlugin, gunfight::GunfightPlugin, grid::GridPlugin, bots::BotsPlugin, camadjust::CamAdjustPlugin, dev::DevPlugin))
-        .add_plugins((effects::EffectsPlugin, soft::SoftPlugin, attach::AttachPlugin, items::ItemsPlugin, perks::PerksPlugin))
+        .add_plugins((effects::EffectsPlugin, soft::SoftPlugin, attach::AttachPlugin, items::ItemsPlugin, perks::PerksPlugin, net::NetPlugin))
         .add_plugins(ui::UiPlugin)
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
         .add_systems(Startup, test_range.run_if(|| !map::available()))

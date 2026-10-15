@@ -46,9 +46,9 @@ pub fn spring_roll_target(move_x: f32, yaw_delta: f32) -> f32 {
 }
 
 // ---- UE FRichCurve (game/src/curve.rs) ----
-type Key = [f32; 5];
+pub(crate) type Key = [f32; 5];
 
-fn curve_eval(keys: &[Key], t: f32) -> f32 {
+pub(crate) fn curve_eval(keys: &[Key], t: f32) -> f32 {
     let (Some(first), Some(last)) = (keys.first(), keys.last()) else { return 0.0 };
     if t <= first[0] {
         return first[1];
@@ -454,6 +454,15 @@ pub unsafe extern "C" fn bc_step(c: *mut Core, inp: *const BcInput, out: *mut Bc
     let input = Input { dt: i.dt, look_yaw_deg: i.look_yaw_deg, look_pitch_deg: i.look_pitch_deg, move_x: i.move_x, speed: i.speed, lean_target: i.lean_target, flags: i.flags };
     unsafe { *out = c.step(&input) };
 }
+
+pub mod ballistics;
+pub mod cues;
+pub mod ffi;
+pub mod gunfire;
+pub mod lens;
+pub mod recoil;
+pub mod sway;
+pub mod weapon_data;
 
 #[cfg(test)]
 mod tests;
