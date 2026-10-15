@@ -25,7 +25,7 @@ use std::sync::OnceLock;
 pub const IDS: [(&str, &str); 9] = [
     ("reddot", "RED DOT"),
     ("holo", "HOLOGRAPHIC"),
-    ("acog", "ACOG 4X"),
+    ("acog", "ACOG 3X"),
     ("canted", "CANTED DOT"),
     ("suppressor", "SUPPRESSOR"),
     ("laser", "LASER (GREEN)"),
@@ -59,6 +59,22 @@ pub struct Data {
     pub items: HashMap<String, Item>,
     pub guns: HashMap<String, HashMap<String, Xf>>,
     pub rows: HashMap<String, String>,
+}
+
+/// assets/reticles.json (tools/reticles.py): MI_ReticleData_* texture/colour/scale + scope Magnification per optic.
+#[derive(Deserialize, Debug)]
+pub struct Reticle {
+    pub tex: String,
+    pub color: [f32; 3],
+    pub intensity: f32,
+    /// ReticleScaleAndOffset (x, y scale of the texture on the reticle window).
+    pub scale: [f32; 4],
+    #[serde(default)]
+    pub mag: Option<f32>,
+}
+fn reticles() -> &'static HashMap<String, Reticle> {
+    static D: OnceLock<HashMap<String, Reticle>> = OnceLock::new();
+    D.get_or_init(|| serde_json::from_str(include_str!("../../assets/reticles.json")).expect("assets/reticles.json"))
 }
 
 pub fn data() -> &'static Data {
@@ -169,7 +185,6 @@ fn mount_sys(
     parents: Query<&ChildOf>,
     old: Query<Entity, With<AttMount>>,
     mut done: Local<(Option<Entity>, String)>,
-    mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut mats: ResMut<Assets<StandardMaterial>>,
     mut st: ResMut<AttState>,
@@ -195,7 +210,6 @@ fn mount_sys(
     *done = (Some(gun), key);
     st.scope = None;
     let d = data();
-    let reticle = reticle_mat(&mut images, &mut mats);
     for id in &ids {
         let Some((_, xf)) = mount(&row, id) else { continue };
         let Some(bone) = joints.iter().find(|(e, n)| n.as_str().eq_ignore_ascii_case(&xf.bone) && root_of_entity(*e, gun, &parents)).map(|j| j.0) else { continue };
@@ -207,12 +221,12 @@ fn mount_sys(
             st.scope = Some((root, v.clone()));
         }
         // WEP optics: the reticle quad sits on the optic's Reticle socket (MI_ReticleData_*: ReticleColor red, unlit).
-        // ponytail: procedural dot/crosshair stands in for the reticle textures of the MI_ReticleData parents.
-        if let Some(r) = item.sockets.get("reticle").or_else(|| item.sockets.get("reticle_magnified")).or_else(|| item.sockets.get("reticle_canted")).filter(|_| is_optic(id)) {
-            let size = if item.kind == "magnified" { 0.012 } else { 0.007 };
+        // ponytail: window size 7 cm x ReticleScaleAndOffset (guess); reticle item defaults are guesses too (tools/reticles.py).
+        if let Some(rt) = reticles().get(id.as_str()).filter(|_| item.kind != "magnified")
+            && let Some(r) = item.sockets.get("reticle").or_else(|| item.sockets.get("reticle_magnified")).or_else(|| item.sockets.get("reticle_canted")).filter(|_| is_optic(id)) {
             cmd.spawn((
-                Mesh3d(meshes.add(Rectangle::new(size, size))),
-                MeshMaterial3d(reticle.clone()),
+                Mesh3d(meshes.add(Rectangle::new(0.07 * rt.scale[0], 0.07 * rt.scale[1]))),
+                MeshMaterial3d(reticle_mat(&assets, &mut mats, rt)),
                 r.tf() * Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
                 NoFrustumCulling,
                 IgnoreTraces,
@@ -240,25 +254,12 @@ fn mount_sys(
     }
 }
 
-/// Procedural red-dot reticle: bright core + halo (MI_ReticleData ReticleIlluminationIntensity/ReticleHalo), alpha-blended.
-fn reticle_mat(images: &mut Assets<Image>, mats: &mut Assets<StandardMaterial>) -> Handle<StandardMaterial> {
-    use bevy::asset::RenderAssetUsages;
-    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-    const N: u32 = 64;
-    let mut px = Vec::with_capacity((N * N * 4) as usize);
-    for y in 0..N {
-        for x in 0..N {
-            let d = (Vec2::new(x as f32, y as f32) - Vec2::splat(N as f32 / 2.0 - 0.5)).length() / (N as f32 / 2.0);
-            let a = (1.0 - ((d - 0.12) / 0.04).clamp(0.0, 1.0)).max((1.0 - d).clamp(0.0, 1.0).powi(3) * 0.35);
-            px.extend_from_slice(&[255, 20, 20, (a * 255.0) as u8]);
-        }
-    }
-    let img = Image::new(Extent3d { width: N, height: N, depth_or_array_layers: 1 }, TextureDimension::D2, px, TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::RENDER_WORLD);
-    let tex = images.add(img);
+/// Reticle quad material: the MI_ReticleData texture (white mask, alpha = luminance) tinted by ReticleColor x ReticleIlluminationIntensity, unlit.
+fn reticle_mat(assets: &AssetServer, mats: &mut Assets<StandardMaterial>, r: &Reticle) -> Handle<StandardMaterial> {
+    let tex = assets.load(format!("models/attachments/reticles/{}.png", r.tex));
     mats.add(StandardMaterial {
-        base_color_texture: Some(tex.clone()),
-        emissive_texture: Some(tex),
-        emissive: LinearRgba::rgb(6.0, 6.0, 6.0),
+        base_color: Color::LinearRgba(LinearRgba::rgb(r.color[0], r.color[1], r.color[2]) * r.intensity.min(1.5)),
+        base_color_texture: Some(tex),
         unlit: true,
         alpha_mode: AlphaMode::Blend,
         cull_mode: None,
@@ -327,7 +328,8 @@ fn state(
         Some((xf.bone.clone(), xf.at(Vec3::from(a.loc)) + Vec3::Y * d * 0.01))
     });
     st.eye_relief = relief;
-    st.zoom = if optic.is_some_and(|o| data().items[o].kind == "magnified") { 4.0 } else { 1.0 };
+    // MI_ScopeOpticReticle_*.Magnification
+    st.zoom = optic.filter(|o| data().items[*o].kind == "magnified").and_then(|o| reticles().get(o)?.mag).unwrap_or(1.0);
     let (fl, la) = (st.flashlight, st.laser);
     for mut v in &mut lights {
         *v = if fl { Visibility::Inherited } else { Visibility::Hidden };
@@ -365,17 +367,16 @@ fn laser(
 // ---- magnified optic: scope capture (BodycamScopeCaptureComponent at the optic's Viewpoint socket, SetMagnification) ----
 const SCOPE_PX: u32 = 512;
 // ACOG eyepiece glass (acog.glb MI_ScopeOpticGlass_AGO rear slot): radius 1.08 cm, 3.0 cm in front of the AimPoint socket.
-// ponytail: scope-specific numbers; other magnified optics reuse them. UE reads Magnification/ScreenHeightFraction from the reticle MI.
+// ponytail: scope-specific lens numbers; other magnified optics reuse them (only the ACOG is in the library). Magnification comes from the data.
 const LENS_R: f32 = 0.0108;
 const LENS_BEHIND: f32 = 0.030;
-const SCOPE_MAG: f32 = 4.0;
 
 #[derive(Component)]
 struct ScopeCam;
 #[derive(Component)]
 struct ScopeOverlay;
 
-fn scope_setup(mut cmd: Commands, mut images: ResMut<Assets<Image>>) {
+fn scope_setup(mut cmd: Commands, mut images: ResMut<Assets<Image>>, assets: Res<AssetServer>) {
     let img = images.add(Image::new_target_texture(SCOPE_PX, SCOPE_PX, TextureFormat::Rgba8UnormSrgb, None));
     cmd.spawn((
         ScopeCam,
@@ -394,9 +395,14 @@ fn scope_setup(mut cmd: Commands, mut images: ResMut<Assets<Image>>) {
             GlobalZIndex(-10),
         ))
         .id();
-    // DotMK1 reticle: thin cross + red dot (MI_ReticleMagnifiedData_DotMK1_Red). ponytail: procedural, not the reticle texture.
-    for (w, h, c) in [(percent(100), px(1), Color::srgba(0.0, 0.0, 0.0, 0.7)), (px(1), percent(100), Color::srgba(0.0, 0.0, 0.0, 0.7)), (px(4), px(4), Color::srgb(1.0, 0.05, 0.05))] {
-        cmd.spawn((Node { position_type: PositionType::Absolute, width: w, height: h, ..default() }, BackgroundColor(c), ChildOf(o)));
+    // MI_ReticleMagnifiedData_*: reticle texture scaled by ReticleScaleAndOffset over the lens.
+    if let Some(r) = reticles().get("acog") {
+        let c = Color::srgb(r.color[0], r.color[1], r.color[2]);
+        cmd.spawn((
+            Node { position_type: PositionType::Absolute, width: percent(r.scale[0] * 100.0), height: percent(r.scale[1] * 100.0), ..default() },
+            ImageNode::new(assets.load(format!("models/attachments/reticles/{}.png", r.tex))).with_color(c),
+            ChildOf(o),
+        ));
     }
 }
 
@@ -428,7 +434,7 @@ fn scope(
     let dist = LENS_BEHIND + st.eye_relief;
     let alpha = (LENS_R / dist).atan();
     if let Projection::Perspective(p) = &mut **cam_p {
-        p.fov = 2.0 * (alpha.tan() / SCOPE_MAG).atan();
+        p.fov = 2.0 * (alpha.tan() / st.zoom).atan();
     }
     let vfov = if let Projection::Perspective(p) = *main { p.fov } else { 1.0 };
     let h = win.height();
