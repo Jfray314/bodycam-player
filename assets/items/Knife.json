@@ -1,5 +1,42 @@
 {
- "extra": {},
+ "extra": {
+  "Throw": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Knife/Character/A_FP_Knife_Throw_Montage.A_FP_Knife_Throw_Montage",
+    "length": 0.9,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "PlayWepSounds_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {
+       "Sound": "/Game/Audio/Knife/Cue/Bodycam_SFX_Weapon_Throw_Knife.Bodycam_SFX_Weapon_Throw_Knife",
+       "Volume Multiplier": 1.0
+      }
+     }
+    ],
+    "blend_in": 0.25,
+    "blend_out": 0.25
+   }
+  },
+  "Windup": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Knife/Character/A_FP_Knife_Windup.A_FP_Knife_Windup",
+    "length": 1.9,
+    "rate": 1.0,
+    "notifies": []
+   }
+  },
+  "WindDown": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Knife/Character/A_FP_Knife_WindDown.A_FP_Knife_WindDown",
+    "length": 1.3333334,
+    "rate": 1.0,
+    "notifies": []
+   }
+  }
+ },
  "row": "Knife",
  "item_class": "Item.Melee.Knife.Knife.Knife",
  "actor": "",
