@@ -825,6 +825,7 @@ fn muzzle_basis(
     cam: &GlobalTransform,
     aiming: bool,
     sights: &mut HashMap<String, Vec3>,
+    att_fire: Option<(String, Vec3)>,
 ) -> (Vec3, Vec3) {
     let cam_fwd = cam.forward().as_vec3();
     let Ok((root, rgt, model)) = gun.single() else { return (cam.translation(), cam_fwd) };
@@ -847,10 +848,11 @@ fn muzzle_basis(
         }
     }
     let centre = if n > 0.0 { sum / n } else { rgt.translation() };
-    let socket = FIRE_SOCKETS.with(|m| m.get(model.0).cloned());
+    // BP_StaticFireLocationAttachment (suppressor): InitFireLocationTarget moves the fire location to the attachment's FireLocation socket.
+    let socket = att_fire.or_else(|| FIRE_SOCKETS.with(|m| m.get(model.0).cloned()).map(|(b, l)| (b, Vec3::new(l.x, -l.y, l.z) * 0.01))); // UE cm -> joint frame (x, -y, z) m
     let fire_loc = socket.and_then(|(bone, loc)| {
         let (_, _, jt) = joints.iter().find(|(e, n, _)| n.as_str().eq_ignore_ascii_case(&bone) && crate::viewmodel::root_of_entity(*e, root, parents))?;
-        Some(jt.transform_point(Vec3::new(loc.x, -loc.y, loc.z) * 0.01)) // UE cm -> joint frame (x, -y, z) m
+        Some(jt.transform_point(loc))
     });
     let origin = fire_loc.unwrap_or_else(|| centre + gun_fwd * (if n > 0.0 { far } else { centre.dot(gun_fwd) } - centre.dot(gun_fwd)));
     // Aimed: UE fires along the bore (BulletSpawnOrigin pitch), but on our models the eye (AimPoint, on the camera when
@@ -953,7 +955,7 @@ fn fire(
     inv.cooldown = s.fire_rate.unwrap_or(0.1);
 
     let gt = *cam;
-    let (origin, aim_dir) = muzzle_basis(&gun, &joints, &parents, &kids, &gun_meshes, &mesh_assets, gt, p.aiming, &mut sights);
+    let (origin, aim_dir) = muzzle_basis(&gun, &joints, &parents, &kids, &gun_meshes, &mesh_assets, gt, p.aiming, &mut sights, cfg.as_ref().and_then(|c| crate::attach::fire_location(c, &inv.slots[inv.current].name)));
     debug!("shot dir vs camera: yaw {:.2} pitch {:.2} deg", (aim_dir.cross(*gt.forward()).y).asin().to_degrees(), (aim_dir.y.asin() - gt.forward().y.asin()).to_degrees());
     // SpreadX = max yaw, SpreadY = max pitch (GA_Fire_Base), full angles.
     let (sx, sy) = if p.aiming { (s.spread_aim_x, s.spread_aim_y) } else { (s.spread_hip_x, s.spread_hip_y) };

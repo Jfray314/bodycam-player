@@ -118,7 +118,8 @@ def build_materials(meta, d, meshes):
         if dif and "specular" in dif.lower():  # e.g. M16A4 Stanag: the only "Texture" param is a specular map, not albedo
             dif = None
             bsdf.inputs["Base Color"].default_value = (0.04, 0.04, 0.04, 1)
-        col = mdef.get("colors", {}).get("Albedo Tint")
+        # ponytail: M_Kobra's TX_Kobra_01a_ALB renders near-white (its MI has no tint param; Albedo Controls 1/.8/.8 is not enough); factor tuned by eye.
+        col = mdef.get("colors", {}).get("Albedo Tint") or {"M_Kobra": (0.5, 0.45, 0.45)}.get(mdef.get("material"))
         if dif:
             t = nt.nodes.new("ShaderNodeTexImage"); t.image = load_img(d, dif, "sRGB")
             src = t.outputs["Color"]

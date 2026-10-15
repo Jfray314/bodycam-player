@@ -12,7 +12,7 @@ use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
 use bevy::prelude::*;
 use serde_json::Value;
 
-// ponytail: underhand throw (bOverhandGrenade always true), knife throw (RMB + LMB), sticky/RGN/G68 grenades, ReceivePointDamage fuse shortening,
+// ponytail: underhand grenade throw (the FP BAS only has Overhand; AC_BodycamAnimationComponent.bOverhandGrenade is set by C++), knife stab/stick physics (stuck = pickup at the impact), sticky/RGN/G68 grenades, ReceivePointDamage fuse shortening,
 // bots are not flashed (GE_Flashed 18 s), BFL_Explosion falloff formula is UE's ApplyRadialDamageWithFalloff shape.
 pub const SLOT_GRENADE: usize = 2;
 pub const SLOT_MELEE: usize = 3;
@@ -60,6 +60,10 @@ const FUSE: f32 = 3.0; // DT_GrenadeInfo FuseDelay (counted from the Throw event
 pub const KNIFE_RANGE: f32 = 1.25; // Knife_C.CloseAttackRange 125 cm
 pub const KNIFE_RADIUS: f32 = 0.5; // sphere trace radius 50 cm
 pub const KNIFE_DAMAGE: f32 = 100.0; // GE_KnifeStat_Default Damage
+const KNIFE_THROW_DELAY: f32 = 0.3; // Knife_C Server - StartThrowing: Delay 0.3 after the Throw montage starts
+const KNIFE_SPEED: f32 = 15.0; // Knife_C ProjectileMovement InitialSpeed 1500 cm/s
+const KNIFE_AIM_RANGE: f32 = 8.0; // AimAssistMaxRange 800 cm (sphere trace radius 50 cm)
+const KNIFE_STAB_DEPTH: f32 = 0.01; // StabDepth 1 cm
 
 /// RadialDamageWithFalloff(Base, Inner, Outer, Exponent): full damage inside Inner, 0 beyond Outer, power falloff between (cm).
 // ponytail: BFL_Explosion.RadialDamageWithFalloff body is not decompiled; this is UE's ApplyRadialDamageWithFalloff shape.
@@ -180,6 +184,10 @@ struct Items {
     hold: f32,
     /// Knife combo index (Fire list).
     combo: usize,
+    /// Knife_C.bIsAiming (RMB, GA_Character_Aim_Knife): LMB throws instead of stabbing.
+    knife_aim: bool,
+    /// Throw montage running: seconds since StartThrowing.
+    knife_throw: Option<f32>,
     /// GA_Character_QuickAttack: slot to return to after the swing.
     quick: Option<QuickAttack>,
 }
@@ -203,6 +211,12 @@ struct Grenade {
     owner: u8,
 }
 
+/// Knife_C in flight (ProjectileMovement + RotatingMovement).
+#[derive(Component)]
+struct KnifeProj {
+    vel: Vec3,
+}
+
 #[derive(Component)]
 struct Blast {
     t: f32,
@@ -223,7 +237,7 @@ struct BlastMesh(Handle<Mesh>);
 pub struct ItemsPlugin;
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Items>().add_message::<Detonate>().add_message::<DetonateFor>().add_message::<BlastDamage>().add_message::<Thrown>().add_message::<Melee>().add_message::<DroneCrashed>().add_message::<PlayCue>().add_systems(Startup, |mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>| cmd.insert_resource(BlastMesh(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())))).add_systems(Update, (grenade_input, knife_input, projectiles, detonate, blasts, tag_meshes, drop_pickup).chain());
+        app.init_resource::<Items>().add_message::<Detonate>().add_message::<DetonateFor>().add_message::<BlastDamage>().add_message::<Thrown>().add_message::<Melee>().add_message::<DroneCrashed>().add_message::<PlayCue>().add_systems(Startup, |mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>| cmd.insert_resource(BlastMesh(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())))).add_systems(Update, (grenade_input, knife_input, knife_flight, projectiles, detonate, blasts, tag_meshes, drop_pickup).chain());
     }
 }
 
@@ -544,6 +558,7 @@ fn knife_input(
     mut out: MessageWriter<MontageStarted>,
     mut snd: MessageWriter<PlayCue>,
     mut melee: MessageWriter<Melee>,
+    (assets, hand): (Res<AssetServer>, Query<&GlobalTransform, With<GunRoot>>), // grouped: Bevy's 16-param limit
 ) {
     let dt = time.delta_secs();
     if perk.locked() {
@@ -551,9 +566,51 @@ fn knife_input(
     }
     let cur = inv.current;
     let on_knife = cur == SLOT_MELEE && inv.slots.get(cur).is_some_and(|w| w.kind == ItemKind::Knife);
-    let knife_slot = inv.slots.get(SLOT_MELEE).is_some_and(|w| w.kind == ItemKind::Knife);
+    let knife_slot = inv.slots.get(SLOT_MELEE).is_some_and(|w| w.kind == ItemKind::Knife && w.ammo > 0);
     if p.dead || !knife_slot {
         return;
+    }
+    if !on_knife {
+        st.knife_aim = false;
+        st.knife_throw = None;
+    }
+    // Knife_C.TriggerKnife: bIsAiming -> Server - StartThrowing (Throw montage, 0.3 s later InternalStartThrowing + RemoveItemFromInventory); else CloseRangeAttack.
+    if on_knife && st.quick.is_none() {
+        if let Some(t) = &mut st.knife_throw {
+            *t += dt;
+            if *t >= KNIFE_THROW_DELAY {
+                st.knife_throw = None;
+                // InternalStartThrowing: SphereTraceSingleForObjects 800 cm from the camera; a hit -> UpdateProjectileParams (suggested arc), else straight at InitialSpeed.
+                let c = cam.compute_transform();
+                let fwd = c.forward().as_vec3();
+                let start = hand.iter().next().map(|g| g.translation()).filter(|p| p.distance(c.translation) < 1.0).unwrap_or(c.translation + fwd * 0.4 - Vec3::Y * 0.15);
+                let aim = targets
+                    .iter()
+                    .filter_map(|(e, t, _, _)| {
+                        let v = t.translation() - c.translation;
+                        let along = v.dot(fwd);
+                        ((0.0..KNIFE_AIM_RANGE).contains(&along) && (v - fwd * along).length() <= KNIFE_RADIUS).then_some((e, t.translation(), along))
+                    })
+                    .min_by(|a, b| a.2.total_cmp(&b.2));
+                let vel = aim.and_then(|(_, at, _)| toss_velocity(start, at, KNIFE_SPEED)).unwrap_or(fwd * KNIFE_SPEED);
+                cmd.spawn((KnifeProj { vel }, WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset("models/guns/Knife.glb"))), Transform::from_translation(start).with_rotation(knife_rot(vel))));
+                inv.slots[SLOT_MELEE].ammo = 0; // RemoveItemInSlot(Melee)
+                inv.swap_to(0, &mut out);
+            }
+            return;
+        }
+        if mouse.just_pressed(MouseButton::Right) && !st.knife_aim && !inv.busy() {
+            // ponytail: no Windup/WindDown clips (the AnimBP holds the aim pose; played one-shot they tilt the head-mounted camera ~80 deg), only the flag.
+            st.knife_aim = true;
+        } else if st.knife_aim && !mouse.pressed(MouseButton::Right) {
+            st.knife_aim = false;
+        } else if st.knife_aim && mouse.just_pressed(MouseButton::Left) {
+            st.knife_aim = false;
+            st.knife_throw = Some(0.0);
+            let m = extra(&inv.slots[SLOT_MELEE], "Throw");
+            inv.use_item(m, &mut out);
+            return;
+        }
     }
     let mut swing = false;
     if keys.just_pressed(KeyCode::KeyX) && st.quick.is_none() && !inv.busy() {
@@ -564,7 +621,7 @@ fn knife_input(
             st.quick = Some(QuickAttack { prev: cur, swing: None });
             inv.swap_to(SLOT_MELEE, &mut out);
         }
-    } else if on_knife && st.quick.is_none() && mouse.just_pressed(MouseButton::Left) && !inv.busy() {
+    } else if on_knife && st.quick.is_none() && !st.knife_aim && mouse.just_pressed(MouseButton::Left) && !inv.busy() {
         swing = true;
     }
     if let Some(mut q) = st.quick {
@@ -612,6 +669,73 @@ fn knife_input(
                 }
             }
         }
+    }
+}
+
+/// Knife mesh long axis (Knife.glb: +Z = blade tip) along the velocity; ponytail: roll about the blade is fixed.
+fn knife_rot(vel: Vec3) -> Quat {
+    Quat::from_rotation_arc(Vec3::Z, vel.normalize_or_zero())
+}
+
+/// Thrown knife: ProjectileMovement (gravity, 15 m/s), RotatingMovement while flying; on a hit the knife sticks (bIsStuck, StabDepth 1 cm) and is
+/// a pickup again; a hit on a target applies GE_Knife_Damage (100 x bone multiplier) + Throw_Impact_Gore, else Throw_Impact.
+// ponytail: swept ray (no sphere body), stuck knives never attach to moving targets, spin about X at 20 rad/s.
+fn knife_flight(
+    mut cmd: Commands,
+    time: Res<Time>,
+    mut q: Query<(Entity, &mut Transform, &mut KnifeProj, Option<&Children>)>,
+    mut ray: MeshRayCast,
+    ignore: Query<(), With<IgnoreTraces>>,
+    mut targets: Query<(Entity, &GlobalTransform, &mut Health, Option<&Name>)>,
+    mut snd: MessageWriter<PlayCue>,
+    assets: Res<AssetServer>,
+    cam: Single<&GlobalTransform, With<BodycamCamera>>,
+) {
+    let dt = time.delta_secs().min(0.05);
+    for (e, mut tf, mut k, _) in &mut q {
+        k.vel.y -= G * dt;
+        let step = k.vel * dt;
+        let len = step.length();
+        let dir = step.normalize_or_zero();
+        // target hit: the nearest Health entity within 0.4 m of the step
+        let hit_t = targets
+            .iter()
+            .filter_map(|(t, g, _, n)| {
+                let v = g.translation() - tf.translation;
+                let along = v.dot(dir);
+                ((-0.2..len + 0.2).contains(&along) && (v - dir * along).length() <= 0.4).then_some((t, along.max(0.0), n.map_or(1.0, |n| bone_multiplier(n.as_str()))))
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        let filter = |x: Entity| !ignore.contains(x) && !targets.contains(x);
+        let wall = Dir3::new(step).ok().and_then(|d| ray.cast_ray(Ray3d::new(tf.translation, d), &MeshRayCastSettings::default().with_filter(&filter)).first().map(|(_, h)| h.distance).filter(|d| *d <= len + 0.02));
+        let hit = match (hit_t, wall) {
+            (Some((t, along, mult)), w) if w.is_none_or(|w| along <= w) => Some((tf.translation + dir * along, Some((t, mult)))),
+            (_, Some(w)) => Some((tf.translation + dir * w, None)),
+            _ => None,
+        };
+        let Some((pt, tgt)) = hit else {
+            tf.translation += step;
+            tf.rotate_local_z(20.0 * dt);
+            continue;
+        };
+        let mut cue = "/Game/Audio/Knife/Cue/Bodycam_SFX_Weapon_Knife_Throw_Impact";
+        if let Some((t, mult)) = tgt
+            && let Ok((_, _, mut hp, _)) = targets.get_mut(t)
+        {
+            hp.0 -= KNIFE_DAMAGE * mult;
+            cue = "/Game/Audio/Knife/Cue/Bodycam_SFX_Weapon_Knife_Throw_Impact_Gore";
+            if hp.0 <= 0.0 {
+                cmd.entity(t).despawn();
+            }
+        }
+        snd.write(PlayCue { cue: cue.into(), dist_cm: cam.translation().distance(pt) * 100.0 });
+        // bIsStuck: the knife stays where it hit (StabDepth into the surface) and can be picked up again.
+        cmd.entity(e).despawn();
+        cmd.spawn((
+            Pickup { row: "Knife".into(), vel: Vec3::ZERO },
+            WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset("models/guns/Knife.glb"))),
+            Transform::from_translation(pt + dir * KNIFE_STAB_DEPTH).with_rotation(knife_rot(k.vel)),
+        ));
     }
 }
 

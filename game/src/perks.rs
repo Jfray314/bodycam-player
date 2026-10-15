@@ -7,7 +7,7 @@
 //! (350) fires GameplayEvent.Perk.Crash -> GA_DroneCrash -> GA_ExplodePerk (200 dmg, inner 200 / outer 1000 cm, exp 2). F = GA_LeavePerk
 //! (Drone_Exit montage, back to Primary); battery drain GE_PerkStat_Default IdleBatteryConsumption 0.1 + 0.001 x speed(cm/s) per second,
 //! empty = GA_OutOfBattery -> Perk.Leave; GadgetCooldown after use (GE_Perk_Cooldown).
-// ponytail: not ported - goggles visual (virtual-bone socket), propeller/rotor spin, drone HUD widget (DroneUI), Acro/Horizon flight modes,
+// ponytail: not ported - goggles visual (virtual-bone socket), propeller/rotor spin, Acro/Horizon flight modes (IA_FlightMode/IA_HUDMode/IA_RatesPresetMode are gamepad-only in IMC_Drone),
 // FPV post-process/night vision, Spectator/Sentinel drones, RC car, bomb (GA_TriggerBomb, Special slot / game-mode item), GoPro PerkDeploy camera montage.
 // GA_Flashlight is this drone light (GameplayCue.Perk.RcCar.Flashlight): on foot, C toggles the gun-mounted flashlight attachment (GA_ToggleAttachment_Flashlight), not a helmet light.
 use crate::audio::PlayCue;
@@ -90,6 +90,8 @@ struct Drone {
     hold: f32,
     tilt: Vec2,
     spawn: f32,
+    /// BP_FPV_Drone Initial Position (IMU_Data.Distance = distance from it, m).
+    origin: Vec3,
 }
 
 /// Controller / goggles on the arms, with their own clip graph.
@@ -113,6 +115,21 @@ struct DroneBody;
 struct DarkPlastic;
 #[derive(Component)]
 struct PerkText;
+/// WBP_DroneInterface root (Overlay_Full + Overlay_Compact, HUD mode 0 = Full: the setting's default).
+#[derive(Component)]
+struct DroneHud;
+#[derive(Component, Clone, Copy, PartialEq)]
+enum HudKind {
+    Lq,
+    LqBars,
+    Battery,
+    Velocity,
+    Distance,
+    Throttle,
+    Mode,
+    Warning,
+    Static,
+}
 #[derive(Component)]
 struct PerkFade;
 
@@ -130,7 +147,51 @@ fn load(mut perk: ResMut<Perk>, assets: Res<AssetServer>) {
     perk.visuals = Some((assets.load("models/guns/DroneController.glb"), assets.load("models/guns/DroneGoggles.glb")));
 }
 
+/// 1080p-referenced UMG pixels -> viewport height percent.
+fn vh(px: f32) -> Val {
+    Val::Vh(px / 10.8)
+}
+
+/// WBP_DroneInterface layout (slot paddings/alignments from the cooked widget tree; font stands in for the CommonText style):
+/// Full: LQ top-left (250, 200), battery bottom-left (300, 100), leave (300, 200), flight mode / velocity (km/h) / distance (H icon)
+/// bottom-right (250, 230/160/110), TH top-right (250, 200); Compact: FpvCrossAir 60 px centre, "Signal Critical" warning below it.
+fn drone_hud(cmd: &mut Commands, assets: &AssetServer) {
+    let font: Handle<Font> = assets.load("fonts/Ki-Bold.otf");
+    let text = |s: &str, size: f32, kind: HudKind, node: Node| {
+        (Text::new(s), TextFont { font: font.clone().into(), font_size: FontSize::Vh(size / 10.8), ..default() }, TextColor(Color::srgb(0.85, 1.0, 0.85)), node, kind)
+    };
+    let abs = |l: Option<f32>, r: Option<f32>, t: Option<f32>, b: Option<f32>| Node {
+        position_type: PositionType::Absolute,
+        left: l.map_or(Val::Auto, vh),
+        right: r.map_or(Val::Auto, vh),
+        top: t.map_or(Val::Auto, vh),
+        bottom: b.map_or(Val::Auto, vh),
+        ..default()
+    };
+    let root = cmd
+        .spawn((DroneHud, Node { position_type: PositionType::Absolute, width: percent(100), height: percent(100), display: Display::None, ..default() }, GlobalZIndex(80), bevy::picking::Pickable::IGNORE))
+        .id();
+    let icon = |name: &str, _size: f32| ImageNode::new(assets.load(format!("ui/drone/{name}.png")));
+    let mut kids = vec![];
+    // LQ: "<channel>:<power>" + signal bars (Distance 0..100 m -> power 100..0, bars 3..0)
+    kids.push(cmd.spawn(text("3:100", 34.0, HudKind::Lq, abs(Some(250.0), None, Some(200.0), None))).id());
+    kids.push(cmd.spawn((icon("T_Signal_4", 0.0), HudKind::LqBars, Node { width: vh(56.0), height: vh(56.0), ..abs(Some(250.0), None, Some(240.0), None) })).id());
+    kids.push(cmd.spawn(text("", 30.0, HudKind::Battery, abs(Some(300.0), None, None, Some(100.0)))).id());
+    kids.push(cmd.spawn(text("[F] LEAVE   [C] LIGHT", 28.0, HudKind::Static, abs(Some(300.0), None, None, Some(200.0)))).id());
+    kids.push(cmd.spawn(text("ANGLE", 30.0, HudKind::Mode, abs(None, Some(250.0), None, Some(230.0)))).id());
+    kids.push(cmd.spawn(text("0", 36.0, HudKind::Velocity, abs(None, Some(330.0), None, Some(160.0)))).id());
+    kids.push(cmd.spawn((icon("KMH_Blured", 0.0), HudKind::Static, Node { width: vh(70.0), height: vh(70.0), ..abs(None, Some(250.0), None, Some(145.0)) })).id());
+    kids.push(cmd.spawn(text("0", 36.0, HudKind::Distance, abs(None, Some(330.0), None, Some(110.0)))).id());
+    kids.push(cmd.spawn((icon("Calque_65", 0.0), HudKind::Static, Node { width: vh(50.0), height: vh(50.0), ..abs(None, Some(250.0), None, Some(105.0)) })).id());
+    kids.push(cmd.spawn(text("TH 100", 30.0, HudKind::Throttle, abs(None, Some(250.0), Some(200.0), None))).id());
+    // Compact: FpvCrossAir (ImageSize 60x60) at the centre, flight mode warning 50 px below
+    kids.push(cmd.spawn((icon("DroneFpvCrossAirBluredHeavy", 0.0), HudKind::Static, Node { width: vh(60.0), height: vh(60.0), position_type: PositionType::Absolute, left: percent(50), top: percent(50), margin: UiRect { left: vh(-30.0), top: vh(-30.0), ..default() }, ..default() })).id());
+    kids.push(cmd.spawn(text("SIGNAL CRITICAL", 34.0, HudKind::Warning, Node { position_type: PositionType::Absolute, left: percent(50), top: percent(50), margin: UiRect { left: vh(-170.0), top: vh(60.0), ..default() }, ..default() })).id());
+    cmd.entity(root).add_children(&kids);
+}
+
 fn ui(mut cmd: Commands, assets: Res<AssetServer>) {
+    drone_hud(&mut cmd, &assets);
     cmd.spawn((
         Text::new(""),
         TextFont { font: assets.load("fonts/Ki-Bold.otf").into(), font_size: 26.0.into(), ..default() },
@@ -230,7 +291,7 @@ fn deploy_flow(
                     let (_, hand_rot, hand_pos) = gt.to_scale_rotation_translation();
                     let (yaw, _, _) = cam.to_scale_rotation_translation().1.to_euler(EulerRot::YXZ);
                     cmd.spawn((
-                        Drone { vel: Vec3::ZERO, yaw, pitch: 0.0, flying: false, hold: 0.0, tilt: Vec2::ZERO, spawn: 0.0 },
+                        Drone { vel: Vec3::ZERO, yaw, pitch: 0.0, flying: false, hold: 0.0, tilt: Vec2::ZERO, spawn: 0.0, origin: hand_pos },
                         Transform::from_translation(hand_pos).with_rotation(hand_rot * drone_basis().inverse()),
                         Visibility::default(),
                         Name::new("KamikazeDrone"),
@@ -489,16 +550,47 @@ fn hud(
     perk: Res<Perk>,
     inv: Single<&Inventory>,
     mut text: Single<(&mut Text, &mut TextColor), With<PerkText>>,
-    drone: Query<&Drone>,
+    drone: Query<(&Drone, &Transform)>,
+    mut root: Single<&mut Node, With<DroneHud>>,
+    mut fields: Query<(&HudKind, Option<&mut Text>, Option<&mut ImageNode>), Without<PerkText>>,
+    assets: Res<AssetServer>,
+    mut bars: Local<Option<Vec<Handle<Image>>>>,
 ) {
     let (t, c) = &mut *text;
     let held = inv.current == SLOT_PERK && inv.slots.get(SLOT_PERK).is_some_and(|w| w.kind == ItemKind::Drone);
-    match perk.phase {
-        Phase::Piloting => {
-            let speed = drone.single().map(|d| d.vel.length()).unwrap_or(0.0);
-            t.0 = format!("BAT {:3.0}%   {:4.1} m/s   [F] LEAVE   [C] LIGHT", perk.battery.max(0.0), speed);
-            c.0 = if perk.battery < 15.0 { Color::srgb(1.0, 0.25, 0.1) } else { Color::srgb(0.7, 1.0, 0.7) };
+    let piloting = perk.phase == Phase::Piloting;
+    root.display = if piloting { Display::Flex } else { Display::None };
+    if piloting && let Ok((d, tf)) = drone.single() {
+        // IMU_Data: Distance = metres from the initial position, velocity cm/s; BP_FPV_Drone broadcasts it every tick.
+        let dist = tf.translation.distance(d.origin);
+        let power = (100.0 - dist).clamp(0.0, 100.0).round();
+        let n = (3.0 - dist * 3.0 / 100.0).clamp(0.0, 3.0).round() as usize; // MIC_SignalIndicator CurrentBars
+        let bars = bars.get_or_insert_with(|| (1..=4).map(|i| assets.load(format!("ui/drone/T_Signal_{i}.png"))).collect());
+        let batt = perk.battery.max(0.0);
+        // Widget_Battery: pack 16.8 V (full) .. 13.2 V (4S), cell 4.2 .. 3.3 V
+        let (pack, cell) = (13.2 + 3.6 * batt / 100.0, 3.3 + 0.9 * batt / 100.0);
+        for (k, tx, im) in &mut fields {
+            if let Some(mut tx) = tx {
+                tx.0 = match k {
+                    HudKind::Lq => format!("3:{power:.0}"),
+                    HudKind::Battery => format!("{pack:.1}v  {cell:.1}v  {batt:.0}%"),
+                    HudKind::Velocity => format!("{:.0}", d.vel.length() * 3.6),
+                    HudKind::Distance => format!("{dist:.0}"),
+                    HudKind::Throttle => format!("TH {}", (100.0 - dist.clamp(0.0, 100.0)).round().max(9.0)), // Widget_TH shows a noisy 100 - distance
+                    HudKind::Mode => "ANGLE".into(), // DroneFlightMode 0 (Acro is gamepad-only)
+                    HudKind::Warning => if power <= 10.0 { "SIGNAL CRITICAL".into() } else { String::new() },
+                    _ => continue,
+                };
+            }
+            if let (HudKind::LqBars, Some(mut im)) = (k, im) {
+                im.image = bars[n.clamp(0, 3)].clone();
+            }
         }
+        t.0.clear();
+        c.0 = Color::NONE;
+        return;
+    }
+    match perk.phase {
         Phase::Idle if held && perk.cooldown > 0.0 => {
             t.0 = format!("KAMIKAZE COOLDOWN {:.0}s", perk.cooldown.ceil());
             c.0 = Color::srgb(1.0, 0.7, 0.2);

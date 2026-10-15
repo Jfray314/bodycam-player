@@ -113,6 +113,9 @@ for name, row in load('/Game/BodycamCore/ItemsDefinition/Gameplay/DT_PerkItems.D
     if name in ('Grenade G67', 'Grenade G68'):  # clips the BAS does not list (GA_Character_Aim_Grenade cancel, hold pose)
         G = '/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_'
         extra = {k: expand({'Character': G + v + '.A_FP_G67_' + v}) for k, v in (('CancelOverhand', 'Cancel_Overhand'), ('OverhandLoop', 'Overhand_Loop'))}
+    if name == 'Knife':  # Knife_C.PlayThrowAnimation (A_FP_Knife_Throw_Montage); RMB aim = Windup hold, release = WindDown (no montages: sequences)
+        K = '/BodycamAnimationFramework/Animations/Knife/Character/A_FP_Knife_'
+        extra = {k: expand({'Character': K + v + '.A_FP_Knife_' + v}) for k, v in (('Throw', 'Throw_Montage'), ('Windup', 'Windup'), ('WindDown', 'WindDown'))}
     if name == 'Kamikaze':  # GA_LaunchPerk leave: A_FP_Drone_Exit_Montage (its DeployDrone(bIsDeploy=false) notify plays the goggles/controller exit clips)
         extra = {'Exit': expand({'Character': '/BodycamAnimationFramework/Animations/Drone/Character/A_FP_Drone_Exit_Montage.A_FP_Drone_Exit_Montage'})}
     json.dump({'extra': extra, 'row': name, 'item_class': row.get('ItemClassID'), 'actor': row.get('ActorClassOverride'),
