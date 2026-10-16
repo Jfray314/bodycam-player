@@ -1,4 +1,4 @@
-# Handoff — Bodycam player 1:1 Rust/Bevy rewrite + multiplayer (2026-10-15, session 9)
+# Handoff — Bodycam player 1:1 Rust/Bevy rewrite + multiplayer (2026-10-15, session 10)
 
 ## 1. Goal
 1:1 Rust (Bevy 0.20) rewrite of UE 5.5.4 game Bodycam's first-person player (movement, camera/lens, guns, viewmodel, attachments,
@@ -6,7 +6,7 @@ items, sounds, effects, tablet UI) on the real lobby map, plus multiplayer and a
 Game install `F:\SteamLibrary\steamapps\common\Bodycam` is READ-ONLY. User wants: keep going through the whole list autonomously,
 low usage, builder subagents on `model: sonnet` in worktrees. Done = matches the real game in every state + playable multiplayer.
 
-## 2. Current state (master `bacf736`, `cargo test -p game` 52 pass, `-p bodycam-core` 16 pass, build clean)
+## 2. Current state (master `618d047`, `cargo test -p game` 52 pass, `-p bodycam-core` 16 pass, build clean)
 Works (merged, screenshot-checked unless noted):
 - Lens/post (postfx.wesl; lens-dirt clamped so the skylight no longer stripes), auto exposure (map.rs), real map `scene2` (emissive,
   1024 tex, PhysMat surfaces, Brightness/AlbedoBrightness params), bots A* + accuracy (test map only).
@@ -27,12 +27,18 @@ Works (merged, screenshot-checked unless noted):
   PlayCharacterWeaponMontage, slot UpperBody); there are NO separate 3P montages in the paks. Ported 1:1: CharacterState
   montage/clip/blend + Ev::Montage; body.rs `montage_clips` retargets the clip (glTF root `arms`->`body`) into the shared graph masked
   to spine_01 + ik_hand_*; bodyik blends gun onto ik_hand_gun + arms by `montage_w`. Screenshot-checked with puppet (shots_tp/side_*).
+- Session 10: deaths = body collapses via ALS_CLF_GetUp_Back/Front played backwards (body.rs DEATH_CLIPS; UE ragdolls, no
+  physics here) + ScreamBlood_Cue after 0.1-1 s (`suffer` 20%, character.rs death_scream); gun leaves the hands. Bomb over the net:
+  teams = id parity (host carries, team 0 attacks), Ev::Bomb(BombMsg Planted/Defused), every machine runs its own fuse (host's
+  blast does damage), OEM beep loop (whole-second FuzeTimer, Access_Granted_8 once at 2 s), plant/announcer cues, C4 explosion
+  cue (BlastSpec.cue). Tested with two local instances (plant -> defuse) and offline (explosion). Soft-particle shader fix
+  (DepthPrepass on every Camera3d).
 Half-done / approximate:
-- 3P fire kick / hit flinch / death fall stay procedural (UE: no remote fire/hit montage; death = ALS ragdoll, not ported).
+- 3P fire kick / hit flinch procedural; death is a reversed GetUp clip, not a physics ragdoll (no impulse direction / slopes).
   3P gun's own A_W_* weapon montage (mag out) not played. Drone close-up and FP shadow after character refactor unverified.
 - Workbench top MI_auto_repair_table_01 renders bright: not a material bug — the UE dust layer (Dust Color 0.05, Dust High 0.68)
   isn't ported, and lights/exposure aren't retuned.
-- Bomb: no net events, no beep audio, no teams, zones only on test map (lobby has none).
+- Bomb: team = id parity (GameState objective team not ported), fuse per machine, beep volume ramp not ported, zones only on test map.
 - No underhand grenade (no FP anims), no Acro/Horizon drone modes (gamepad-only), no NAT traversal, no HUD kill feed (game has none).
 
 ## 3. Active files
@@ -62,6 +68,6 @@ gap list, 3P character, knife/boards/bomb).
 ## 6. Specific next steps
 1. Optional 3P polish: play the gun's A_W_* montage on the 3P CharGun (net Ev::Montage could carry the weapon clip); ALS ragdoll on
    death; check FP gun shadow + drone close-up.
-2. Real two-machine multiplayer test (LAN), then bomb net events + teams, beep audio.
+2. Real two-machine LAN test (only two local instances tested). Overkill (<-350 HP) no-scream branch + StopScream on respawn.
 3. Port the UE dust layer (up-facing dust blend) in map loader to fix bright workbench tops; retune if needed.
 4. Delete the old C:/code/bodycam-player copy (user's call), then `git worktree prune`.
