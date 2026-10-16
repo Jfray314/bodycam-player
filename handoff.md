@@ -1,4 +1,4 @@
-# Handoff — Bodycam player 1:1 Rust/Bevy rewrite + multiplayer (2026-10-15, session 8)
+# Handoff — Bodycam player 1:1 Rust/Bevy rewrite + multiplayer (2026-10-15, session 9)
 
 ## 1. Goal
 1:1 Rust (Bevy 0.20) rewrite of UE 5.5.4 game Bodycam's first-person player (movement, camera/lens, guns, viewmodel, attachments,
@@ -6,7 +6,7 @@ items, sounds, effects, tablet UI) on the real lobby map, plus multiplayer and a
 Game install `F:\SteamLibrary\steamapps\common\Bodycam` is READ-ONLY. User wants: keep going through the whole list autonomously,
 low usage, builder subagents on `model: sonnet` in worktrees. Done = matches the real game in every state + playable multiplayer.
 
-## 2. Current state (master after bomb merge, `cargo test -p game` 51 pass, `-p bodycam-core` 16 pass, build clean)
+## 2. Current state (master `bacf736`, `cargo test -p game` 52 pass, `-p bodycam-core` 16 pass, build clean)
 Works (merged, screenshot-checked unless noted):
 - Lens/post (postfx.wesl; lens-dirt clamped so the skylight no longer stripes), auto exposure (map.rs), real map `scene2` (emissive,
   1024 tex, PhysMat surfaces, Brightness/AlbedoBrightness params), bots A* + accuracy (test map only).
@@ -23,9 +23,13 @@ Works (merged, screenshot-checked unless noted):
   tile. `BODYCAM_HOST=port` / `BODYCAM_JOIN=ip:port`; tests tools/net-test.sh, tools/ui-net-test.sh.
 - bodycam-core: weapon_data, sway, recoil, gunfire, ballistics, cues, lens, ffi + include/bodycam_core.h; C example
   bodycam-core/examples/c/main.c (MinGW gcc); parity tests game/src/core_parity.rs; docs/MODDING.md per-engine notes.
+- 3P montages (session 9): UE multicasts the owner's A_FP_* character montage onto the full-body Mesh (AC_BodycamAnimationComponent
+  PlayCharacterWeaponMontage, slot UpperBody); there are NO separate 3P montages in the paks. Ported 1:1: CharacterState
+  montage/clip/blend + Ev::Montage; body.rs `montage_clips` retargets the clip (glTF root `arms`->`body`) into the shared graph masked
+  to spine_01 + ik_hand_*; bodyik blends gun onto ik_hand_gun + arms by `montage_w`. Screenshot-checked with puppet (shots_tp/side_*).
 Half-done / approximate:
-- 3P fire/reload/hit/death are procedural (no 3P montages exported); reload motion barely visible; drone close-up and FP shadow
-  after character refactor unverified.
+- 3P fire kick / hit flinch / death fall stay procedural (UE: no remote fire/hit montage; death = ALS ragdoll, not ported).
+  3P gun's own A_W_* weapon montage (mag out) not played. Drone close-up and FP shadow after character refactor unverified.
 - Workbench top MI_auto_repair_table_01 renders bright: not a material bug — the UE dust layer (Dust Color 0.05, Dust High 0.68)
   isn't ported, and lights/exposure aren't retuned.
 - Bomb: no net events, no beep audio, no teams, zones only on test map (lobby has none).
@@ -44,8 +48,10 @@ See `git log` since `6f7ed1a` (wave 1 end): waves 2-3 merges (att-optics, polish
 gap list, 3P character, knife/boards/bomb).
 
 ## 5. Failed attempts / gotchas
-- Disk C: is nearly full (22 GB free). Worktree builds MUST use the shared target (`CARGO_TARGET_DIR=C:/code/bodycam-player/target`);
-  delete `.claude/worktrees/*/target` after merging. Master builds in `target-main` (untracked).
+- Project moved C: -> F:\codeodycam-player (2.2 TB free). tools/* paths repointed (commit 5e2cd38). `git worktree list` still shows
+  stale C:/code/... worktrees (old copy) — `git worktree prune` once the C: copy is deleted. ue-export dll was corrupt after the copy:
+  rebuilt with `dotnet build -c Release` in tools/ue-export. Master builds in `target-main` (untracked); builders may use
+  `CARGO_TARGET_DIR=F:/code/bodycam-player/target`. MSYS mangles args starting with `/` (use `find Animations`, not `/Animations/`).
 - Shared target's game.exe is overwritten by every builder: build+copy to a per-builder exe name in one command.
 - Bevy system fn limit 16 params: group into tuples (done in items.rs knife_input).
 - Turning on a camera mid-run panics Bevy directional-light cascades: scope camera parks on a 1 px viewport instead.
@@ -54,8 +60,8 @@ gap list, 3P character, knife/boards/bomb).
 - Builders hit usage limits mid-task; worktrees were sometimes removed — resume via SendMessage, merge master first.
 
 ## 6. Specific next steps
-1. 3P montages: export third-person fire/reload/hit/death montages (tools/ue-export) and replace the procedural ones in character.rs;
-   verify with BODYCAM_PUPPET + BODYCAM_3P; check FP gun shadow and drone close-up.
+1. Optional 3P polish: play the gun's A_W_* montage on the 3P CharGun (net Ev::Montage could carry the weapon clip); ALS ragdoll on
+   death; check FP gun shadow + drone close-up.
 2. Real two-machine multiplayer test (LAN), then bomb net events + teams, beep audio.
 3. Port the UE dust layer (up-facing dust blend) in map loader to fix bright workbench tops; retune if needed.
-4. Free disk space (C: 22 GB) before big builds.
+4. Delete the old C:\codeodycam-player copy (user's call), then `git worktree prune`.
