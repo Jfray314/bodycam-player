@@ -76,7 +76,7 @@ pub struct Puppet;
 pub struct CharacterPlugin;
 impl Plugin for CharacterPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (mark_local, sync_local, sync_guns, gun_joints, flash).chain());
+        app.add_systems(Update, (mark_local, sync_local, sync_guns, gun_joints, flash, death_scream).chain());
         if let Ok(v) = std::env::var("BODYCAM_PUPPET") {
             let n: Vec<f32> = v.split(':').filter_map(|x| x.parse().ok()).collect();
             let off = Vec3::new(n.first().copied().unwrap_or(0.0), 0.0, n.get(1).copied().unwrap_or(-2.5));
@@ -179,7 +179,7 @@ fn sync_guns(
 ) {
     for (root, r, co) in &roots {
         let (true, Ok(st)) = (r.world, chars.get(co.parent())) else { continue };
-        let want = model_of(&st.item);
+        let want = if st.dead { None } else { model_of(&st.item) }; // the gun leaves the hands on death
         let cur = guns.iter().find(|(_, _, c)| c.parent() == root);
         if cur.map(|c| c.1.model) == want {
             continue;
@@ -231,6 +231,36 @@ fn flash(mut f: Query<(&MuzzleFlash, &mut Visibility)>, anims: Query<&crate::bod
         let on = anims.get(m.0).is_ok_and(|a| a.kick > 0.45);
         *v = if on { Visibility::Visible } else { Visibility::Hidden };
     }
+}
+
+/// WW_SurvivorStatus on death: after RandomFloatInRange(0.1, 1.0) s, ScreamSound (multicast) plays ScreamBlood_Cue at the head with
+/// `suffer` = RandomBoolWithWeight(Default Suffer Proba 0.2) (long agony scream + death breaths instead of a short cry).
+// ponytail: the Health < -350 instant-death branch (no scream) and StopScream on respawn are not ported (remotes carry no health).
+const SCREAM: &str = "/Game/Ultimate_SFX/DeathScream/ScreamBlood_Cue";
+const SUFFER_PROBA: f32 = 0.2;
+fn death_scream(
+    time: Res<Time>,
+    chars: Query<(Entity, &CharacterState, &GlobalTransform)>,
+    cam: Single<&GlobalTransform, With<crate::player::BodycamCamera>>,
+    mut pending: Local<HashMap<Entity, (bool, Option<f32>)>>,
+    mut out: MessageWriter<crate::audio::PlayCue>,
+) {
+    for (e, st, tf) in &chars {
+        let (was, timer) = pending.entry(e).or_insert((st.dead, None));
+        if st.dead && !*was {
+            *timer = Some(rand::random_range(0.1..1.0));
+        }
+        *was = st.dead;
+        if let Some(t) = timer {
+            *t -= time.delta_secs();
+            if *t <= 0.0 {
+                *timer = None;
+                let head = tf.translation() + Vec3::Y * 0.3; // the body lies on the ground by now
+                out.write(crate::audio::PlayCue { cue: SCREAM.into(), dist_cm: cam.translation().distance(head) * 100.0, bools: vec![("suffer", rand::random::<f32>() < SUFFER_PROBA)] });
+            }
+        }
+    }
+    pending.retain(|e, _| chars.contains(*e));
 }
 
 // ---- test puppet ----

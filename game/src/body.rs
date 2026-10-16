@@ -264,8 +264,10 @@ fn body_layers(det: Res<Detached>, roots: Query<&BodyRoot>, mut meshes: Query<(&
 /// the ALS foot sync markers; the phase rate is CalculateStandingPlayRate (speed over the gait's animated speed, lerped by gait).
 // ponytail: normalised-time sync, not the ALS sync markers; no turn-in-place (the local player's actor rotation is the control
 // yaw: UpdateGroudedRotation IsLocallyControlled branch) and no Stop transitions.
-// Montages (reload, mag check, draw, ...) are the owner's A_FP_* clips on the UpperBody slot, as in UE. Kick/hit/death are procedural:
-// UE has no character fire/hit montage on remotes here and dies into the ALS ragdoll.
+// Montages (reload, mag check, draw, ...) are the owner's A_FP_* clips on the UpperBody slot, as in UE. Kick/hit are procedural (UE
+// has no character fire/hit montage). Death: UE goes WW_RagdollSystem Ragdoll Start (physics); no physics here, so the body
+// collapses by playing ALS_CLF_GetUp_Back/Front backwards (it starts lying down) and stays on the ground.
+// ponytail: no ragdoll physics (no shot impulse direction, no slopes/stairs settling); add with a physics crate.
 #[derive(Component, Default)]
 pub(crate) struct BodyAnim {
     w: HashMap<&'static str, f32>,
@@ -275,11 +277,14 @@ pub(crate) struct BodyAnim {
     land_heavy: bool,
     was_air: bool,
     fall: f32,
-    /// Smoothed ADS 0..1, recoil kick 1 -> 0, hit flinch 1 -> 0, death fall 0..1.
+    /// Smoothed ADS 0..1, recoil kick 1 -> 0, hit flinch 1 -> 0.
     pub(crate) ads: f32,
     pub(crate) kick: f32,
     pub(crate) hit: f32,
-    death: f32,
+    /// Seconds since death (None = alive), its collapse clip and blend weight 0..1.
+    dead_t: Option<f32>,
+    dead_clip: &'static str,
+    pub(crate) dead_w: f32,
     /// Character montage: clip, seconds into it, blend in / out (None = idle); `montage_w` = its current blend weight 0..1.
     montage: Option<(String, f32, (f32, f32))>,
     pub(crate) montage_w: f32,
@@ -293,6 +298,10 @@ const RUN: &Dirs = &[("ALS_N_Run_LB", -130.0), ("ALS_N_Run_LF", -50.0), ("ALS_N_
 const CROUCH: &Dirs = &[("ALS_CLF_Walk_L", -90.0), ("ALS_CLF_Walk_F", 0.0), ("ALS_CLF_Walk_R", 90.0), ("ALS_CLF_Walk_B", 180.0)];
 const AIR: [&str; 2] = ["ALS_N_JumpLoop", "ALS_N_FallLoop"];
 const BLEND_RATE: f32 = 9.0;
+/// Collapse clips (played backwards from their end) and how fast / how quickly they take over.
+const DEATH_CLIPS: [&str; 2] = ["ALS_CLF_GetUp_Back", "ALS_CLF_GetUp_Front"];
+const DEATH_RATE: f32 = 1.6;
+const DEATH_BLEND: f32 = 0.12;
 
 /// Adds `scale` split between the two set entries bracketing `a` (degrees, 0 = forward, +right; set sorted ascending, cyclic).
 fn dir_weights(set: &Dirs, a: f32, scale: f32, out: &mut Vec<(&'static str, f32)>) {
@@ -387,9 +396,14 @@ fn anim_state(time: Res<Time>, durs: Res<ClipDurs>, mut roots: Query<(&ChildOf, 
         // Clip not retargeted yet (its glb still loading): wait up to 10 s at weight 0.
         st.montage = st.montage.take().map(|(c, t, b)| (c, t + dt, b)).filter(|(c, t, _)| *t < durs.0.get(c).copied().unwrap_or(10.0));
         st.montage_w = st.montage.as_ref().map_or(0.0, |(c, t, b)| durs.0.get(c).map_or(0.0, |&l| montage_weight(*t, l, *b)));
-        st.death = crate::status::finterp_to(st.death, p.dead as i32 as f32, dt, 3.0);
-        // Death: fall backwards about the feet and lie on the back (ponytail: no ragdoll / death montage).
-        *rt = Transform { rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2 * st.death), translation: Vec3::Y * 0.12 * st.death, ..default() };
+        st.dead_t = p.dead.then(|| st.dead_t.map_or(0.0, |t| t + dt));
+        if st.dead_t == Some(0.0) {
+            // shot from the front mostly throws the ragdoll backwards
+            st.dead_clip = if rand::random::<f32>() < 0.7 { DEATH_CLIPS[0] } else { DEATH_CLIPS[1] };
+            st.montage = None;
+        }
+        st.dead_w = st.dead_t.map_or(0.0, |t| (t / DEATH_BLEND).min(1.0));
+        *rt = Transform::default();
     }
 }
 
@@ -492,7 +506,9 @@ pub(crate) fn drive(
         let land = if st.land_t < land_dur { (st.land_t / 0.06).min(1.0) * ((land_dur - st.land_t) / 0.25).min(1.0) } else { 0.0 };
         for (name, &node) in &r.nodes {
             let is_land = name.starts_with("ALS_N_Land");
-            let w = if is_land { if name == land_clip { land } else { 0.0 } } else { st.w.get(name.as_str()).copied().unwrap_or(0.0) * (1.0 - land) };
+            let is_death = DEATH_CLIPS.contains(&name.as_str());
+            let dw = if name == st.dead_clip { st.dead_w.min(0.999) } else { 0.0 };
+            let w = if is_death { dw / (1.0 - dw) } else if is_land { if name == land_clip { land } else { 0.0 } } else { st.w.get(name.as_str()).copied().unwrap_or(0.0) * (1.0 - land) };
             if ap.animation_mut(node).is_none() {
                 ap.play(node).repeat().set_weight(0.0);
             }
@@ -503,6 +519,8 @@ pub(crate) fn drive(
                 a.set_speed(0.0).set_seek_time(st.phase * dur);
             } else if is_land {
                 a.set_speed(0.0).set_seek_time(st.land_t.min(dur));
+            } else if is_death {
+                a.set_speed(0.0).set_seek_time((dur - st.dead_t.unwrap_or(0.0) * DEATH_RATE).max(0.0));
             }
         }
         // Montage over the locomotion: weights blend as a weighted mean (locomotion sums to ~1), so w / (1 - w) gives it share w.
@@ -551,9 +569,10 @@ pub(crate) fn hide_bones(
             t.scale = Vec3::splat((1.0 - k * k * (3.0 - 2.0 * k)).max(0.001)); // 0 panics the skinned bounds
         }
         // Owner copy stays upright (the chest would swing into the camera, which is not parented to the head).
-        let pitch = if r.world { p.pitch } else { 0.0 };
+        let alive = 1.0 - an.dead_w;
+        let pitch = if r.world { p.pitch * alive } else { 0.0 };
         let (share, flinch, lean) = if SPINE.contains(&name) {
-            (SPINE_SHARE / 3.0, an.hit * 0.25 / 3.0, -p.lean * LEAN_ROLL_DEG.to_radians() / 3.0)
+            (SPINE_SHARE / 3.0, an.hit * alive * 0.25 / 3.0, -p.lean * alive * LEAN_ROLL_DEG.to_radians() / 3.0)
         } else if name == "neck_01" {
             (NECK_SHARE + HEAD_SHARE, 0.0, 0.0) // ponytail: the head follows the neck bone (no separate head pass)
         } else {

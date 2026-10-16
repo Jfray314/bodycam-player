@@ -301,7 +301,7 @@ fn switch_input(keys: Res<ButtonInput<KeyCode>>, mouse: Res<ButtonInput<MouseBut
         _ => false,
     };
     let click = |snd: &mut MessageWriter<crate::audio::PlayCue>, k: &str| {
-        snd.write(crate::audio::PlayCue { cue: format!("/Game/BodycamWeapons/LowPolyShooterPack/Audio/WAV/Weapons/S_WEP_{k}_Click_Cue"), dist_cm: 0.0 });
+        snd.write(crate::audio::PlayCue { bools: vec![], cue: format!("/Game/BodycamWeapons/LowPolyShooterPack/Audio/WAV/Weapons/S_WEP_{k}_Click_Cue"), dist_cm: 0.0 });
     };
     if keys.just_pressed(KeyCode::KeyC) {
         st.flashlight = !st.flashlight;

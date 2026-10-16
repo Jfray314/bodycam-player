@@ -720,7 +720,7 @@ fn tick(
             net.snd.push((t - dt, cue, from));
         } else {
             let at = net.others.get(&from).and_then(|o| o.buf.back()).map_or(cam.translation(), |s| Vec3::from(s.1.pos) + Vec3::Y);
-            cues.write(PlayCue { cue, dist_cm: cam.translation().distance(at) * 100.0 });
+            cues.write(PlayCue { bools: vec![], cue, dist_cm: cam.translation().distance(at) * 100.0 });
         }
     }
     if net.host {

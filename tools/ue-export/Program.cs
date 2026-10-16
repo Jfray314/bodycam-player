@@ -196,6 +196,9 @@ void ExportAll(string[]? only)
                      "Locomotion/ALS_CLF_Walk_F", "Locomotion/ALS_CLF_Walk_B", "Locomotion/ALS_CLF_Walk_L", "Locomotion/ALS_CLF_Walk_R",
                      "InAir/ALS_N_JumpLoop", "InAir/ALS_N_FallLoop", "InAir/ALS_N_Land_Light", "InAir/ALS_N_Land_Heavy" })
             ExportAnim(Als + c, "body_anims");
+        // death collapse = GetUp played backwards (body.rs; UE ragdolls, no death clip)
+        foreach (var c in new[] { "ALS_CLF_GetUp_Back", "ALS_CLF_GetUp_Front" })
+            ExportAnim(Als.Replace("/Base/", "/Actions/") + c, "body_anims");
     }
     // "Grenade/G67"-style guns.json keys: item anim sets one level down
     string DirOf(string k) { var p = k[AnimRoot.Length..].Split('/'); return p.Length > 2 && cfg.ContainsKey(p[0] + "/" + p[1]) ? p[0] + "/" + p[1] : p[0]; }

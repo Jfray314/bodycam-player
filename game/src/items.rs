@@ -396,7 +396,7 @@ fn projectiles(
                 let vt = g.vel - vn;
                 if g.vel.length() > 3.0 {
                     g.hits += 1; // Hit event only for speed > 300 cm/s
-                    snd.write(PlayCue { cue: "/Game/BallisticsVFX/SFX/Impacts/Grenade/Grenade_Impact".into(), dist_cm: cam.translation().distance(pt) * 100.0 });
+                    snd.write(PlayCue { bools: vec![], cue: "/Game/BallisticsVFX/SFX/Impacts/Grenade/Grenade_Impact".into(), dist_cm: cam.translation().distance(pt) * 100.0 });
                 }
                 g.vel = vt * 0.7 - vn * 0.35;
                 tf.translation = pt + n * 0.04;
@@ -509,7 +509,7 @@ fn explode(
     cmd.spawn((PointLight { intensity: 8_000_000.0, range: 25.0, color: col, ..default() }, Transform::from_translation(at + Vec3::Y * 0.5), Blast { t: 0.0, life: life + 0.1, size: 0.0 }));
     // G67_C: AC_Detonation.DetonationSound = Bodycam_Grenade_G67; Flash_C: Explosions_flash.
     let cue = if flash_gren { "/Game/BallisticsVFX/SFX/Explodes/Explosions_flash" } else { "/Game/Audio/Grenade/Cue/Bodycam_Grenade_G67" };
-    snd.write(PlayCue { cue: cue.into(), dist_cm: dp });
+    snd.write(PlayCue { bools: vec![], cue: cue.into(), dist_cm: dp });
 }
 
 fn blasts(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Blast, &mut Transform, Option<&mut PointLight>)>) {
@@ -665,7 +665,7 @@ fn knife_input(
             let wall = Dir3::new(d).ok().is_some_and(|dir| ray.cast_ray(Ray3d::new(o, dir), &MeshRayCastSettings::default().with_filter(&filter)).first().is_some_and(|(_, h)| h.distance < along.max(0.0) - 0.05));
             if !wall && let Ok((_, _, mut hp, _)) = targets.get_mut(e) {
                 hp.0 -= KNIFE_DAMAGE * mult;
-                snd.write(PlayCue { cue: "/Game/Audio/Knife/Cue/Bodycam_SFX_Weapon_Knife_Attack_Gore".into(), dist_cm: 60.0 }); // MultiCast-PlayHitSound
+                snd.write(PlayCue { bools: vec![], cue: "/Game/Audio/Knife/Cue/Bodycam_SFX_Weapon_Knife_Attack_Gore".into(), dist_cm: 60.0 }); // MultiCast-PlayHitSound
                 if hp.0 <= 0.0 {
                     cmd.entity(e).despawn();
                 }
@@ -730,7 +730,7 @@ fn knife_flight(
                 cmd.entity(t).despawn();
             }
         }
-        snd.write(PlayCue { cue: cue.into(), dist_cm: cam.translation().distance(pt) * 100.0 });
+        snd.write(PlayCue { bools: vec![], cue: cue.into(), dist_cm: cam.translation().distance(pt) * 100.0 });
         // bIsStuck: the knife stays where it hit (StabDepth into the surface) and can be picked up again.
         cmd.entity(e).despawn();
         cmd.spawn((

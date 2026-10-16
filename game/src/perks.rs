@@ -307,7 +307,7 @@ fn deploy_flow(
                 perk.fade = 1.0;
                 perk.fade_to = 0.0;
                 p.locked = true;
-                snd.write(PlayCue { cue: "/Game/FPV_Drone/Sfx/Boot/ECS_Boot_Bip_Sound_Cue".into(), dist_cm: 0.0 });
+                snd.write(PlayCue { bools: vec![], cue: "/Game/FPV_Drone/Sfx/Boot/ECS_Boot_Bip_Sound_Cue".into(), dist_cm: 0.0 });
                 cmd.spawn((Motor, AudioPlayer::<AudioSource>(assets.load("audio/FPV_Drone/Sfx/Drone/Drone_Idle_Loop.wav")), PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(0.4))));
                 fx.base_fov_deg = DRONE_FOV;
                 for mut v in &mut arms_vis {
@@ -473,7 +473,7 @@ fn drone_fly(
             // GameplayEvent.Perk.Crash -> GA_DroneCrash -> GA_ExplodePerk
             boom.write(Detonate { at: tf.translation, spec: DRONE_BLAST });
             crashed.write(crate::items::DroneCrashed { at: tf.translation });
-            snd.write(PlayCue { cue: "/Game/FPV_Drone/Sfx/DroneCrash/DroneCrashBipAndPropellerCut_Cue".into(), dist_cm: 0.0 });
+            snd.write(PlayCue { bools: vec![], cue: "/Game/FPV_Drone/Sfx/DroneCrash/DroneCrashBipAndPropellerCut_Cue".into(), dist_cm: 0.0 });
             cmd.entity(e).despawn();
             for l in &lights {
                 cmd.entity(l).despawn();
@@ -503,7 +503,7 @@ fn drone_fly(
     // C: GA_Flashlight toggle
     if keys.just_pressed(KeyCode::KeyC) {
         perk.light = !perk.light;
-        snd.write(PlayCue { cue: "/Game/BodycamWeapons/LowPolyShooterPack/Audio/WAV/Weapons/S_WEP_Flashlight_Click".into(), dist_cm: 0.0 });
+        snd.write(PlayCue { bools: vec![], cue: "/Game/BodycamWeapons/LowPolyShooterPack/Audio/WAV/Weapons/S_WEP_Flashlight_Click".into(), dist_cm: 0.0 });
         for l in &lights {
             cmd.entity(l).despawn();
         }

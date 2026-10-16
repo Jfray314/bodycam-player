@@ -153,6 +153,9 @@ fn apply_ik(
 ) {
     for (root, r, an, co) in &roots {
         let b = |n: &str| r.bones.get(n).copied();
+        if an.dead_w > 0.0 {
+            continue; // the corpse lies as the collapse clip left it (no foot or arm IK)
+        }
         if r.local
             && (ik.off.iter().any(|o| o.abs() >= 0.003) || ik.pelvis.abs() >= 0.003)
             && let (Some(pelvis), Some(tl), Some(cl), Some(fl), Some(tr), Some(cr), Some(fr)) = (b("pelvis"), b("thigh_l"), b("calf_l"), b("foot_l"), b("thigh_r"), b("calf_r"), b("foot_r"))

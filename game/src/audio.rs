@@ -305,12 +305,15 @@ pub fn wav_path(pkg: &str) -> String {
 pub struct PlayCue {
     pub cue: String,
     pub dist_cm: f32,
+    /// SetBoolParameter values for SoundNodeBranch (e.g. ScreamBlood_Cue `suffer`).
+    pub bools: Vec<(&'static str, bool)>,
 }
 
 fn play_cues(mut cmd: Commands, mut ev: MessageReader<PlayCue>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>) {
     for e in ev.read() {
         if bank.has(&e.cue) {
-            trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &e.cue, &Params::default(), e.dist_cm);
+            let params = Params { bools: e.bools.iter().copied().collect(), ..default() };
+            trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &e.cue, &params, e.dist_cm);
         } else {
             let handle = load_wave(&mut live, &assets, &e.cue);
             cmd.spawn(Pending { wait: 0.0, handle, volume: 1.0, pitch: 1.0 });
