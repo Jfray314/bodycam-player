@@ -283,8 +283,9 @@ fn defuse(
 }
 
 /// Bombe_C Loop: FuzeTimer - 1 every second; <= 0 -> Explode (Server) -> multicast.
-/// Beep loop: light on + Ui_Hover_over_button_16 (+ Access_Granted_8 at FuzeTimer <= 2), light off after
-/// MapRangeClamped(FuzeTimer, 0..FuseDelay -> 0..0.2) s, next beep after MapRangeClamped(.. -> 0.0001..1.0) s more.
+/// Beep loop on the whole-second FuzeTimer: light on + Ui_Hover_over_button_16, light off after MapRangeClamped(FuzeTimer,
+/// 0..FuseDelay -> 0..0.2) s, next beep after MapRangeClamped(.. -> 0.0001..1.0) s more (fastest 0.12 s at 3 s left). At
+/// FuzeTimer <= 2 the loop plays Access_Granted_8 once and ends (pop_flow): no beeps in the last 2 s.
 #[allow(clippy::too_many_arguments)]
 fn fuse(
     time: Res<Time>,
@@ -302,13 +303,17 @@ fn fuse(
     a.next_beep -= dt;
     a.lit -= dt;
     if a.next_beep <= 0.0 && a.left > 0.0 {
-        let k = (a.left / FUSE_DELAY).clamp(0.0, 1.0);
-        a.lit = 0.2 * k;
-        a.next_beep = a.lit + k.max(0.0001);
+        let fuze = a.left.ceil(); // replicated FuzeTimer counts whole seconds
         let dist_cm = cam.translation().distance(a.pos) * 100.0;
-        snd.write(PlayCue { bools: vec![], cue: BEEP.into(), dist_cm });
-        if a.left <= 2.0 {
+        a.lit = 0.2;
+        if fuze <= 2.0 {
             snd.write(PlayCue { bools: vec![], cue: BEEP_LAST.into(), dist_cm });
+            a.next_beep = f32::INFINITY; // the loop ends here
+        } else {
+            let k = (fuze / FUSE_DELAY).clamp(0.0, 1.0);
+            a.lit = 0.2 * k;
+            a.next_beep = a.lit + k.max(0.0001);
+            snd.write(PlayCue { bools: vec![], cue: BEEP.into(), dist_cm });
         }
     }
     for mut v in &mut lights {
