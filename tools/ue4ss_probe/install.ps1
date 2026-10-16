@@ -1,6 +1,6 @@
 # Installs UE4SS (experimental build, UE 5.5 support) into Bodycam and enables the BodycamProbe recorder mod.
-# Run:   powershell -ExecutionPolicy Bypass -File C:\code\bodycam-player\tools\ue4ss_probe\install.ps1
-# Undo:  powershell -ExecutionPolicy Bypass -File C:\code\bodycam-player\tools\ue4ss_probe\install.ps1 -Uninstall
+# Run:   powershell -ExecutionPolicy Bypass -File F:\code\bodycam-player\tools\ue4ss_probe\install.ps1
+# Undo:  powershell -ExecutionPolicy Bypass -File F:\code\bodycam-player\tools\ue4ss_probe\install.ps1 -Uninstall
 param([string]$Game = "F:\SteamLibrary\steamapps\common\Bodycam", [switch]$Uninstall)
 $ErrorActionPreference = "Stop"
 $win64 = Join-Path $Game "Bodycam\Binaries\Win64"
@@ -43,6 +43,6 @@ if (Test-Path $list) {
 }
 
 # 3. Recording output folder.
-New-Item -ItemType Directory -Force "C:\code\bodycam-player\extracted\probe" | Out-Null
+New-Item -ItemType Directory -Force "F:\code\bodycam-player\extracted\probe" | Out-Null
 Write-Host "UE4SS + BodycamProbe installed in $win64"
 Write-Host "Start Bodycam; a UE4SS console window opens. Spawn in, then F8 = start/stop recording, F9 = marker, F7 = property dump."

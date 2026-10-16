@@ -187,7 +187,7 @@ pub fn codec_name(uasset: &[u8]) -> &'static str {
 mod tests {
     #[test]
     fn example_pistol() {
-        let b = "C:/code/bodycam-player/extracted/Bodycam/Content/Audio/Guns/Wav/Pistol/Punch/CLEAN/Bodycam_Guns_Pistol_Punch_Outside_Close_CLEAN_v2_001";
+        let b = "F:/code/bodycam-player/extracted/Bodycam/Content/Audio/Guns/Wav/Pistol/Punch/CLEAN/Bodycam_Guns_Pistol_Punch_Outside_Close_CLEAN_v2_001";
         let (Ok(e), Ok(k)) = (std::fs::read(format!("{b}.uexp")), std::fs::read(format!("{b}.ubulk"))) else { return };
         let d = super::decode(&e, Some(&k)).unwrap();
         assert_eq!((d.channels, d.rate, d.pcm[0].len()), (2, 48000, 24432));

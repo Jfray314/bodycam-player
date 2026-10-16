@@ -1,6 +1,6 @@
 """One command: UE paks -> assets-local/models/*.glb + manifest.json.
 
-  python tools/build_models.py [--out C:/code/bodycam-player/assets-local/models] [--only M4A1,Glock17] [--skip-export] [--arms-guns M4A1,Glock17]
+  python tools/build_models.py [--out F:/code/bodycam-player/assets-local/models] [--only M4A1,Glock17] [--skip-export] [--arms-guns M4A1,Glock17]
 
 1. ue-export (CUE4Parse) reads the paks read-only and writes PSK/PSA/PNG/JSON into <out>/_work
 2. Blender (headless, io_scene_psk_psa) builds the .glb files (tools/blender/build_glb.py)
@@ -14,13 +14,13 @@ sys.path.insert(0, os.path.join(HERE, "blender"))
 import inspect_glb  # noqa: E402
 
 PAKS = r"F:/SteamLibrary/steamapps/common/Bodycam/Bodycam/Content/Paks"
-USMAP = r"C:/code/bodycam-player/extracted/Bodycam.usmap"
+USMAP = r"F:/code/bodycam-player/extracted/Bodycam.usmap"
 BLENDER = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
 DOTNET = os.path.expanduser(r"~\.dotnet-sdk\dotnet.exe")
 ATTACH_BONE = "ik_hand_gun"  # UE: BP_EquippableItem.ItemAttachBone = "VB ik_hand_gun" (virtual bone: head -> ik_hand_gun == the bone itself)
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--out", default=r"C:/code/bodycam-player/assets-local/models")
+ap.add_argument("--out", default=r"F:/code/bodycam-player/assets-local/models")
 ap.add_argument("--only", default="", help="comma list of gun names (default: all guns with FP animations)")
 ap.add_argument("--arms-guns", default="M4A1,Glock17", help="guns whose FP clips are baked into arms.glb; others get arms_anims/<Gun>.glb")
 ap.add_argument("--skip-export", action="store_true")

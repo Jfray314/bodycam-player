@@ -5,7 +5,7 @@ Ammo and reticle/optic-dot classes are skipped (not visible geometry we model)."
 import json, os, sys, glob
 
 work = sys.argv[1]
-root = (sys.argv[2] if len(sys.argv) > 2 else "C:/code/bodycam-player/extracted/json") + "/Content/BodycamCore/ItemsDefinition/"
+root = (sys.argv[2] if len(sys.argv) > 2 else "F:/code/bodycam-player/extracted/json") + "/Content/BodycamCore/ItemsDefinition/"
 here = os.path.dirname(os.path.abspath(__file__))
 weapons = os.path.join(here, "..", "assets", "weapons")
 rows = lambda f: json.load(open(root + f))["exports"][0]["properties"]["_rows"]

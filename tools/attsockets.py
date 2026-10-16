@@ -6,7 +6,7 @@ All transforms are in gun-joint space (metres; UE (x,y,z) cm -> (x,-y,z)/100, as
 python -I tools/attsockets.py [<models_dir>]"""
 import json, os, sys, glob
 import numpy as np
-M = (sys.argv[1] if len(sys.argv) > 1 else "C:/code/bodycam-player/assets-local/models").rstrip("/")
+M = (sys.argv[1] if len(sys.argv) > 1 else "F:/code/bodycam-player/assets-local/models").rstrip("/")
 HERE = os.path.dirname(os.path.abspath(__file__))
 F = np.diag([1, -1, 1.0])
 

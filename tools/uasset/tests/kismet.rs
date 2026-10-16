@@ -1,7 +1,7 @@
 use std::path::Path;
 use uasset::{kismet, package::Package, props::Reader, usmap::Usmap};
 
-const ROOT: &str = "C:/code/bodycam-player/extracted";
+const ROOT: &str = "F:/code/bodycam-player/extracted";
 const BP: &str = "Bodycam/Plugins/BodycamAnimationFramework/Content/Blueprints";
 
 /// Every Function export decodes with no unknown opcodes, exact in-memory size, jump targets on statement starts.

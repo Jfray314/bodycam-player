@@ -1,7 +1,7 @@
 """Bake assets/reticles.json: per library optic, the reticle texture/colour/scale (MI_ReticleData_* chain) and scope magnification.
 python -I tools/reticles.py [extracted_json_root]   then export the listed textures with ue-export `tex` (see REWRITE.md)."""
 import json, os, sys
-R = (sys.argv[1] if len(sys.argv) > 1 else "C:/code/bodycam-player/extracted/json") + "/Content/"
+R = (sys.argv[1] if len(sys.argv) > 1 else "F:/code/bodycam-player/extracted/json") + "/Content/"
 O = "BodycamWeapons/Attachement/Optics/"
 # id -> (optic mesh json, default reticle data MI). ponytail: the game lets the player pick a reticle item; defaults are guesses.
 LIB = {

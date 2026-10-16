@@ -3,10 +3,10 @@
 import os, subprocess, sys, glob
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAKS = r"F:/SteamLibrary/steamapps/common/Bodycam/Bodycam/Content/Paks"
-USMAP = r"C:/code/bodycam-player/extracted/Bodycam.usmap"
+USMAP = r"F:/code/bodycam-player/extracted/Bodycam.usmap"
 BLENDER = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
 DOTNET = os.path.expanduser(r"~\.dotnet-sdk\dotnet.exe")
-OUT = r"C:/code/bodycam-player/assets-local/models"
+OUT = r"F:/code/bodycam-player/assets-local/models"
 WORK = os.path.join(os.path.dirname(OUT), "models_items", "_work")
 items = (sys.argv[1] if len(sys.argv) > 1 else "G67,Knife,Flashbang").split(",")
 exe = os.path.join(HERE, "ue-export", "bin", "Release", "net10.0", "ue-export.dll")

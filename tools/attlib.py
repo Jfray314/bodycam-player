@@ -2,7 +2,7 @@
 python -I tools/attlib.py <work_dir> [<extracted_json_root>]"""
 import json, os, sys
 work = sys.argv[1]
-root = (sys.argv[2] if len(sys.argv) > 2 else "C:/code/bodycam-player/extracted/json") + "/Content/BodycamCore/ItemsDefinition/"
+root = (sys.argv[2] if len(sys.argv) > 2 else "F:/code/bodycam-player/extracted/json") + "/Content/BodycamCore/ItemsDefinition/"
 skins = json.load(open(root + "Skins/DT_WeaponSkins.json"))["exports"][0]["properties"]["_rows"]
 # id -> (static mesh basename, kind)
 LIB = {

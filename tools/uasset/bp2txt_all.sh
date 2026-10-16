@@ -1,6 +1,6 @@
 #!/bin/bash
 # Regenerate extracted/bp/*.txt for the player blueprints. usage: bp2txt_all.sh [path/to/bp2txt.exe]
-X=${1:-target/release/bp2txt.exe}; E=C:/code/bodycam-player/extracted; O=$E/bp; M=$E/Bodycam.usmap; C=$E/Bodycam/Content
+X=${1:-target/release/bp2txt.exe}; E=F:/code/bodycam-player/extracted; O=$E/bp; M=$E/Bodycam.usmap; C=$E/Bodycam/Content
 P=$E/Bodycam/Plugins/BodycamAnimationFramework/Content/Blueprints
 mkdir -p $O
 {

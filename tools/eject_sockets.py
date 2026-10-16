@@ -2,7 +2,7 @@
 Guns whose mesh export carries no Eject socket are omitted (UE's GetSocketLocation then returns the component origin)."""
 import json, os
 
-G = "C:/code/bodycam-player/assets-local/models/_work/guns/"
+G = "F:/code/bodycam-player/assets-local/models/_work/guns/"
 out = {}
 for d in sorted(os.listdir(G)):
     f = f"{G}{d}/{d}.json"

@@ -1,7 +1,7 @@
 use std::path::Path;
 use uasset::{package::Package, props::Reader, usmap::Usmap};
 
-const ROOT: &str = "C:/code/bodycam-player/extracted";
+const ROOT: &str = "F:/code/bodycam-player/extracted";
 
 #[test]
 fn m4a1_modifiers() {
