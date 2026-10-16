@@ -1,5 +1,4 @@
 //! Soft particles for smoke/dust sprites (they were cut flat where they met walls/floor): see soft.wesl.
-use crate::player::BodycamCamera;
 use bevy::asset::embedded_asset;
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension};
@@ -24,7 +23,7 @@ pub struct SoftPlugin;
 impl Plugin for SoftPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "soft.wesl");
-        app.add_plugins(MaterialPlugin::<SoftMat>::default()).add_systems(Update, |mut cmd: Commands, q: Query<Entity, Added<BodycamCamera>>| {
+        app.add_plugins(MaterialPlugin::<SoftMat>::default()).add_systems(Update, |mut cmd: Commands, q: Query<Entity, Added<Camera3d>>| {
             for e in &q {
                 cmd.entity(e).insert(DepthPrepass);
             }

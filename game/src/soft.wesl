@@ -1,5 +1,5 @@
 // Soft particles: StandardMaterial forward shading, alpha faded by the distance to the opaque depth behind the sprite
-// (UE DepthFade / Cascade soft particle). Needs DepthPrepass on the camera. Reverse-Z infinite far: view distance = near / depth.
+// (UE DepthFade / Cascade soft particle). Needs DepthPrepass on every Camera3d (soft.rs adds it; the scope camera too). Reverse-Z infinite far: view distance = near / depth.
 import bevy_pbr::{
     render::{
         pbr_fragment::pbr_input_from_standard_material,

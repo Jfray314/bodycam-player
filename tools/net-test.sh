@@ -2,7 +2,7 @@
 # local two-instance net test (dev only)
 cd "$(dirname "$0")/.."
 mkdir -p shots
-G=F:/code/bodycam-player/target/debug/game-net.exe
+G=${G:-F:/code/bodycam-player/target/debug/game-net.exe}
 export BODYCAM_ASSETS=F:/code/bodycam-player/assets-local BODYCAM_MAP=test RUST_LOG=info
 BODYCAM_CONFIG=shots/cfg-h.json BODYCAM_HOST=7777 BODYCAM_POS=0:0:${HYAW:-180} BODYCAM_SCREENSHOT=shots/host.png BODYCAM_SCREENSHOT_AT=${HAT:-12} timeout 240 $G > shots/host.log 2>&1 &
 sleep 8
