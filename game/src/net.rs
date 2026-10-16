@@ -60,6 +60,8 @@ pub enum Ev {
     Fire { row: String, supp: bool, origin: [f32; 3], dirs: Vec<[f32; 3]> },
     /// Reload / mag check / draw ... : the montage's sound notifies (seconds from now, cue).
     Sounds(Vec<(f32, String)>),
+    /// Character montage started (A_FP_* clip, blend in / out s): played on the remote's body (CharacterState::montage).
+    Montage { clip: String, blend: (f32, f32) },
     Grenade { start: [f32; 3], vel: [f32; 3], flash: bool },
     /// Knife swing (host resolves the hit).
     Melee { origin: [f32; 3], dir: [f32; 3] },
@@ -426,6 +428,7 @@ fn local_events(
         if matches!(m.kind, CameraAdjust | FireOut) {
             continue;
         }
+        evs.push(Ev::Montage { clip: crate::viewmodel::clip_of(&m.montage.path), blend: (m.montage.blend_in, m.montage.blend_out) });
         let s: Vec<(f32, String)> = m.montage.notifies.iter().filter(|n| n.1 == "PlayWepSounds_C").filter_map(|n| Some((n.0, n.2["Sound"].as_str()?.split('.').next()?.to_string()))).collect();
         if !s.is_empty() {
             evs.push(Ev::Sounds(s));
@@ -579,6 +582,11 @@ fn apply(
             Ev::Sounds(list) => {
                 for (t, cue) in list {
                     net.snd.push((*t, cue.clone(), *from));
+                }
+            }
+            Ev::Montage { clip, blend } => {
+                if let Some(mut c) = net.others.get(from).and_then(|o| o.ent).and_then(|e| chars.get_mut(e).ok()) {
+                    (c.montage, c.clip, c.blend) = (c.montage + 1, clip.clone(), *blend);
                 }
             }
             Ev::Grenade { start, vel, flash } => {

@@ -216,6 +216,12 @@ pub enum ActionKind {
     /// Item use: grenade pull-pin/throw, knife attack, drone deploy (items.rs); not an Inventory action key.
     Use,
 }
+impl ActionKind {
+    /// Plays on the character Mesh for everyone (not the gun-only FireOut, not the owner-only GoPro adjust).
+    pub fn on_body(self) -> bool {
+        !matches!(self, Self::FireOut | Self::CameraAdjust)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Action {

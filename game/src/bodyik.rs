@@ -167,18 +167,34 @@ fn apply_ik(
         let (Ok(st), true) = (chars.get(co.parent()), r.world) else { continue };
         let Some((ge, gun, _)) = guns.iter().find(|(_, _, c)| c.parent() == root) else { continue };
         let (Some(joint), Some(spine)) = (gun.joint, b("spine_03")) else { continue };
-        let reload = an.reload.map_or(0.0, |(t, l)| (t / l * std::f32::consts::PI).sin().powf(0.5));
-        let pose_g = crate::character::hold(gun.model, pose(spine, root, &q).0, st.pitch, an.ads, an.kick, reload);
+        // Montage weight f: the clip's own arms and gun (scene root on ik_hand_gun, as on the FP arms) take over from the IK hold.
+        let f = an.montage_w;
+        let pose_g = crate::character::hold(gun.model, pose(spine, root, &q).0, st.pitch, an.ads, an.kick);
         let (jt, jr) = pose(joint, ge, &q);
-        let grot = pose_g.rot * jr.inverse();
+        let mut grot = pose_g.rot * jr.inverse();
+        let mut gpos = pose_g.joint - grot * jt;
+        if f > 0.0
+            && let Some(hg) = b("ik_hand_gun")
+        {
+            let (p, r) = pose(hg, root, &q);
+            (gpos, grot) = (gpos.lerp(p, f), grot.slerp(r, f));
+        }
         if let Ok((mut t, _)) = q.get_mut(ge) {
-            t.rotation = grot;
-            t.translation = pose_g.joint - grot * jt;
+            (t.rotation, t.translation) = (grot, gpos);
+        }
+        if f >= 0.999 {
+            continue;
         }
         for (side, (pos, rot)) in [("r", pose_g.hand_r), ("l", pose_g.hand_l)] {
             let (Some(u), Some(l), Some(h)) = (b(&format!("upperarm_{side}")), b(&format!("lowerarm_{side}")), b(&format!("hand_{side}"))) else { continue };
             let sx = if side == "r" { 1.0 } else { -1.0 };
+            let anim = [u, l, h].map(|e| q.get(e).map_or(Quat::IDENTITY, |t| t.0.rotation));
             two_bone(root, [u, l, h], pos, Vec3::new(sx * 0.6, -1.0, 0.3), Some(rot), &mut q);
+            for (e, a) in [u, l, h].into_iter().zip(anim).filter(|_| f > 0.0) {
+                if let Ok((mut t, _)) = q.get_mut(e) {
+                    t.rotation = t.rotation.slerp(a, f);
+                }
+            }
         }
     }
 }

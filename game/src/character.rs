@@ -3,7 +3,7 @@
 //!   let e = spawn_character(&mut cmd, Transform::from_translation(pos).with_rotation(Quat::from_rotation_y(yaw)), CharacterState::default());
 //! Afterwards the net layer only writes the entity's `Transform` (feet position + yaw) and `CharacterState` (aim pitch, velocity,
 //! stance, lean, equipped DT_WeaponItems row, aiming, event counters). body.rs builds the ALS body from it (locomotion blend, spine /
-//! head aim pitch, lean, hit flinch, death fall, shot kick, reload), this file the gun in the hands (grips measured from the FP arms
+//! head aim pitch, lean, hit flinch, death fall, shot kick, montages), this file the gun in the hands (grips measured from the FP arms
 //! in assets/grips.json via BODYCAM_GRIPDUMP=1) and bodyik.rs the IK that puts both hands on it.
 //! The local player is the same thing: its entity gets a CharacterState synced from `Player`/`Inventory`, plus the owner copy.
 //! Dev: BODYCAM_PUPPET="dx:dz:dyaw_deg" spawns a puppet mirroring the local player's state and motion 1 s late at that offset
@@ -11,7 +11,7 @@
 use crate::player::Player;
 use crate::status::PlayerDamage;
 use crate::viewmodel::{ArmsRoot, GunRoot, ads_axes, gun_model, root_of_entity};
-use crate::weapon::{ActionKind, Fired, Inventory, MontageStarted};
+use crate::weapon::{Fired, Inventory, MontageStarted};
 use bevy::prelude::*;
 use bevy::world_serialization::{WorldAsset, WorldAssetRoot};
 use std::collections::{HashMap, VecDeque};
@@ -32,16 +32,19 @@ pub struct CharacterState {
     /// Equipped DT_WeaponItems row ("" = nothing in hand).
     pub item: String,
     pub aiming: bool,
-    /// Event counters: bump `fired` per shot, `hits` per hit taken, `reload` per reload / mag check (with `reload_len` seconds).
+    /// Event counters: bump `fired` per shot, `hits` per hit taken, `montage` per character montage (`clip` = its A_FP_* clip,
+    /// `blend` = montage BlendIn/BlendOut s). UE multicasts the same FP montage onto the full-body Mesh (AC_BodycamAnimationComponent
+    /// Multicast PlayCharacterWeaponMontage, slot UpperBody), so other players see the owner's reload / mag check / draw ... 1:1.
     pub fired: u32,
     pub hits: u32,
-    pub reload: u32,
-    pub reload_len: f32,
+    pub montage: u32,
+    pub clip: String,
+    pub blend: (f32, f32),
     pub dead: bool,
 }
 impl Default for CharacterState {
     fn default() -> Self {
-        Self { pitch: 0.0, vel: Vec3::ZERO, grounded: true, crouched: false, sprinting: false, lean: 0.0, item: String::new(), aiming: false, fired: 0, hits: 0, reload: 0, reload_len: 2.5, dead: false }
+        Self { pitch: 0.0, vel: Vec3::ZERO, grounded: true, crouched: false, sprinting: false, lean: 0.0, item: String::new(), aiming: false, fired: 0, hits: 0, montage: 0, clip: String::new(), blend: (0.25, 0.25), dead: false }
     }
 }
 
@@ -109,11 +112,10 @@ fn sync_local(
     }
     s.fired += fired.read().count() as u32;
     s.hits += dmg.read().count() as u32;
-    for m in montages.read() {
-        if matches!(m.kind, ActionKind::Reload | ActionKind::MagCheck) {
-            s.reload += 1;
-            s.reload_len = m.montage.length;
-        }
+    for m in montages.read().filter(|m| m.kind.on_body()) {
+        s.montage += 1;
+        s.clip = crate::viewmodel::clip_of(&m.montage.path);
+        s.blend = (m.montage.blend_in, m.montage.blend_out);
     }
 }
 
@@ -153,20 +155,18 @@ pub struct Hold {
 /// Right-hand point relative to the chest (spine_03) at hip / aimed, in a yaw-forward frame (x right, y up, -z forward).
 const HAND_HIP: Vec3 = Vec3::new(0.09, -0.03, -0.30);
 const HAND_ADS: Vec3 = Vec3::new(0.035, 0.19, -0.34);
-/// Magazine well in the gun's joint frame (below the receiver, +Z up): the left hand goes here during a reload.
-const MAGWELL: Vec3 = Vec3::new(0.0, -0.02, -0.10);
 
-/// Third-person gun hold: the hands pivot about the chest by the aim pitch, rise to the sight line when aiming, kick back per shot
-/// and tilt while reloading (the left hand leaves the grip for the magwell). Grips come from the FP arms (assets/grips.json).
-// ponytail: no per-gun hold offsets beyond the measured grips; the 3P reload/fire montages are procedural (not exported).
-pub fn hold(model: &str, chest: Vec3, pitch: f32, ads: f32, kick: f32, reload: f32) -> Hold {
+/// Third-person gun hold between montages: the hands pivot about the chest by the aim pitch, rise to the sight line when aiming and
+/// kick back per shot. Grips come from the FP arms (assets/grips.json). During a montage bodyik blends to the clip's own arms + gun.
+// ponytail: no per-gun hold offsets beyond the measured grips.
+pub fn hold(model: &str, chest: Vec3, pitch: f32, ads: f32, kick: f32) -> Hold {
     let g = grips().get(model).or_else(|| grips().get("Glock17")).expect("Glock17 grip");
     let ((rp, rq), (lp, lq)) = (xf(g.r), xf(g.l));
     let rx = Quat::from_rotation_x(pitch);
     let hand = chest + rx * (HAND_HIP.lerp(HAND_ADS, ads) + Vec3::Z * 0.03 * kick);
-    let rot = rx * Quat::from_rotation_x(kick * 0.07) * Quat::from_rotation_z(-reload * 0.35) * Quat::from_rotation_x(-reload * 0.25) * Quat::from_mat3(&ads_axes(model));
+    let rot = rx * Quat::from_rotation_x(kick * 0.07) * Quat::from_mat3(&ads_axes(model));
     let joint = hand - rot * rp;
-    Hold { rot, joint, hand_r: (hand, rot * rq), hand_l: (joint + rot * lp.lerp(MAGWELL, reload), rot * lq) }
+    Hold { rot, joint, hand_r: (hand, rot * rq), hand_l: (joint + rot * lp, rot * lq) }
 }
 
 /// Keeps one CharGun on every world body copy matching its character's equipped item.
@@ -318,7 +318,7 @@ mod tests {
     #[test]
     fn gun_points_where_aimed() {
         for m in ["M4A1", "Glock17", "Akm", "Revolver"] {
-            let h = hold(m, Vec3::new(0.0, 1.3, 0.0), 0.4, 0.0, 0.0, 0.0);
+            let h = hold(m, Vec3::new(0.0, 1.3, 0.0), 0.4, 0.0, 0.0);
             // muzzle = joint -Y (Revolver: +Z) pitched up with the aim
             let muzzle = h.rot * if m == "Revolver" { Vec3::Z } else { Vec3::NEG_Y };
             let want = Quat::from_rotation_x(0.4) * Vec3::NEG_Z;

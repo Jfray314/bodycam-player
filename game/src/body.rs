@@ -40,10 +40,11 @@ impl Plugin for BodyPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(crate::bodyik::IkPlugin)
             .init_resource::<ClipDurs>()
+            .init_resource::<MontageNodes>()
             .init_resource::<ThirdPerson>()
             .init_resource::<Detached>()
             .add_systems(Startup, |mut cmd: Commands, a: Res<AssetServer>| cmd.insert_resource(BodyAsset(a.load("models/body.glb"))))
-            .add_systems(Update, (detached_view, build_bodies, prepare, light_layers, body_layers, anim_state, drive).chain())
+            .add_systems(Update, (detached_view, build_bodies, prepare, light_layers, body_layers, montage_clips, anim_state, drive).chain())
             .add_systems(PostUpdate, (hide_bones.after(bevy::app::AnimationSystems), third_person_cam).before(bevy::transform::TransformSystems::Propagate));
     }
 }
@@ -263,7 +264,8 @@ fn body_layers(det: Res<Detached>, roots: Query<&BodyRoot>, mut meshes: Query<(&
 /// the ALS foot sync markers; the phase rate is CalculateStandingPlayRate (speed over the gait's animated speed, lerped by gait).
 // ponytail: normalised-time sync, not the ALS sync markers; no turn-in-place (the local player's actor rotation is the control
 // yaw: UpdateGroudedRotation IsLocallyControlled branch) and no Stop transitions.
-// Event layers (kick/hit/reload/death) are procedural: no third-person fire/reload/hit/death montages are exported from the game.
+// Montages (reload, mag check, draw, ...) are the owner's A_FP_* clips on the UpperBody slot, as in UE. Kick/hit/death are procedural:
+// UE has no character fire/hit montage on remotes here and dies into the ALS ragdoll.
 #[derive(Component, Default)]
 pub(crate) struct BodyAnim {
     w: HashMap<&'static str, f32>,
@@ -278,9 +280,10 @@ pub(crate) struct BodyAnim {
     pub(crate) kick: f32,
     pub(crate) hit: f32,
     death: f32,
-    /// Reload / mag check: seconds into the action and its length (None = idle).
-    pub(crate) reload: Option<(f32, f32)>,
-    /// Event counters of CharacterState already consumed (fired, hits, reload).
+    /// Character montage: clip, seconds into it, blend in / out (None = idle); `montage_w` = its current blend weight 0..1.
+    montage: Option<(String, f32, (f32, f32))>,
+    pub(crate) montage_w: f32,
+    /// Event counters of CharacterState already consumed (fired, hits, montage).
     seen: (u32, u32, u32),
 }
 
@@ -327,7 +330,7 @@ fn targets(grounded: bool, vy: f32, crouched: bool, gait: f32, speed: f32, a: f3
     (w, (speed / WALK_REF) * (1.0 - gait) + (speed / RUN_REF) * gait)
 }
 
-/// Per body copy: smoothed locomotion weights, event layers (shots, hits, reloads), death pose.
+/// Per body copy: smoothed locomotion weights, event layers (shots, hits, montages), death pose.
 fn anim_state(time: Res<Time>, durs: Res<ClipDurs>, mut roots: Query<(&ChildOf, &mut BodyAnim, &mut Transform), With<BodyRoot>>, chars: Query<(&CharacterState, &Transform), Without<BodyRoot>>) {
     let dt = time.delta_secs().min(0.1);
     for (co, mut st, mut rt) in &mut roots {
@@ -366,7 +369,7 @@ fn anim_state(time: Res<Time>, durs: Res<ClipDurs>, mut roots: Query<(&ChildOf, 
         if wsum > 0.01 {
             st.phase = (st.phase + dt * rate.clamp(0.0, 3.0) * wsum / dsum).rem_euclid(1.0);
         }
-        // Event layers: counters in CharacterState tick up per shot / hit / reload.
+        // Event layers: counters in CharacterState tick up per shot / hit / montage.
         let seen = st.seen;
         if p.fired != seen.0 {
             st.kick = 1.0;
@@ -374,22 +377,96 @@ fn anim_state(time: Res<Time>, durs: Res<ClipDurs>, mut roots: Query<(&ChildOf, 
         if p.hits != seen.1 {
             st.hit = 1.0;
         }
-        if p.reload != seen.2 {
-            st.reload = Some((0.0, p.reload_len.max(0.5)));
+        if p.montage != seen.2 && !p.clip.is_empty() {
+            st.montage = Some((p.clip.clone(), 0.0, p.blend));
         }
-        st.seen = (p.fired, p.hits, p.reload);
+        st.seen = (p.fired, p.hits, p.montage);
         st.kick *= (-dt * 25.0).exp();
         st.hit *= (-dt * 5.0).exp();
         st.ads = crate::status::finterp_to(st.ads, p.aiming as i32 as f32, dt, 12.0);
-        st.reload = st.reload.map(|(t, l)| (t + dt, l)).filter(|(t, l)| t < l);
+        // Clip not retargeted yet (its glb still loading): wait up to 10 s at weight 0.
+        st.montage = st.montage.take().map(|(c, t, b)| (c, t + dt, b)).filter(|(c, t, _)| *t < durs.0.get(c).copied().unwrap_or(10.0));
+        st.montage_w = st.montage.as_ref().map_or(0.0, |(c, t, b)| durs.0.get(c).map_or(0.0, |&l| montage_weight(*t, l, *b)));
         st.death = crate::status::finterp_to(st.death, p.dead as i32 as f32, dt, 3.0);
         // Death: fall backwards about the feet and lie on the back (ponytail: no ragdoll / death montage).
         *rt = Transform { rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2 * st.death), translation: Vec3::Y * 0.12 * st.death, ..default() };
     }
 }
 
+/// FAlphaBlend in / out of a montage `t` s into a clip of length `len`.
+fn montage_weight(t: f32, len: f32, (bin, bout): (f32, f32)) -> f32 {
+    (t / bin.max(1e-3)).min((len - t) / bout.max(1e-3)).clamp(0.0, 1.0)
+}
+
+/// Montage clip name -> node in the shared body graph.
+#[derive(Resource, Default)]
+pub(crate) struct MontageNodes(HashMap<String, AnimationNodeIndex>);
+
+/// Mask group of the bones the UpperBody slot leaves to locomotion: everything not under spine_01, except the ik_hand_* bones the
+/// gun hangs on.
+const LOWER_BODY: u32 = 0;
+
+/// Retargets each requested montage clip (A_FP_* in arms.glb / arms_anims/*.glb, loaded by viewmodel.rs; same ALS skeleton, glTF
+/// root node `arms` instead of `body`) onto the body's joint paths and adds it to the shared graph, masked to the upper body.
+fn montage_clips(
+    mut nodes: ResMut<MontageNodes>,
+    mut durs: ResMut<ClipDurs>,
+    gltfs: Res<Assets<Gltf>>,
+    mut clips: ResMut<Assets<AnimationClip>>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+    chars: Query<&CharacterState>,
+    roots: Query<(&BodyRoot, &AnimationGraphHandle)>,
+    joints: Query<(&Name, &AnimationTargetId)>,
+    parents: Query<&ChildOf>,
+) {
+    let Some((r, gh)) = roots.iter().find(|(r, _)| !r.bones.is_empty()) else { return };
+    for p in &chars {
+        if p.clip.is_empty() || nodes.0.contains_key(&p.clip) {
+            continue;
+        }
+        let Some(src) = gltfs.iter().find_map(|(_, g)| g.named_animations.get(p.clip.as_str())).and_then(|h| clips.get(h)) else { continue };
+        let mut map = HashMap::new();
+        let mut lower = vec![];
+        for &e in r.bones.values() {
+            let Ok((_, &id)) = joints.get(e) else { continue };
+            // joint path below the glTF root node (whose name differs), e.g. root/pelvis/spine_01
+            let (mut path, mut x, mut upper) = (vec![], e, false);
+            while let Ok((n, _)) = joints.get(x)
+                && n.as_str() != "body"
+            {
+                upper |= n.as_str() == "spine_01" || n.as_str().starts_with("ik_hand");
+                path.push(n.clone());
+                x = parents.get(x).map_or(x, |c| c.parent());
+            }
+            path.push(Name::new("arms"));
+            path.reverse();
+            map.insert(AnimationTargetId::from_names(path.iter()), id);
+            if !upper {
+                lower.push(id);
+            }
+        }
+        let mut clip = AnimationClip::default();
+        for (id, curves) in src.curves() {
+            for c in curves.iter().filter(|_| map.contains_key(id)) {
+                clip.add_variable_curve_to_target(map[id], c.clone());
+            }
+        }
+        clip.set_duration(src.duration());
+        debug!("body montage {}: {} of {} tracks retargeted", p.clip, clip.curves().len(), src.curves().len());
+        durs.0.insert(p.clip.clone(), src.duration().max(0.01));
+        let Some(mut g) = graphs.get_mut(&gh.0) else { return };
+        for id in lower {
+            g.add_target_to_mask_group(id, LOWER_BODY);
+        }
+        let top = g.root;
+        let n = g.add_clip_with_mask(clips.add(clip), 1 << LOWER_BODY, 1.0, top);
+        nodes.0.insert(p.clip.clone(), n);
+    }
+}
+
 pub(crate) fn drive(
     durs: Res<ClipDurs>,
+    montages: Res<MontageNodes>,
     roots: Query<(&BodyRoot, &BodyAnim)>,
     mut players: Query<(Entity, &mut AnimationPlayer)>,
     parents: Query<&ChildOf>,
@@ -427,6 +504,17 @@ pub(crate) fn drive(
             } else if is_land {
                 a.set_speed(0.0).set_seek_time(st.land_t.min(dur));
             }
+        }
+        // Montage over the locomotion: weights blend as a weighted mean (locomotion sums to ~1), so w / (1 - w) gives it share w.
+        for (name, &node) in &montages.0 {
+            let on = st.montage.as_ref().filter(|m| &m.0 == name);
+            if ap.animation_mut(node).is_none() {
+                ap.play(node).set_weight(0.0);
+            }
+            let a = ap.animation_mut(node).unwrap();
+            let w = on.map_or(0.0, |_| st.montage_w.min(0.999));
+            a.set_weight(w / (1.0 - w));
+            a.set_speed(0.0).set_seek_time(on.map_or(0.0, |m| m.1));
         }
     }
 }
@@ -479,7 +567,16 @@ pub(crate) fn hide_bones(
 
 #[cfg(test)]
 mod tests {
-    use super::targets;
+    use super::{montage_weight, targets};
+    #[test]
+    fn montage_fades() {
+        let b = (0.25, 0.5);
+        assert_eq!(montage_weight(0.0, 3.0, b), 0.0);
+        assert!((montage_weight(0.125, 3.0, b) - 0.5).abs() < 1e-5);
+        assert_eq!(montage_weight(1.0, 3.0, b), 1.0);
+        assert!((montage_weight(2.75, 3.0, b) - 0.5).abs() < 1e-5);
+        assert_eq!(montage_weight(3.0, 3.0, b), 0.0);
+    }
     #[test]
     fn blend_weights() {
         let get = |w: &[(&str, f32)], n: &str| w.iter().filter(|c| c.0 == n).map(|c| c.1).sum::<f32>();

@@ -350,7 +350,7 @@ fn play(anim: &mut Anim, player: &mut AnimationPlayer, tr: &mut AnimationTransit
 }
 
 /// "/.../A_FP_M4A1_Draw_Montage.A_FP_M4A1_Draw_Montage" -> "A_FP_M4A1_Draw".
-fn clip_of(montage_path: &str) -> String {
+pub(crate) fn clip_of(montage_path: &str) -> String {
     montage_path.rsplit('.').next().unwrap_or("").trim_end_matches("_Montage").to_string()
 }
 
