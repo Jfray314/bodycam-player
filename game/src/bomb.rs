@@ -4,10 +4,16 @@
 //! GameplayEvent.Bomb.Initiated -> Start Fuse; releasing earlier cancels (K2_OnEndAbility bWasCancelled -> MontageStop).
 //! Defuse: F held next to the armed bomb plays A_FP_C4_Defuse_Montage, notify at 6.4613 s -> Defuse. The fuse keeps counting.
 //! Explode: Bombe_C Explode (mutlicast): Explosion_Flash_small + C4_Explosion_2, RadialDamageWithFalloff(1000, inner 250, outer 2000, exp 2).
-// ponytail: no replication (net.rs would need plant/defuse/explode events), no teams/rounds beyond restart 6 s after the outcome, no beep/announcer
-// audio (Ui_Hover_over_button_16 beeps, BombPlantedB announcer: cues not baked), zones only on BODYCAM_MAP=test (the lobby map has no BombZone),
-// no W_Bomb tablet widget, the planted bomb stays where the player stood (Bombe_C physics drop not modelled).
-use crate::items::{load_item, BlastSpec, Detonate};
+//! Net: teams by player id parity (team 0 = Bombe_C.TeamHasBomb attackers, the host carries the bomb; odd ids defend). Plant and
+//! defuse go out as `BombMsg` (net.rs Ev::Bomb); every machine runs its own fuse and blast (only the host's blast deals damage).
+//! Offline both plant and defuse are yours. Beeps: Bombe_C loop (Ui_Hover_over_button_16 per tick, Access_Granted_8 in the last 2 s).
+// ponytail: team = id parity (GM_BodyBomb/GameState objective team not ported), rounds restart 6 s after the outcome, the fuse runs
+// per machine (drift = latency), beep volume ramp (MapRange 0.45..0.7) and zone PlantSound announcers not ported, zones only on
+// BODYCAM_MAP=test (the lobby map has no BombZone), no W_Bomb tablet widget, the bomb stays where it was planted (no physics drop).
+use crate::audio::PlayCue;
+use crate::items::{load_item, BlastSpec, DetonateFor};
+use crate::net::MY_ID;
+use std::sync::atomic::Ordering::Relaxed;
 use crate::player::Player;
 use crate::weapon::{Inventory, ItemKind, Montage, MontageStarted};
 use bevy::prelude::*;
@@ -21,7 +27,7 @@ const DEFUSE_EVENT: f32 = 6.4613;
 const DEFUSE_REACH: f32 = 2.0;
 const RESTART: f32 = 6.0;
 /// Bombe_C.Explode: damage 1000, RadialDamageWithFalloff inner 250 / outer 2000 cm, exponent 2.
-const BOMB_BLAST: BlastSpec = BlastSpec { base: 1000.0, inner: 250.0, outer: 2000.0, exp: 2.0, flash: false };
+const BOMB_BLAST: BlastSpec = BlastSpec { base: 1000.0, inner: 250.0, outer: 2000.0, exp: 2.0, flash: false, cue: "/Game/Ultimate_SFX/Survival_Sound_Kit_HD_Remake/Cues/C4_Explosion_2_Cue" };
 /// BombZone Box half extents (m) on the test map.
 const ZONE_HALF: f32 = 3.0;
 
@@ -42,6 +48,36 @@ struct Armed {
     left: f32,
     pos: Vec3,
     defusing: Option<f32>,
+    /// Planter (kill credit for the blast).
+    by: u8,
+    /// Seconds to the next fuse beep / until the light goes off.
+    next_beep: f32,
+    lit: f32,
+}
+
+/// Bombe_C.FuseDelay: below it the beeps speed up.
+const FUSE_DELAY: f32 = 30.0;
+const BEEP: &str = "/Game/Ultimate_SFX/Ultimate_Retro_Sounds/Cues/Ui_Hover_over_button_-_10/Ui_Hover_over_button_16_Cue";
+const BEEP_LAST: &str = "/Game/Ultimate_SFX/Ultimate_Retro_Sounds/Cues/Access_Granted_-_10/Access_Granted_8_Cue";
+const PLANTED_CUE: &str = "/Game/Ultimate_SFX/Ultimate_Retro_Sounds/Cues/Ui_Hover_over_button_-_10/Ui_Hover_over_button_9_Cue";
+const DEFUSE_ANNOUNCER: &str = "/Game/Ultimate_SFX/Announcer/BombDefuseWarning/BombDefuseWarning-01_Cue";
+const ATTACKERS: u8 = 0;
+
+/// Bomb events on the wire (net.rs Ev::Bomb).
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+pub enum BombMsg {
+    Planted { at: [f32; 3], by: u8 },
+    Defused,
+}
+/// Local plant/defuse -> net.rs.
+#[derive(Message)]
+pub struct BombOut(pub BombMsg);
+/// Another player's plant/defuse <- net.rs.
+#[derive(Message)]
+pub struct BombIn(pub BombMsg);
+
+fn team(id: u8) -> u8 {
+    id % 2
 }
 
 #[derive(Resource, Default)]
@@ -56,10 +92,11 @@ struct Round {
 pub struct BombPlugin;
 impl Plugin for BombPlugin {
     fn build(&self, app: &mut App) {
+        app.add_message::<BombOut>().add_message::<BombIn>();
         if !wanted() {
             return;
         }
-        app.init_resource::<Round>().add_systems(Startup, spawn).add_systems(Update, (give_bomb, plant, defuse, fuse, finish, hud).chain());
+        app.init_resource::<Round>().add_systems(Startup, spawn).add_systems(Update, (give_bomb, bomb_in, plant, defuse, fuse, finish, hud).chain());
     }
 }
 
@@ -92,10 +129,10 @@ fn extra(inv: &Inventory, slot: usize, key: &str) -> Option<Montage> {
     Montage::from_value(inv.slots[slot].anims["Extra"].get(key)?)
 }
 
-/// AC_BombRuleComponent.AssignPlayerToObjective: SpawnSpecialItem(Bombe) (also again after each round).
-fn give_bomb(mut r: ResMut<Round>, inv: Option<Single<&mut Inventory>>) {
+/// AC_BombRuleComponent.AssignPlayerToObjective: SpawnSpecialItem(Bombe) (also again after each round) -> the host / offline player.
+fn give_bomb(mut r: ResMut<Round>, inv: Option<Single<&mut Inventory>>, net: Option<Res<crate::net::Net>>) {
     let Some(mut inv) = inv else { return };
-    if r.given {
+    if r.given || (net.is_some() && MY_ID.load(Relaxed) != 0) {
         return;
     }
     match bomb_slot(&inv) {
@@ -109,6 +146,49 @@ fn give_bomb(mut r: ResMut<Round>, inv: Option<Single<&mut Inventory>>) {
     r.given = true;
 }
 
+/// Bombe_C Start Fuse (planted at `pos` by `by`): the bomb actor with its blinking light.
+fn arm(cmd: &mut Commands, assets: &AssetServer, r: &mut Round, pos: Vec3, by: u8) {
+    cmd.spawn((PlantedBomb, WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset("models/guns/Bomb.glb"))), Transform::from_translation(pos + Vec3::Y * 0.03))).with_children(|c| {
+        c.spawn((BombLight, PointLight { color: Color::srgb(1.0, 0.26, 0.0), intensity: 60_000.0, range: 5.0, ..default() }, Transform::from_xyz(0.0, 0.1, 0.0), Visibility::Hidden));
+    });
+    let left = std::env::var("BODYCAM_BOMBFUSE").ok().and_then(|v| v.parse().ok()).unwrap_or(FUSE); // dev: shorter fuse
+    r.armed = Some(Armed { left, pos, defusing: None, by, next_beep: 0.0, lit: 0.0 });
+    r.planting = None;
+    info!("bomb planted at {pos:?} by player {by}");
+}
+
+/// Another player planted / defused. Bombe_C OnRep: non-owners hear the plant cue, the defenders the defuse announcer; defenders get
+/// a spent C4 slot so they can play the defuse montage.
+fn bomb_in(mut ev: MessageReader<BombIn>, mut cmd: Commands, assets: Res<AssetServer>, mut r: ResMut<Round>, mut inv: Option<Single<&mut Inventory>>, mut snd: MessageWriter<PlayCue>) {
+    for BombIn(m) in ev.read() {
+        match m {
+            BombMsg::Planted { at, by } => {
+                if r.armed.is_some() {
+                    continue;
+                }
+                arm(&mut cmd, &assets, &mut r, Vec3::from(*at), *by);
+                snd.write(PlayCue { bools: vec![], cue: PLANTED_CUE.into(), dist_cm: 0.0 });
+                if team(MY_ID.load(Relaxed)) != team(*by) {
+                    snd.write(PlayCue { bools: vec![], cue: DEFUSE_ANNOUNCER.into(), dist_cm: 0.0 });
+                    if let Some(inv) = inv.as_mut().filter(|i| bomb_slot(i).is_none())
+                        && let Some(mut w) = load_item("Bomb")
+                    {
+                        w.ammo = 0;
+                        inv.slots.push(w);
+                    }
+                }
+            }
+            BombMsg::Defused => {
+                if r.armed.take().is_some() {
+                    r.over = Some(("BOMB DEFUSED - DEFENDERS WIN", RESTART));
+                    info!("bomb defused (remote)");
+                }
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn plant(
     time: Res<Time>,
     keys: Res<ButtonInput<MouseButton>>,
@@ -119,6 +199,7 @@ fn plant(
     p: Single<(&Player, &Transform)>,
     zones: Query<&Transform, With<BombZone>>,
     mut out: MessageWriter<MontageStarted>,
+    mut net_out: MessageWriter<BombOut>,
 ) {
     let Some(slot) = bomb_slot(&inv) else { return };
     let (pl, tr) = *p;
@@ -131,16 +212,10 @@ fn plant(
             }
         } else if *t >= PLANT_EVENT {
             // GameplayEvent.Bomb.Initiated -> Bombe_C.Start Fuse (StartObjective, BombeActive).
-            r.planting = None;
-            let pos = Vec3::new(tr.translation.x, tr.translation.y, tr.translation.z);
-            cmd.spawn((PlantedBomb, WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset("models/guns/Bomb.glb"))), Transform::from_translation(pos + Vec3::Y * 0.03)))
-                .with_children(|c| {
-                    c.spawn((BombLight, PointLight { color: Color::srgb(1.0, 0.26, 0.0), intensity: 60_000.0, range: 5.0, ..default() }, Transform::from_xyz(0.0, 0.1, 0.0), Visibility::Hidden));
-                });
+            let (pos, by) = (tr.translation, MY_ID.load(Relaxed));
+            arm(&mut cmd, &assets, &mut r, pos, by);
             inv.slots[slot].ammo = 0;
-            let left = std::env::var("BODYCAM_BOMBFUSE").ok().and_then(|v| v.parse().ok()).unwrap_or(FUSE); // dev: shorter fuse
-            r.armed = Some(Armed { left, pos, defusing: None });
-            info!("bomb planted at {pos:?}");
+            net_out.write(BombOut(BombMsg::Planted { at: pos.to_array(), by }));
         }
         return;
     }
@@ -155,15 +230,29 @@ fn plant(
     }
 }
 
-/// Initiate/Defuse: the interaction key (F here) held within reach of the armed bomb.
-fn defuse(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut r: ResMut<Round>, mut inv: Single<&mut Inventory>, p: Single<(&Player, &Transform)>, mut out: MessageWriter<MontageStarted>) {
+/// Initiate/Defuse: the interaction key (F here) held within reach of the armed bomb (Bombe_C.CanInterract: the other team only).
+#[allow(clippy::too_many_arguments)]
+fn defuse(
+    time: Res<Time>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut r: ResMut<Round>,
+    mut inv: Single<&mut Inventory>,
+    p: Single<(&Player, &Transform)>,
+    mut out: MessageWriter<MontageStarted>,
+    mut net_out: MessageWriter<BombOut>,
+    net: Option<Res<crate::net::Net>>,
+) {
+    if net.is_some() && team(MY_ID.load(Relaxed)) == ATTACKERS {
+        return;
+    }
     let Some(slot) = bomb_slot(&inv) else { return };
     let (pl, tr) = *p;
     let Some(a) = &mut r.armed else { return };
     let near = tr.translation.distance(a.pos) <= DEFUSE_REACH && !pl.dead;
     if let Some(t) = &mut a.defusing {
         *t += time.delta_secs();
-        if !near || !keys.pressed(KeyCode::KeyF) || inv.current != slot {
+        // (t < 0: still drawing the C4, the slot isn't current yet)
+        if !near || !keys.pressed(KeyCode::KeyF) || (inv.current != slot && *t >= 0.0) {
             a.defusing = None;
             inv.slots[slot].ammo = 0;
             if !pl.dead && inv.current == slot {
@@ -174,6 +263,7 @@ fn defuse(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut r: ResMut<Round>
             r.armed = None;
             inv.slots[slot].ammo = 0;
             r.over = Some(("BOMB DEFUSED - DEFENDERS WIN", RESTART));
+            net_out.write(BombOut(BombMsg::Defused));
             info!("bomb defused");
         }
         return;
@@ -193,23 +283,39 @@ fn defuse(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut r: ResMut<Round>
 }
 
 /// Bombe_C Loop: FuzeTimer - 1 every second; <= 0 -> Explode (Server) -> multicast.
+/// Beep loop: light on + Ui_Hover_over_button_16 (+ Access_Granted_8 at FuzeTimer <= 2), light off after
+/// MapRangeClamped(FuzeTimer, 0..FuseDelay -> 0..0.2) s, next beep after MapRangeClamped(.. -> 0.0001..1.0) s more.
+#[allow(clippy::too_many_arguments)]
 fn fuse(
     time: Res<Time>,
     mut cmd: Commands,
     mut r: ResMut<Round>,
-    mut det: MessageWriter<Detonate>,
+    mut det: MessageWriter<DetonateFor>,
+    mut snd: MessageWriter<PlayCue>,
+    cam: Single<&GlobalTransform, With<crate::player::BodycamCamera>>,
     bombs: Query<Entity, With<PlantedBomb>>,
     mut lights: Query<&mut Visibility, With<BombLight>>,
 ) {
     let Some(a) = &mut r.armed else { return };
-    a.left -= time.delta_secs();
-    // PointLight blink: RetriggerableDelay MapRangeClamped(FuzeTimer, 0..FuseDelay 30 -> 0.0001..1.0) s, lit 0.2 s max.
-    let period = (a.left / 30.0).clamp(0.05, 1.0);
+    let dt = time.delta_secs();
+    a.left -= dt;
+    a.next_beep -= dt;
+    a.lit -= dt;
+    if a.next_beep <= 0.0 && a.left > 0.0 {
+        let k = (a.left / FUSE_DELAY).clamp(0.0, 1.0);
+        a.lit = 0.2 * k;
+        a.next_beep = a.lit + k.max(0.0001);
+        let dist_cm = cam.translation().distance(a.pos) * 100.0;
+        snd.write(PlayCue { bools: vec![], cue: BEEP.into(), dist_cm });
+        if a.left <= 2.0 {
+            snd.write(PlayCue { bools: vec![], cue: BEEP_LAST.into(), dist_cm });
+        }
+    }
     for mut v in &mut lights {
-        *v = if (time.elapsed_secs() % period) < 0.12 { Visibility::Inherited } else { Visibility::Hidden };
+        *v = if a.lit > 0.0 { Visibility::Inherited } else { Visibility::Hidden };
     }
     if a.left <= 0.0 {
-        det.write(Detonate { at: a.pos + Vec3::Y * 0.1, spec: BOMB_BLAST });
+        det.write(DetonateFor { at: a.pos + Vec3::Y * 0.1, spec: BOMB_BLAST, owner: a.by });
         for e in &bombs {
             cmd.entity(e).despawn();
         }
@@ -219,28 +325,32 @@ fn fuse(
     }
 }
 
-/// Round over: after a pause the carrier gets a fresh Bombe_C.
-fn finish(time: Res<Time>, mut r: ResMut<Round>) {
+/// Round over: after a pause the (defused) bomb goes away and the carrier gets a fresh Bombe_C.
+fn finish(time: Res<Time>, mut cmd: Commands, mut r: ResMut<Round>, bombs: Query<Entity, With<PlantedBomb>>) {
     if let Some((_, t)) = &mut r.over {
         *t -= time.delta_secs();
         if *t <= 0.0 {
             r.over = None;
             r.given = false;
+            for e in &bombs {
+                cmd.entity(e).despawn();
+            }
         }
     }
 }
 
-fn hud(r: Res<Round>, inv: Option<Single<&Inventory>>, p: Single<&Transform, With<Player>>, zones: Query<&Transform, With<BombZone>>, mut q: Single<&mut Text, With<BombText>>) {
+fn hud(net: Option<Res<crate::net::Net>>, r: Res<Round>, inv: Option<Single<&Inventory>>, p: Single<&Transform, With<Player>>, zones: Query<&Transform, With<BombZone>>, mut q: Single<&mut Text, With<BombText>>) {
     q.0 = if let Some((msg, _)) = r.over {
         msg.into()
     } else if let Some(a) = &r.armed {
         match a.defusing {
             Some(t) if t >= 0.0 => format!("DEFUSING {:.0}%   BOMB {:.0}", t / DEFUSE_EVENT * 100.0, a.left.max(0.0).ceil()),
+            _ if net.is_some() && team(MY_ID.load(Relaxed)) == ATTACKERS => format!("BOMB PLANTED {:.0}   (defend it)", a.left.max(0.0).ceil()),
             _ => format!("BOMB PLANTED {:.0}   (hold F next to it to defuse)", a.left.max(0.0).ceil()),
         }
     } else if let Some(t) = r.planting {
         format!("PLANTING {:.0}%", t / PLANT_EVENT * 100.0)
-    } else if let Some(inv) = inv.filter(|i| bomb_slot(i).is_some()) {
+    } else if let Some(inv) = inv.filter(|i| bomb_slot(i).is_some_and(|s| i.slots[s].ammo > 0)) {
         let n = bomb_slot(&inv).unwrap() + 1;
         if in_zone(p.translation, &zones) { format!("In bomb zone: draw C4 (key {n}), hold LMB to plant") } else { format!("Carrying C4 (key {n}): reach a bomb zone") }
     } else {

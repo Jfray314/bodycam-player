@@ -105,13 +105,16 @@ pub struct BlastSpec {
     pub outer: f32,
     pub exp: f32,
     pub flash: bool,
+    /// Explosion SoundCue.
+    pub cue: &'static str,
 }
+const G67_CUE: &str = "/Game/Audio/Grenade/Cue/Bodycam_Grenade_G67";
 /// G67_C: (1.0, 350, 1000, 1.3) x GE_GrenadeStat_G67 Damage 200.
-pub const G67_BLAST: BlastSpec = BlastSpec { base: 200.0, inner: 350.0, outer: 1000.0, exp: 1.3, flash: false };
+pub const G67_BLAST: BlastSpec = BlastSpec { base: 200.0, inner: 350.0, outer: 1000.0, exp: 1.3, flash: false, cue: G67_CUE };
 /// Flash_C: (1.0, 250, 1000, 2.0) x GE_GrenadeStat_Flash Damage 50; the flash applies GE_Flashed instead.
-pub const FLASH_BLAST: BlastSpec = BlastSpec { base: 50.0, inner: 250.0, outer: 1000.0, exp: 2.0, flash: true };
+pub const FLASH_BLAST: BlastSpec = BlastSpec { base: 50.0, inner: 250.0, outer: 1000.0, exp: 2.0, flash: true, cue: "/Game/BallisticsVFX/SFX/Explodes/Explosions_flash" };
 /// GA_ExplodePerk: ExplosionDamage 200, Inner 200, Outer 1000, exponent 2.0.
-pub const DRONE_BLAST: BlastSpec = BlastSpec { base: 200.0, inner: 200.0, outer: 1000.0, exp: 2.0, flash: false };
+pub const DRONE_BLAST: BlastSpec = BlastSpec { base: 200.0, inner: 200.0, outer: 1000.0, exp: 2.0, flash: false, cue: G67_CUE };
 
 /// The local player threw a grenade (net.rs replicates it).
 #[derive(Message)]
@@ -456,7 +459,7 @@ fn explode(
     sphere: &Handle<Mesh>,
     mats: &mut Assets<StandardMaterial>,
 ) {
-    let BlastSpec { base, inner, outer, exp, flash: flash_gren } = spec;
+    let BlastSpec { base, inner, outer, exp, flash: flash_gren, cue } = spec;
     let origin = at + Vec3::Y * 0.5; // BFL call uses ActorLocation + (0,0,50)
     let blocked = |ray: &mut MeshRayCast, to: Vec3, ignore: &Query<(), With<IgnoreTraces>>, targets: &Query<(Entity, &GlobalTransform, &mut Health)>| {
         let d = to - origin;
@@ -508,7 +511,6 @@ fn explode(
     ));
     cmd.spawn((PointLight { intensity: 8_000_000.0, range: 25.0, color: col, ..default() }, Transform::from_translation(at + Vec3::Y * 0.5), Blast { t: 0.0, life: life + 0.1, size: 0.0 }));
     // G67_C: AC_Detonation.DetonationSound = Bodycam_Grenade_G67; Flash_C: Explosions_flash.
-    let cue = if flash_gren { "/Game/BallisticsVFX/SFX/Explodes/Explosions_flash" } else { "/Game/Audio/Grenade/Cue/Bodycam_Grenade_G67" };
     snd.write(PlayCue { bools: vec![], cue: cue.into(), dist_cm: dp });
 }
 

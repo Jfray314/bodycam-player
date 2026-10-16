@@ -70,6 +70,8 @@ pub enum Ev {
     /// Host -> victim: apply damage (from = attacker).
     Damage(f32),
     Kill { killer: u8, victim: u8 },
+    /// Bomb mode plant / defuse (bomb.rs).
+    Bomb(crate::bomb::BombMsg),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -415,6 +417,7 @@ fn local_events(
     mut thrown: MessageReader<crate::items::Thrown>,
     mut melee: MessageReader<crate::items::Melee>,
     mut crashed: MessageReader<crate::items::DroneCrashed>,
+    mut bomb: MessageReader<crate::bomb::BombOut>,
     mut out: MessageWriter<NetEv>,
 ) {
     let net = &mut *net;
@@ -443,6 +446,7 @@ fn local_events(
     for c in crashed.read() {
         evs.push(Ev::Blast { at: c.at.to_array() });
     }
+    evs.extend(bomb.read().map(|b| Ev::Bomb(b.0.clone())));
     for ev in evs {
         if net.host {
             for o in net.others.values_mut() {
@@ -510,6 +514,7 @@ fn apply(
     ignore: Query<(), With<IgnoreTraces>>,
     body: Query<(), With<RemoteBody>>,
     mut chars: Query<&mut crate::character::CharacterState>,
+    mut bomb_in: MessageWriter<crate::bomb::BombIn>,
 ) {
     let now = time.elapsed_secs();
     let tnow = time.elapsed_secs_f64();
@@ -582,6 +587,11 @@ fn apply(
             Ev::Sounds(list) => {
                 for (t, cue) in list {
                     net.snd.push((*t, cue.clone(), *from));
+                }
+            }
+            Ev::Bomb(m) => {
+                if *from != my_id {
+                    bomb_in.write(crate::bomb::BombIn(m.clone()));
                 }
             }
             Ev::Montage { clip, blend } => {
