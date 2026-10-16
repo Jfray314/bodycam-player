@@ -48,7 +48,7 @@ See `git log` since `6f7ed1a` (wave 1 end): waves 2-3 merges (att-optics, polish
 gap list, 3P character, knife/boards/bomb).
 
 ## 5. Failed attempts / gotchas
-- Project moved C: -> F:\codeodycam-player (2.2 TB free). tools/* paths repointed (commit 5e2cd38). `git worktree list` still shows
+- Project moved C: -> F:/code/bodycam-player (2.2 TB free). tools/* paths repointed (commit 5e2cd38). `git worktree list` still shows
   stale C:/code/... worktrees (old copy) — `git worktree prune` once the C: copy is deleted. ue-export dll was corrupt after the copy:
   rebuilt with `dotnet build -c Release` in tools/ue-export. Master builds in `target-main` (untracked); builders may use
   `CARGO_TARGET_DIR=F:/code/bodycam-player/target`. MSYS mangles args starting with `/` (use `find Animations`, not `/Animations/`).
@@ -64,4 +64,4 @@ gap list, 3P character, knife/boards/bomb).
    death; check FP gun shadow + drone close-up.
 2. Real two-machine multiplayer test (LAN), then bomb net events + teams, beep audio.
 3. Port the UE dust layer (up-facing dust blend) in map loader to fix bright workbench tops; retune if needed.
-4. Delete the old C:\codeodycam-player copy (user's call), then `git worktree prune`.
+4. Delete the old C:/code/bodycam-player copy (user's call), then `git worktree prune`.
