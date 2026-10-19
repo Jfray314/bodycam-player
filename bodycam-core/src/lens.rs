@@ -30,13 +30,14 @@ impl LensParams {
     pub const fn game() -> Self {
         LensParams {
             distortion: 0.33, distortion_density: 1.0, ca: 0.003, vignette: 0.4, aberration_fade_exponent: 2.0, edge_blur: 25.0 * 0.8,
-            blur_fade_exponent: 10.0, sharpen: 0.0, grain: 0.0, temporal_noise: 0.0, banding: 0.0, dirt: 0.25, dirt_threshold: 4.0,
+            blur_fade_exponent: 10.0, sharpen: 0.0, grain: 0.0, temporal_noise: 0.0, banding: 0.0, dirt: 0.0, // ponytail: off until dirt rides a blurred bright pass (see game postfx.rs)
+            dirt_threshold: 4.0,
             dirt_gain: 0.6, exposure_bias: 0.0, rolling_shutter: 0.010,
         }
     }
     /// Defaults of mods/reshade/Bodycam.fx (checked against the file by a test).
     pub const fn reshade() -> Self {
-        LensParams { dirt_threshold: 0.8, dirt_gain: 1.5, rolling_shutter: 0.0, ..Self::game() }
+        LensParams { dirt: 0.25, dirt_threshold: 0.8, dirt_gain: 1.5, rolling_shutter: 0.0, ..Self::game() }
     }
 }
 
