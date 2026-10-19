@@ -9,7 +9,6 @@ use bevy::asset::{RenderAssetUsages, embedded_asset};
 use bevy::core_pipeline::fullscreen_material::{FullscreenMaterial, FullscreenMaterialPlugin};
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::post_process::auto_exposure::{AutoExposure, AutoExposurePlugin};
-use bevy::post_process::bloom::Bloom;
 use bevy::post_process::motion_blur::MotionBlur;
 use bevy::prelude::*;
 use bevy::render::extract_component::ExtractComponent;
@@ -87,6 +86,18 @@ impl FullscreenMaterial for BodycamPostFx {
     fn fragment_shader() -> ShaderRef {
         "embedded://game/postfx.wesl".into()
     }
+    /// Pinned after motion blur, before bloom. The default ("before tonemapping" only) left it unordered against them, so
+    /// the order changed between frames: frames where bloom ran first flashed a full-screen skylight glare. Every look value
+    /// was tuned with this pass ahead of bloom. ponytail: UE puts lens effects after bloom; that order needs bloom retuned.
+    fn schedule_configs(
+        system: bevy::ecs::schedule::ScheduleConfigs<bevy::ecs::system::BoxedSystem>,
+    ) -> bevy::ecs::schedule::ScheduleConfigs<bevy::ecs::system::BoxedSystem> {
+        use bevy::ecs::schedule::IntoScheduleConfigs;
+        system
+            .in_set(bevy::core_pipeline::Core3dSystems::PostProcess)
+            .before(bevy::post_process::motion_blur::motion_blur)
+            .before(bevy::post_process::bloom::bloom)
+    }
 }
 
 /// Horizontal FOV (UE CameraComponent.FieldOfView = 120, constant, also while aiming).
@@ -131,8 +142,9 @@ fn stack(st: &PostFxState) -> impl Bundle {
     (
         BodycamPostFx::default(),
         Msaa::Off,
-        // ponytail: UE BloomIntensity 0.675 (SOG) mapped by eye; Bevy's bloom units differ.
-        Bloom { intensity: 0.2, prefilter: bevy::post_process::bloom::BloomPrefilter { threshold: 1.0, threshold_softness: 0.5 }, ..Bloom::NATURAL },
+        // ponytail: no bloom. UE has BloomIntensity 0.675 (SOG), but Bevy's energy-conserving bloom on the 300-nit skylight hazes
+        // the whole frame (even at 0.04); it only ever showed on the frames where an unordered pass let it through, which read
+        // as white flashes. Every look value was tuned without it. Re-add with a thresholded/clamped bright pass if wanted.
         Tonemapping::AcesFitted, // UE filmic tonemapper is ACES-based
         MotionBlur { shutter_angle: 0.5, samples: 4 }, // MotionBlurAmount 0.5
         // Histogram auto exposure, AutoExposureBias +1 (exposure_bias), metering mask stand-in.
@@ -158,7 +170,7 @@ pub fn apply_enabled(cmd: &mut Commands, st: &PostFxState, cams: impl IntoIterat
         if st.enabled {
             cmd.entity(e).insert(stack(st));
         } else {
-            cmd.entity(e).remove::<(BodycamPostFx, Bloom, MotionBlur, AutoExposure)>().insert((Tonemapping::TonyMcMapface, Msaa::Sample4));
+            cmd.entity(e).remove::<(BodycamPostFx, bevy::post_process::bloom::Bloom, MotionBlur, AutoExposure)>().insert((Tonemapping::TonyMcMapface, Msaa::Sample4));
         }
     }
 }
