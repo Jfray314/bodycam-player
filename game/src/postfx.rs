@@ -72,7 +72,9 @@ impl Default for BodycamPostFx {
             distortion: 0.33, distortion_density: 1.0, ca: 0.003, vignette: 0.4, aberration_fade_exponent: 2.0,
             edge_blur: 25.0 * 0.8, blur_fade_exponent: 10.0, sharpen: 0.0, // UE Sharpen default 0
             grain: 0.0, temporal_noise: 0.0, banding: 0.0, // FilmGrainIntensity 0
-            dirt: 0.25, dirt_threshold: 4.0, dirt_gain: 0.6, exposure_bias: 0.0,
+            // ponytail: lens dirt off - sparse full-res taps ghost the skylight slats into smoky sheets and every shot (dirt_boost x7)
+            // flashed the mask white. UE scales its *bloom* by the dirt mask; redo it from a blurred/mipped bright pass before 0.25.
+            dirt: 0.0, dirt_threshold: 4.0, dirt_gain: 0.6, exposure_bias: 0.0,
             rolling_shutter: 0.010,
             flash_amount: 0.0, damage_amount: 0.0, explosion_shake: 0.0, dirt_boost: 0.0,
             time: 0.0, yaw_rate: 0.0, pitch_rate: 0.0, pump: 0.0,
@@ -180,9 +182,11 @@ fn motion_state(time: Res<Time>, mut q: Query<(&GlobalTransform, &mut BodycamPos
             fx.yaw_rate += (w.y.clamp(-12.0, 12.0) - fx.yaw_rate) * k;
             fx.pitch_rate += (w.x.clamp(-12.0, 12.0) - fx.pitch_rate) * k;
             // Underdamped spring: overshoot after a fast turn.
-            let kick = (w.length() - 2.0).max(0.0) * 0.02;
+            // Above 30 rad/s is a camera snap (respawn, death cam, 3P), not a turn: no kick. Pump capped to +-0.5 EV.
+            let wl = w.length();
+            let kick = if wl > 30.0 { 0.0 } else { (wl.min(12.0) - 2.0).max(0.0) * 0.02 };
             *vel += (-18.0 * fx.pump - 3.0 * *vel - kick * 60.0) * dt;
-            fx.pump += *vel * dt;
+            fx.pump = (fx.pump + *vel * dt).clamp(-0.5, 0.5);
         }
         *prev = Some(rot);
         fx.time = time.elapsed_secs() % 3600.0;
