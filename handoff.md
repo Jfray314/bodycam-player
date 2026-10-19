@@ -66,11 +66,12 @@ gap list, 3P character, knife/boards/bomb).
 - Builders hit usage limits mid-task; worktrees were sometimes removed — resume via SendMessage, merge master first.
 
 ## 6. Specific next steps
-**User priorities (session 10 feedback, not started):**
-1. Own (FP) death is wrong: the owner body falls flat while the FP arms stay floating in the air. In the game the camera stays
-   attached to the body (head) and the arms go down with it. Fix: on death hide/stop the FP arms + viewmodel, put the camera on
-   the world body's `head` bone (Bodycam_Player BroadcastCameraTransitionOnDeath / AC_BodycamCamera death branch - read
-   extracted/bp/Bodycam_Player.txt + AC_BodycamCamera), show the local world copy (not just its shadow).
+**User priorities (session 10 feedback):**
+1. DONE (session 11): own death. `body::DeadCam` (pl.dead, not 3P/drone) makes the view detached (no VM layer, owner copy hidden,
+   local world copy on layer 0) and scales the world copy's head away; `effects::camera` pins the camera to that copy's `neck_01`
+   at the offset it had at death (UE EventRagdollStart attaches Camera to Mesh 'fp_camera'). Screenshot-checked (shots_death/).
+   BroadcastCameraTransitionOnDeath = C++ CameraTransitionSubsystem 'Camera.Transition.Disconnected' (+InstantKill on headshot),
+   not in the BP dumps: its visual is unknown. Dev quirk: BODYCAM_AUTO "F2" before "Kill" makes the kill not fire; put Kill first.
 2. Death poses: not always flat on the back. Real game ragdolls into varied results (falls to the side, curls into a fetal
    position, or drops fast). Pick from several collapse variants (GetUp_Front/Back reversed, side falls; maybe a curl pose from
    ALS/WW_RollRagdoll clips in AnimationExamples/Base/InAir, ALS_CLF_Pose) by random + hit direction; slumps vary in speed.
@@ -79,6 +80,11 @@ gap list, 3P character, knife/boards/bomb).
    the real HUD widgets show - find them in Content/MenuSystemPro/INGAME and UI/ widgets, WBP_* HUD), and the loading screen
    (a bodycam booting/loading screen - find the real loading widget/movie in the paks). Survey all small bodycam-presentation
    features (overlays, boot/shutdown, death screen, sounds) and list them before building.
+   Survey (session 11, BP dumps only; extracted/json search timed out, so unconfirmed): NO bodycam REC/timestamp/battery text
+   widget, loading movie, boot/shutdown or static overlay found. Bodycam_Player has ScreenDroplets, BodycamBorders /
+   SpringArmBodycamBorders (mesh borders), Censor Face (SM_FaceCensorProxy_a on FP_Camera). Drone HUD (Widget_Battery/LQ/Warning)
+   already ported in perks.rs. Next: search extracted/json + paks (Content/MenuSystemPro, UI/, Movies/) for loading widgets/movies
+   and the BodycamBorders mesh/material before building anything; ask the user what they remember seeing in-game.
 
 4. Optional 3P polish: play the gun's A_W_* montage on the 3P CharGun (net Ev::Montage could carry the weapon clip); ALS ragdoll on
    death; check FP gun shadow + drone close-up.
