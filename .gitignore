@@ -6,3 +6,5 @@ run.log
 player_manifest.txt
 /.claude/worktrees
 /shots
+/target-*
+/shots_*
