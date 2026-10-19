@@ -43,6 +43,7 @@ impl Plugin for BodyPlugin {
             .init_resource::<MontageNodes>()
             .init_resource::<ThirdPerson>()
             .init_resource::<Detached>()
+            .init_resource::<DeadCam>()
             .add_systems(Startup, |mut cmd: Commands, a: Res<AssetServer>| cmd.insert_resource(BodyAsset(a.load("models/body.glb"))))
             .add_systems(Update, (detached_view, build_bodies, prepare, light_layers, body_layers, montage_clips, anim_state, drive).chain())
             .add_systems(PostUpdate, (hide_bones.after(bevy::app::AnimationSystems), third_person_cam).before(bevy::transform::TransformSystems::Propagate));
@@ -70,8 +71,22 @@ impl Default for ThirdPerson {
 #[derive(Resource, Default)]
 pub struct Detached(pub bool);
 
-fn detached_view(tp: Res<ThirdPerson>, perk: Option<Res<crate::perks::Perk>>, mut det: ResMut<Detached>, mut cam: Single<&mut RenderLayers, With<crate::player::BodycamCamera>>) {
-    let d = tp.on || perk.is_some_and(|p| p.phase == crate::perks::Phase::Piloting);
+/// Local player dead and the camera on its own body (UE EventRagdollStart: Camera attached to the Mesh's fp_camera socket, the
+/// FP arms are gone): detached, plus the world copy hides its head (the camera is inside it). effects.rs moves the camera.
+#[derive(Resource, Default)]
+pub struct DeadCam(pub bool);
+
+fn detached_view(
+    tp: Res<ThirdPerson>,
+    perk: Option<Res<crate::perks::Perk>>,
+    pl: Single<&crate::player::Player>,
+    mut det: ResMut<Detached>,
+    mut dead: ResMut<DeadCam>,
+    mut cam: Single<&mut RenderLayers, With<crate::player::BodycamCamera>>,
+) {
+    let away = tp.on || perk.is_some_and(|p| p.phase == crate::perks::Phase::Piloting);
+    dead.0 = pl.dead && !away;
+    let d = away || pl.dead;
     if det.0 != d {
         det.0 = d;
         **cam = if d { RenderLayers::layer(0) } else { RenderLayers::from_layers(&[0, crate::attach::VM_LAYER]) };
@@ -541,6 +556,7 @@ pub(crate) fn drive(
 /// world copies, hit flinch) and lean roll. Axes come from last frame's bone GlobalTransform (the pose is about to be propagated).
 pub(crate) fn hide_bones(
     det: Res<Detached>,
+    dead: Res<DeadCam>,
     chars: Query<(&CharacterState, &GlobalTransform), Without<BodyRoot>>,
     mut joints: Query<(Entity, &Name, &mut Transform, &GlobalTransform), (With<AnimationTargetId>, Without<BodyRoot>)>,
     parents: Query<&ChildOf>,
@@ -560,7 +576,8 @@ pub(crate) fn hide_bones(
         let Ok((p, pg)) = chars.get(co.parent()) else { continue };
         if HIDDEN_BONES.contains(&name) {
             // the camera is at the owner's head: the FP arms replace the body's
-            t.scale = if r.local && !det.0 && (if r.world { &SHADOW_HIDDEN_BONES[..] } else { &HIDDEN_BONES[..] }).contains(&name) { Vec3::ZERO } else { Vec3::ONE };
+            let fp = !det.0 && (if r.world { &SHADOW_HIDDEN_BONES[..] } else { &HIDDEN_BONES[..] }).contains(&name);
+            t.scale = if r.local && (fp || (dead.0 && r.world && name == "head")) { Vec3::ZERO } else { Vec3::ONE };
         }
         // ponytail: not UE (its owner mesh is camera-attached at the head); the camera here sits in front of the chest, so the
         // owner copy's torso (spine_01 and up) is scaled away as the view tips down: full at -65 deg, untouched above -40 deg.

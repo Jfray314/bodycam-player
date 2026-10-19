@@ -222,19 +222,32 @@ fn shake_env(t: f32) -> f32 {
     if t < 1.0 { 1.0 } else { (1.0 - (t - 1.0) / 1.5).max(0.0) }
 }
 
-/// After the camera pose is built: explosion oscillation and the death drop (DeadView: low, rolled over).
-fn camera(fx: Res<Fx>, mut cam: Single<&mut Transform, With<BodycamCamera>>) {
+/// After the camera pose is built: explosion oscillation; dead, the camera rides the collapsing body (EventRagdollStart attaches it
+/// to the Mesh's fp_camera socket, a head socket). The body's neck_01 is followed (the head bone is scaled away, see body::DeadCam)
+/// at the offset the camera had when the player died, so there is no snap. Bone/player transforms are last frame's (1 frame lag).
+fn camera(
+    fx: Res<Fx>,
+    dead: Res<crate::body::DeadCam>,
+    roots: Query<&crate::body::BodyRoot>,
+    bones: Query<&GlobalTransform, Without<BodycamCamera>>,
+    pl: Single<&GlobalTransform, (With<Player>, Without<BodycamCamera>)>,
+    mut off: Local<Option<bevy::math::Affine3A>>,
+    mut cam: Single<(&mut Transform, &GlobalTransform), With<BodycamCamera>>,
+) {
+    let (cam, cam_g) = &mut *cam;
     if let Some(t) = fx.shake {
         let a = shake_env(t) * fx.shake_gain;
         let o = |amp: f32, hz: f32| amp * (std::f32::consts::TAU * hz * t).sin() * a;
         cam.rotation *= Quat::from_euler(EulerRot::YXZ, o(4.0, 5.0).to_radians(), o(10.0, 15.0).to_radians(), o(5.0, 2.0).to_radians());
     }
-    if let Some(t) = fx.dead {
-        let k = (t / 1.2).min(1.0);
-        let k = k * k; // accelerating fall
-        cam.translation.y -= 1.35 * k;
-        cam.rotation *= Quat::from_euler(EulerRot::YXZ, 0.0, 0.3 * k, 1.2 * k); // ~70 deg roll onto the side
-    }
+    let neck = roots.iter().find(|r| r.local && r.world).and_then(|r| r.bones.get("neck_01")).and_then(|&e| bones.get(e).ok());
+    let (Some(neck), true) = (neck, dead.0) else {
+        *off = None;
+        return;
+    };
+    let neck = neck.affine();
+    let o = *off.get_or_insert_with(|| neck.inverse() * cam_g.affine());
+    **cam = Transform::from_matrix(Mat4::from(pl.affine().inverse() * neck * o));
 }
 
 #[cfg(test)]

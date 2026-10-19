@@ -136,6 +136,7 @@ pub(crate) fn autotest(
                 "E" => Ok(KeyCode::KeyE),
                 "Space" => Ok(KeyCode::Space),
                 "F1" => Ok(KeyCode::F1),
+                "F2" => Ok(KeyCode::F2),
                 "F3" => Ok(KeyCode::F3),
                 "F4" => Ok(KeyCode::F4),
                 "F5" => Ok(KeyCode::F5),
