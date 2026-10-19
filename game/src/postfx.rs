@@ -132,7 +132,7 @@ fn stack(st: &PostFxState) -> impl Bundle {
         BodycamPostFx::default(),
         Msaa::Off,
         // ponytail: UE BloomIntensity 0.675 (SOG) mapped by eye; Bevy's bloom units differ.
-        Bloom { intensity: 0.2, ..Bloom::NATURAL },
+        Bloom { intensity: 0.2, prefilter: bevy::post_process::bloom::BloomPrefilter { threshold: 1.0, threshold_softness: 0.5 }, ..Bloom::NATURAL },
         Tonemapping::AcesFitted, // UE filmic tonemapper is ACES-based
         MotionBlur { shutter_angle: 0.5, samples: 4 }, // MotionBlurAmount 0.5
         // Histogram auto exposure, AutoExposureBias +1 (exposure_bias), metering mask stand-in.
