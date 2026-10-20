@@ -181,6 +181,9 @@ def attach_parts(arm, gun_dir):
         # Missing socket -> last word of the class leaf (AK "Long_Barrel" -> "Barrel"; parts at the root origin were 21 cm short).
         s = sockets.get(part["socket"].lower()) or sockets.get(part["socket"].split("_")[-1].lower())
         bone = bones.get((s["bone"] if s else "root").lower()) or bones["root"]
+        # Drone motors: rotor + propeller sit on every Rotor0N bone (the socket only names Rotor01).
+        pbones = [b for k, b in sorted(bones.items()) if k.startswith("rotor0")] if part["socket"] in ("Rotor", "Propeller") else []
+        bone = pbones[0] if pbones else bone
         loc = mathutils.Vector((s["loc"][0], -s["loc"][1], s["loc"][2])) / 100 if s else mathutils.Vector()  # UE cm, Y mirrored like the PSK import
         S = mathutils.Matrix.Translation(loc)
         if s:  # json rot = UE (Pitch, Yaw, Roll) degrees; R = Rz(yaw) Ry(pitch) Rx(-roll), conjugated by the Y mirror (cancels the rotated Revolver Root bone)
@@ -188,7 +191,14 @@ def attach_parts(arm, gun_dir):
             Rue = mathutils.Matrix.Rotation(rz, 3, "Z") @ mathutils.Matrix.Rotation(ry, 3, "Y") @ mathutils.Matrix.Rotation(-rx, 3, "X")
             F = mathutils.Matrix.Diagonal((1, -1, 1))
             S = S @ (F @ Rue @ F).to_4x4()
-        for m in meshes:
+        targets = [(m, bone) for m in meshes]
+        for pb in pbones:  # extra copies for the other rotors
+            if pb is not bone:
+                for m in meshes:
+                    c = m.copy()
+                    bpy.context.collection.objects.link(c)
+                    targets.append((c, pb))
+        for m, bone in targets:
             mw = m.matrix_world.copy()
             for mod in [x for x in m.modifiers if x.type == "ARMATURE"]:
                 m.modifiers.remove(mod)
