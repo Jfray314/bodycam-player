@@ -6,6 +6,7 @@
 //!   BODYCAM_RECORD=dir:fps:secs     frame sequence dir/f_0001.png.. at a fixed sim step of 1/fps, then exit
 //!   BODYCAM_POS=x:z:yaw_deg[:y]         place the player after start (yaw 0 = -Z)
 //!   BODYCAM_SPEED=N                 virtual time speed multiplier
+//!   BODYCAM_DUMMY=dist:wall         a Health capsule `dist` m ahead of the player with a wall `wall` m behind it (blood tests)
 use crate::viewmodel::{ArmsRoot, GunRoot};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
@@ -38,6 +39,33 @@ impl Plugin for DevPlugin {
                     p.0.yaw = n.get(2).copied().unwrap_or(0.0).to_radians();
                     p.0.vel = Vec3::ZERO;
                     *f = u32::MAX;
+                }
+            });
+        }
+        if let Some(v) = env("BODYCAM_DUMMY") {
+            // Spawns the dummy at 0.5 s and a scripted FleshHit on it (chest, facing the player) at 1.0 s: the muzzle sits right in front of the
+            // hit point at close range, hiding it behind the gun. Real shots work too (LMB).
+            let n: Vec<f32> = v.split(':').filter_map(|x| x.parse().ok()).collect();
+            app.add_systems(Update, move |mut st: Local<Option<(Entity, Vec3, Vec3, bool)>>, ready: Res<Ready>, time: Res<Time>, p: Single<&GlobalTransform, With<crate::player::BodycamCamera>>, mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>| {
+                let Some(r) = ready.0 else { return };
+                let t = time.elapsed_secs() - r;
+                if n.len() < 2 {
+                    return;
+                }
+                if st.is_none() && t > 0.5 {
+                    let fwd = Vec3::new(p.forward().x, 0.0, p.forward().z).normalize_or_zero();
+                    let base = Vec3::new(p.translation().x, p.translation().y - 0.4, p.translation().z) + fwd * n[0];
+                    let e = cmd.spawn((Mesh3d(meshes.add(Capsule3d::new(0.3, 1.2))), MeshMaterial3d(mats.add(Color::srgb(0.35, 0.3, 0.25))), Transform::from_translation(base), crate::weapon::Health(1.0e9))).id();
+                    cmd.spawn((Mesh3d(meshes.add(Cuboid::new(6.0, 4.0, 0.1))), MeshMaterial3d(mats.add(Color::srgb(0.7, 0.7, 0.68))), Transform::from_translation(base + fwd * n[1] + Vec3::Y * 1.0).looking_to(fwd, Vec3::Y)));
+                    *st = Some((e, base, fwd, false));
+                }
+                if let Some((e, base, fwd, fired)) = st.as_mut()
+                    && !*fired
+                    && t > 1.0
+                {
+                    *fired = true;
+                    let right = fwd.cross(Vec3::Y);
+                    cmd.spawn(crate::blood::FleshHit { pt: *base + Vec3::Y * 0.4 + right * 0.27 - *fwd * 0.13, n: (right * 0.9 - *fwd * 0.43).normalize(), dir: *fwd, hit: *e });
                 }
             });
         }

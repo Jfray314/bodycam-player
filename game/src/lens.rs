@@ -60,9 +60,12 @@ fn spawn(mut cmd: Commands, assets: Res<AssetServer>, mut mats: ResMut<Assets<Le
 
 fn drive(fx: Option<Single<&BodycamPostFx>>, mut mats: ResMut<Assets<LensMat>>) {
     let Some(fx) = fx else { return };
-    if mats.iter().any(|(_, m)| m.p.x != fx.damage_amount) {
+    // The death cut tints the frame to black (effects.rs): the lens layers fade with it.
+    let (x, y) = (fx.damage_amount, DIRT * fx.tint_g.clamp(0.0, 1.0));
+    if mats.iter().any(|(_, m)| m.p.x != x || m.p.y != y) {
         for (_, m) in mats.iter_mut() {
-            m.p.x = fx.damage_amount;
+            m.p.x = x;
+            m.p.y = y;
         }
     }
 }
