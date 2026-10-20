@@ -125,6 +125,8 @@ fn main() {
         let pkg = format!("/Game/{}", rel.to_string_lossy().replace('\\', "/"));
         if is_cue(&root, &pkg) { b.cue(&pkg) }
     }
+    // BallisticsVFX flesh-hit sound (FXMaterialDataTable SurfaceType8 ImpactSoundFX).
+    b.cue("/Game/BallisticsVFX/SFX/Impacts/Blood_Dripping");
     // GoPro camera-adjust cues (plugin content, played by A_FP_GoPro_Adjust*_Montage notifies).
     let gopro = "Plugins/BodycamAnimationFramework/Content/Animations/Gopro/Sound";
     let mut gf = vec![];

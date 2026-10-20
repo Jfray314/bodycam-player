@@ -500,10 +500,8 @@ impl Surf {
 pub(crate) struct FireFx {
     pub tracer: (Handle<Mesh>, Handle<StandardMaterial>),
     decals: [(Vec<Handle<Mesh>>, Handle<StandardMaterial>); 3],
-    /// Flesh row: Decal_Blood_Splatter_Main atlas (Splasher_1, 2x2): hit decal quads, rear-spatter quads, wet red material, droplet mesh material.
-    blood: (Vec<Handle<Mesh>>, Vec<Handle<Mesh>>, Handle<StandardMaterial>, Handle<StandardMaterial>),
-    quad: Handle<Mesh>,
-    smoke: Handle<Image>,
+    pub(crate) quad: Handle<Mesh>,
+    pub(crate) smoke: Handle<Image>,
     bit: Handle<Mesh>,
     shell: (Handle<Mesh>, Handle<StandardMaterial>),
 }
@@ -536,27 +534,9 @@ fn setup_fx(mut cmd: Commands, assets: Res<AssetServer>, mut meshes: ResMut<Asse
         (quads, m)
     };
     let decals = [decal("decal_concrete"), decal("decal_metal"), decal("decal_wood")];
-    // FXMaterialDataTable SurfaceType8 (flesh): DecalSize (3,8,8) -> 16 cm quad; RearSpatterDecal on the surface behind (size not in the dump: 30 cm).
-    let blood_mat = mats.add(StandardMaterial {
-        base_color_texture: Some(assets.load("textures/fx/decal_blood.png")),
-        base_color: Color::srgb(0.3, 0.012, 0.01),
-        perceptual_roughness: 0.25,
-        reflectance: 0.5,
-        alpha_mode: AlphaMode::Blend,
-        cull_mode: None,
-        ..default()
-    });
-    let blood_bit = mats.add(StandardMaterial { base_color: Color::srgb(0.25, 0.008, 0.008), perceptual_roughness: 0.2, ..default() });
-    let blood = (
-        (0..4).map(|i| atlas_quad(&mut meshes, 0.16, (i % 2) as f32, (i / 2) as f32)).collect(),
-        (0..4).map(|i| atlas_quad(&mut meshes, 0.30, (i % 2) as f32, (i / 2) as f32)).collect(),
-        blood_mat,
-        blood_bit,
-    );
     cmd.insert_resource(FireFx {
         tracer: (meshes.add(Cuboid::new(0.01, 0.01, 1.0)), tracer),
         decals,
-        blood,
         quad: meshes.add(Rectangle::new(1.0, 1.0)),
         // whisp_One_512_8x8 frame (4,3): the smoke/dust sprite of the Dust emitters (Whisps_trans) and muzzle smoke.
         smoke: assets.load("textures/fx/smoke.png"),
@@ -1029,9 +1009,8 @@ fn fire(
                 }
             }
             if targets.get(e).is_ok_and(|t| t.2.is_some()) {
-                // Flesh: the rear spatter lands on the first non-damageable surface behind the body.
-                let rear = hits.iter().skip(*i + 1).find(|h| h.0 != e && targets.get(h.0).is_ok_and(|t| t.2.is_none()) && h.1.distance(pt) < REAR_SPATTER_RANGE).map(|h| (h.1, h.2));
-                blood_fx(&mut cmd, &fx, &mut soft, pt, n, dir, rear);
+                // Flesh (Health targets): blood.rs
+                cmd.spawn(crate::blood::FleshHit { pt, n, dir, hit: e });
                 if absorb * mult <= MIN_BULLET_MULT {
                     end = pt;
                 }
@@ -1078,6 +1057,7 @@ fn remote_shots(
     mut ray: MeshRayCast,
     surf: Query<Option<&SurfaceMat>>,
     ignore: Query<(), With<crate::player::IgnoreTraces>>,
+    flesh: Query<(), With<Health>>,
     fx: Res<FireFx>,
     mut mats: ResMut<Assets<StandardMaterial>>,
     mut soft: ResMut<Assets<crate::soft::SoftMat>>,
@@ -1088,6 +1068,10 @@ fn remote_shots(
             let filter = |e: Entity| !ignore.contains(e);
             let hit = ray.cast_ray(Ray3d::new(s.origin, dir), &MeshRayCastSettings::default().with_filter(&filter)).first().map(|(e, h)| (*e, h.point, h.normal.normalize_or_zero(), h.distance));
             if let Some((e, pt, n, dist)) = hit && dist <= FIRE_RANGE {
+                if flesh.contains(e) {
+                    cmd.spawn(crate::blood::FleshHit { pt, n, dir: *dir, hit: e });
+                    continue;
+                }
                 impact_fx(&mut cmd, &fx, &mut mats, &mut soft, Surf::of(surf.get(e).ok().flatten().map(|m| m.0)), pt, n);
             }
         }
@@ -1111,51 +1095,6 @@ fn smoke(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<crate::soft::SoftMat
         Fading(life),
         crate::player::IgnoreTraces,
     ));
-}
-
-/// Max distance behind a hit body for the RearSpatterDecal. ponytail: the Cubit spawner's trace length is not in the dump.
-const REAR_SPATTER_RANGE: f32 = 3.0;
-
-/// Flesh hit (FXMaterialDataTable_GenericBullets SurfaceType8): BloodCloud_Droplets_A (red puff + fast streaking droplets, gravity),
-/// Decal_Blood_Splatter_Main on the body, and the RearSpatter decal on the surface behind. Counts/speeds are eyeballed
-/// (ponytail: Cascade distributions not decoded); the 2x2 atlas pick and 5 cm drop decals are not modelled.
-fn blood_fx(cmd: &mut Commands, fx: &FireFx, soft: &mut Assets<crate::soft::SoftMat>, pt: Vec3, n: Vec3, dir: Vec3, rear: Option<(Vec3, Vec3)>) {
-    let mut rng = rand::rng();
-    let red = Color::srgb(0.3, 0.012, 0.01);
-    let (hit, back, mat, bit) = &fx.blood;
-    let roll = |rng: &mut rand::rngs::ThreadRng, n: Vec3| Quat::from_rotation_arc(Vec3::Z, n) * Quat::from_rotation_z(rng.random_range(0.0..std::f32::consts::TAU));
-    cmd.spawn((
-        Mesh3d(hit[rng.random_range(0..4)].clone()),
-        MeshMaterial3d(mat.clone()),
-        Transform::from_translation(pt + n * 0.004).with_rotation(roll(&mut rng, n)),
-        Fading(30.0),
-        crate::player::IgnoreTraces,
-    ));
-    if let Some((rp, rn)) = rear.filter(|r| r.1 != Vec3::ZERO) {
-        cmd.spawn((
-            Mesh3d(back[rng.random_range(0..4)].clone()),
-            MeshMaterial3d(mat.clone()),
-            Transform::from_translation(rp + rn * 0.004).with_rotation(roll(&mut rng, rn)),
-            Fading(30.0),
-            crate::player::IgnoreTraces,
-        ));
-    }
-    let jitter = |rng: &mut rand::rngs::ThreadRng| Vec3::new(rng.random_range(-1.0..1.0), rng.random_range(-1.0..1.0), rng.random_range(-1.0..1.0));
-    for _ in 0..3 {
-        smoke(cmd, fx, soft, pt + n * 0.02, (n * 0.5 + dir * 0.4) * rng.random_range(0.3..0.9) + jitter(&mut rng) * 0.2, 0.05, 0.5, 0.55, red);
-    }
-    for _ in 0..16 {
-        let life = rng.random_range(0.3..0.8);
-        let out = if rng.random_bool(0.5) { n } else { dir };
-        cmd.spawn((
-            Mesh3d(fx.bit.clone()),
-            MeshMaterial3d(bit.clone()),
-            Transform::from_translation(pt + n * 0.01).with_scale(Vec3::splat(rng.random_range(0.4..1.0))),
-            Particle { vel: (out + jitter(&mut rng) * 0.6).normalize_or_zero() * rng.random_range(1.0..4.0), gravity: 9.8, grow: 0.0, age: 0.0, life, alpha: 1.0, mat: None, billboard: false },
-            Fading(life),
-            crate::player::IgnoreTraces,
-        ));
-    }
 }
 
 /// SpawnImpactEffect: Cubit_ImpactFX_Spawner picks the FXMaterialDataTable row by surface: decal (10 cm, random hole + roll) +

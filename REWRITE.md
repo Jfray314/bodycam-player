@@ -79,6 +79,7 @@ All times are **sim seconds after "viewmodel ready"** (arms + gun meshes spawned
 | HUD: W_PlayerHUD (voice icon only), HUD_Magazine on mag check (window from SetMagCheckUIVisibility notifies, Ki font) | `hud.rs` | screen-space until the viewmodel exists |
 | SoundCues, footsteps, breathing, bodycam mic filter (Samsung A52 IR convolution + EQ) | `audio.rs` | in progress |
 | Arms/gun meshes + FP animations, BAS viewmodel sway/ADS/offsets, PRAS viewmodel recoil curves | | in progress (mesh export) |
+| Blood: flesh hit (Cubit_ImpactFX_Spawner + BloodCloud_Droplets_A + BackSplatter + Blood_Dripping), WW_RagdollSystem bleeding/BloodPool, Screen_Droplets + T_DirtMask_01 lens layers | `blood.rs`, `lens.rs`, `lens.wesl` | BP logic + Cascade modules exact; Niagara internals, puff opacity, puddle growth approximate (see blood.rs header) |
 | Blueprint logic (leaning/auto-lean, stamina, blood on camera, abilities) | | in progress (Kismet decompiler) |
 | Grenades (GA_Character_Aim_Grenade / GA_ThrowGrenade / Grenade_C / G67_C / Flash_C): RMB pull pin, LMB throw (overhand), toss velocity 1600 cm/s, ray-swept bounce, 3 s fuse, radial damage 200 (350/1000 cm, exp 1.3), flashbang | `items.rs` | real data, physics approximated |
 | Knife (GA_Character_QuickAttack, Knife_C.CloseRangeAttack: 50 cm sphere, 125 cm, 100 dmg), drop/pick up (G/F) | `items.rs` | real data |

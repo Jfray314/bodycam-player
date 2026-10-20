@@ -117,7 +117,7 @@ fn keys(k: Res<ButtonInput<KeyCode>>, mut hostile: ResMut<Hostile>, mut bots: Re
 }
 
 /// A bot dies when its body or head entity is gone (the player's fire() despawns entities whose Health hits 0).
-fn lifecycle(time: Res<Time>, mut bots: ResMut<Bots>, mut cmd: Commands, alive: Query<&Bot>, parts: Query<(), With<Mesh3d>>) {
+fn lifecycle(time: Res<Time>, mut bots: ResMut<Bots>, mut cmd: Commands, alive: Query<&Bot>, parts: Query<(), With<Mesh3d>>, xf: Query<&GlobalTransform>) {
     let art = bots.art.clone();
     for s in &mut bots.slots {
         if let Some(e) = s.e {
@@ -128,6 +128,10 @@ fn lifecycle(time: Res<Time>, mut bots: ResMut<Bots>, mut cmd: Commands, alive: 
                 s.kills = b.kills;
             }
             s.deaths += 1;
+            // WW_RagdollSystem.BloodPool (death): puddle under the body after 5 s. ponytail: bots have no ragdoll, so no velocity re-check.
+            if let Ok(g) = xf.get(e) {
+                crate::blood::request_pool(&mut cmd, g.translation() + Vec3::Y, 5.0);
+            }
             cmd.entity(e).despawn();
             s.e = None;
             s.timer = RESPAWN_DELAY;
