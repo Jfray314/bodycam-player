@@ -7,6 +7,7 @@
 //! - Loading: VHS background at ColorAndOpacity 0.094, blur 5, "CAM DISCONNECTED", battery + "BODY EARLY ACCESS" + date +
 //!   versions + REC on top, tip + "WAITING FOR CONNECTION..." + loading bar at the bottom (1920x1080 design px).
 //! No sounds: neither widget has an audio track on these animations and the VHS MediaTexture carries no audio.
+//! VHS background = the real movie's frames (vhs.wesl).
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 use bevy::render::render_resource::AsBindGroup;
@@ -31,6 +32,9 @@ enum Mode {
 pub struct VhsMat {
     #[uniform(0)]
     p: Vec4,
+    #[texture(1)]
+    #[sampler(2)]
+    frames: Handle<Image>,
 }
 impl UiMaterial for VhsMat {
     fn fragment_shader() -> ShaderRef {
@@ -79,13 +83,15 @@ fn text(cmd: &mut ChildSpawnerCommands, font: &Handle<Font>, s: &str, size: f32,
 
 fn spawn(mut cmd: Commands, assets: Res<AssetServer>, mut mats: ResMut<Assets<VhsMat>>) {
     let ki: Handle<Font> = assets.load("fonts/Ki-Bold.otf"); // Ki_Font "Default" typeface
+    // Vhs_01.bk2 frames 0..300 as luma cells (vhs.wesl); data texture, linear
+    let frames: Handle<Image> = assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load("textures/fx/vhs_01_atlas.png");
     let grey24 = Color::linear_rgb(0.701102, 0.701102, 0.701102); // TS_Body24Grey
     let dark32 = Color::linear_rgb(0.286458, 0.286458, 0.286458); // TS_Headline32DarkGrey
     let tips: Vec<String> = serde_json::from_str(include_str!("../../assets/ui_tips.json")).unwrap_or_default();
     let tip = tips.get(rand::random_range(0..tips.len().max(1))).cloned().unwrap_or_default();
     let full = Node { position_type: PositionType::Absolute, width: percent(100), height: percent(100), ..default() };
     cmd.spawn((full.clone(), GlobalZIndex(100), Pickable::IGNORE, Visibility::Hidden, Root)).with_children(|r| {
-        r.spawn((full.clone(), MaterialNode(mats.add(VhsMat { p: Vec4::new(0.0, 1.0, 5.0, 0.0) }))));
+        r.spawn((full.clone(), MaterialNode(mats.add(VhsMat { p: Vec4::new(0.0, 1.0, 5.0, 0.0), frames: frames.clone() }))));
         // OverlaySlot HAlign/VAlign_Center, Ki 34, ToUpper
         let centre = Node { position_type: PositionType::Absolute, width: percent(100), height: percent(100), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() };
         r.spawn(centre.clone()).with_children(|c| text(c, &ki, "CAM DISCONNECTED", 34.0, Color::linear_rgb(1.0, 0.0, 0.0), (Disc, Visibility::Hidden)));

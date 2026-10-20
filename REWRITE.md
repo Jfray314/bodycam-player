@@ -18,6 +18,9 @@ python -I tools/probe_curves.py <rec1.csv> <rec2.csv> assets/camera_motion.json 
 # 4. decode audio (BINKA -> wav) into assets-local/audio
 cargo run --release -p binka -- extracted/Bodycam/Content/Audio assets-local/audio
 # fonts: copy extracted/Bodycam/Content/UI/Fonts/ki/Ki-Bold.ufont -> assets-local/fonts/Ki-Bold.otf
+# VHS movie (death / loading screen background, Movies/Vhs/Vhs_01.bk2, Bink 2): tools/bk2dump (NihAV, see its Cargo.toml)
+#   bk2dump Vhs_01.bk2 a.rgb 0 300 320 180 -> 300 RGB frames; pack as luma into a 15x20 grid of 320x180 cells:
+#   assets-local/textures/fx/vhs_01_atlas.png (4800x3600 L8). Later segments (from frame ~1500) mis-decode (KB2n inter frames).
 cargo run -p game
 ```
 Live values (C++ defaults, real camera motion) come from `tools/ue4ss_probe` (UE4SS Lua mod: F7 property dump,

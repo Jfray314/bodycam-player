@@ -1,0 +1,12 @@
+# Not a workspace member: needs a NihAV checkout (GPL-3.0+, https://nihav.org/nihav.gitbundle) next to it at ../nihav,
+# with nihav-rad/src/demuxers/bink.rs allowing magic up to KB2n. Build: cargo build --release --manifest-path tools/bk2dump/Cargo.toml
+[package]
+name = "bk2dump"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+nihav_core = { path = "../nihav/nihav-core" }
+nihav_rad = { path = "../nihav/nihav-rad", default-features = false, features = ["demuxer_bink", "decoder_bink2"] }
