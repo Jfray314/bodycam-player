@@ -233,6 +233,7 @@ struct Pickup {
 pub struct ItemsPlugin;
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(PostUpdate, hide_thrown);
         app.init_resource::<Items>().add_message::<Detonate>().add_message::<DetonateFor>().add_message::<BlastDamage>().add_message::<Thrown>().add_message::<Melee>().add_message::<DroneCrashed>().add_message::<PlayCue>().add_systems(Update, (grenade_input, knife_input, knife_flight, projectiles, detonate, tag_meshes, drop_pickup).chain());
     }
 }
@@ -788,3 +789,15 @@ mod tests {
     }
 }
 
+
+/// Grenade_C: the FP grenade leaves the hand on release (RemoveItemInSlot). The empty slot's viewmodel model stays until the holster
+/// montage ends: hide it, or it hangs in front of the camera and sinks to the feet with the holster pose.
+fn hide_thrown(inv: Option<Single<&Inventory>>, mut guns: Query<&mut Visibility, With<GunRoot>>) {
+    let Some(inv) = inv else { return };
+    let slot = &inv.slots[inv.current];
+    if slot.kind == ItemKind::Grenade && slot.ammo == 0 {
+        for mut v in &mut guns {
+            *v = Visibility::Hidden;
+        }
+    }
+}

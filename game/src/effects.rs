@@ -33,6 +33,8 @@ struct Fx {
     blood: Option<f32>,
     shake: Option<f32>,
     shake_gain: f32,
+    /// GCN_HitReaction camera shake: (time, scale, noise seed).
+    hit: Option<(f32, f32, f32)>,
     flash: f32,
     /// Ringing without whiteout (explosions).
     deaf: f32,
@@ -78,7 +80,11 @@ fn events(
     mut st: ResMut<SurvivorStatus>,
     cam: Single<&GlobalTransform, With<BodycamCamera>>,
 ) {
-    for _ in dmg.read() {
+    for d in dmg.read() {
+        // GCN_HitReaction (locally controlled): Sprint_CameraShake, Scale = MapRangeClamped(RawMagnitude, 0, 100, 0, 1); bSingleInstance
+        if fx.dead.is_none() {
+            fx.hit = Some((0.0, map_range_clamped(d.0, 0.0, 100.0, 0.0, 1.0), rand::random::<f32>() * 1000.0));
+        }
         if fx.blood.is_none() && fx.dead.is_none() {
             fx.blood = Some(0.0); // DoOnce until the 5 s delay ran out
         }
@@ -141,6 +147,9 @@ fn tick(
         }
         None => 0.0,
     };
+    if let Some((t, k, seed)) = fx.hit {
+        fx.hit = (t + dt < HIT_SHAKE_S).then_some((t + dt, k, seed));
+    }
     // explosion shake
     if let Some(t) = fx.shake {
         fx.shake = (t + dt < 2.5).then_some(t + dt);
@@ -222,6 +231,31 @@ fn tick(
     }
 }
 
+/// Sprint_CameraShake (LegacyCameraShake): OscillationDuration 0.3 s, default BlendIn 0.1 / BlendOut 0.2.
+const HIT_SHAKE_S: f32 = 0.3;
+
+/// FOscillator::UpdateOffset PerlinNoise: 1D gradient noise (-1..1) at t * frequency.
+fn perlin(x: f32) -> f32 {
+    let grad = |i: f32| {
+        let h = ((i * 127.1).sin() * 43_758.547).fract();
+        h * 2.0 - 1.0
+    };
+    let (i, f) = (x.floor(), x.fract());
+    let u = f * f * (3.0 - 2.0 * f);
+    (grad(i) * f * (1.0 - u) + grad(i + 1.0) * (f - 1.0) * u) * 2.0
+}
+
+/// Sprint_CameraShake pose offset (rotation deg pitch/yaw/roll, location cm Y/Z) at `t`, scaled and blended.
+fn hit_shake(t: f32, scale: f32, seed: f32) -> (Vec3, Vec2) {
+    let w = (t / 0.1).min(1.0) * ((HIT_SHAKE_S - t) / 0.2).min(1.0) * scale;
+    let n = |amp: f32, hz: f32, k: f32| amp * perlin(seed + k * 31.7 + t * hz);
+    let rot = Vec3::new(n(10.0, 5.0, 0.0), n(5.0, 0.1, 1.0), n(10.0, 5.0, 2.0)) * w;
+    // LocOscillation Y: 0.2 cm, default 1 Hz sine, random initial offset; Z: 5 cm, 0.3 Hz, offset zero
+    let tau = std::f32::consts::TAU;
+    let loc = Vec2::new(0.2 * (tau * (t + seed.fract())).sin(), 5.0 * (tau * 0.3 * t).sin()) * w;
+    (rot, loc)
+}
+
 /// ExplosionShake envelope: full for OscillationDuration 1 s, then BlendOut 1.5 s.
 fn shake_env(t: f32) -> f32 {
     if t < 1.0 { 1.0 } else { (1.0 - (t - 1.0) / 1.5).max(0.0) }
@@ -245,6 +279,12 @@ fn camera(
         let o = |amp: f32, hz: f32| amp * (std::f32::consts::TAU * hz * t).sin() * a;
         cam.rotation *= Quat::from_euler(EulerRot::YXZ, o(4.0, 5.0).to_radians(), o(10.0, 15.0).to_radians(), o(5.0, 2.0).to_radians());
     }
+    if let Some((t, k, seed)) = fx.hit {
+        let (r, l) = hit_shake(t, k, seed);
+        cam.rotation *= Quat::from_euler(EulerRot::YXZ, r.y.to_radians(), r.x.to_radians(), r.z.to_radians());
+        let d = cam.rotation * Vec3::new(l.x, l.y, 0.0) * 0.01; // UE Y right, Z up (cm)
+        cam.translation += d;
+    }
     let neck = roots.iter().find(|r| r.local && r.world).and_then(|r| r.bones.get("neck_01")).and_then(|&e| bones.get(e).ok());
     let (Some(neck), true) = (neck, dead.0) else {
         *off = None;
@@ -257,6 +297,17 @@ fn camera(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn hit_shake_bounds() {
+        for i in 0..300 {
+            let t = i as f32 * 0.001;
+            let (r, l) = super::hit_shake(t, 1.0, 3.3);
+            assert!(r.abs().max_element() <= 10.0 + 1e-3 && l.y.abs() <= 5.0);
+        }
+        assert_eq!(super::hit_shake(0.0, 1.0, 3.3).0, bevy::math::Vec3::ZERO);
+        assert!(super::perlin(2.0).abs() < 1e-5); // zero at lattice points
+    }
+
     #[test]
     fn shake_envelope() {
         assert_eq!(super::shake_env(0.5), 1.0);
