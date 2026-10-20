@@ -261,6 +261,27 @@ impl<'a> Reader<'a> {
                 }
                 json!({"lower": b[0], "upper": b[1]})
             }
+            "MovieSceneFloatChannel" => {
+                let (pre, post) = (r.u8()?, r.u8()?);
+                let esz = r.i32()?;
+                let nt = r.i32()?;
+                if esz != 4 || nt < 0 { return Err(format!("MovieSceneFloatChannel: times elem {esz} count {nt}")); }
+                let times: Vec<i32> = (0..nt).map(|_| r.i32()).collect::<Res<_>>()?;
+                let esz = r.i32()?;
+                let nv = r.i32()?;
+                if esz != 28 || nv < 0 { return Err(format!("MovieSceneFloatChannel: values elem {esz} count {nv}")); }
+                let mut vals = vec![];
+                for _ in 0..nv {
+                    let v = numf(r.f32()?);
+                    let (at, lt, aw, lw) = (numf(r.f32()?), numf(r.f32()?), numf(r.f32()?), numf(r.f32()?));
+                    let b = r.take(8)?;
+                    vals.push(json!({"value": v, "arrive_tangent": at, "leave_tangent": lt, "arrive_weight": aw, "leave_weight": lw, "weight_mode": b[0], "interp": b[4], "tangent_mode": b[5]}));
+                }
+                let def = numf(r.f32()?);
+                let has_def = r.u8()? != 0;
+                let (num_, den) = (r.i32()?, r.i32()?);
+                json!({"pre": pre, "post": post, "times": times, "values": vals, "default": def, "has_default": has_def, "tick": [num_, den]})
+            }
             "RichCurveKey" => {
                 let (im, tm, tw) = (r.u8()?, r.u8()?, r.u8()?);
                 let mut f = || r.f32().map(numf);

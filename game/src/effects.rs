@@ -121,6 +121,7 @@ fn tick(
     mut post: Single<&mut BodycamPostFx>,
     mut vol: ResMut<GlobalVolume>,
     mut sinks: Query<&mut AudioSink>,
+    mut cam_tr: MessageWriter<crate::transition::CamTransition>,
 ) {
     let dt = time.delta_secs();
     let (pl, tf) = &mut *p;
@@ -184,14 +185,15 @@ fn tick(
             fx.deaf = 0.0;
             pl.dead = true;
             pl.vel = Vec3::ZERO;
+            // Bodycam_Player.BroadcastCameraTransitionOnDeath -> W_ConnectionMenu DeactivatePanel (transition.rs)
+            cam_tr.write(crate::transition::CamTransition { connected: false, instant: false });
             info!("effects: player died");
         }
         Some(t) => {
             let t = t + dt;
             fx.dead = Some(t);
-            // Camera.Transition.Disconnected (Bodycam_Player.BroadcastCameraTransitionOnDeath): the feed rides the falling body,
-            // then cuts hard to black (user, from the game). ponytail: CameraTransitionSubsystem is C++; DEATH_CUT_S is by eye,
-            // and the InstantKill (headshot) immediate cut isn't ported (no headshot info reaches here).
+            // The feed rides the falling body for DeactivatePanel's first 1.0 s, then the VHS "CAM DISCONNECTED" panel covers it
+            // (transition.rs); black underneath. ponytail: the InstantKill (headshot) instant panel isn't sent (no headshot info here).
             let f = if t < DEATH_CUT_S { 1.0 } else { 0.0 };
             post.tint_r = f;
             post.tint_g = f;
@@ -207,6 +209,7 @@ fn tick(
                 pl.pitch = 0.0;
                 pl.dead = false;
                 fx.dead = None;
+                cam_tr.write(crate::transition::CamTransition { connected: true, instant: false });
                 post.tint_r = 1.0;
                 post.tint_g = 1.0;
                 post.tint_b = 1.0;

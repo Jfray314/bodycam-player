@@ -617,21 +617,13 @@ fn hud(
     }
 }
 
-/// CameraTransition Connected/Disconnected (FastTransition): a short dip through black.
-/// Also covers the spawn: black until the map is ready + 0.8 s (auto exposure starts at 0 EV and the first frames blow out white;
-/// the game hides this behind its loading screen), then the same 1/3 s fade in.
-fn fade(time: Res<Time>, map: Option<Res<crate::map::MapState>>, mut boot: Local<f32>, mut perk: ResMut<Perk>, mut q: Single<&mut BackgroundColor, With<PerkFade>>) {
+/// CameraTransition Connected/Disconnected (FastTransition): a short dip through black. (The spawn is covered by the loading
+/// screen, transition.rs.)
+fn fade(time: Res<Time>, mut perk: ResMut<Perk>, mut q: Single<&mut BackgroundColor, With<PerkFade>>) {
     let dt = time.delta_secs();
     // clamped step, not signum: f32::signum(0.0) is 1.0, so at rest the overlay flickered 0 <-> dt*3 every frame
     perk.fade = (perk.fade + (perk.fade_to - perk.fade).clamp(-dt * 3.0, dt * 3.0)).clamp(0.0, 1.0);
-    if map.is_none_or(|m| m.ready()) {
-        *boot += dt;
-    }
-    if std::env::var_os("BODYCAM_SCREENSHOT").is_some() {
-        *boot = 9.0; // dev shots are timed from viewmodel-ready; keep them uncovered
-    }
-    let cover = 1.0 - ((*boot - 0.8) * 3.0).clamp(0.0, 1.0);
-    q.0 = Color::srgba(0.0, 0.0, 0.0, perk.fade.max(cover));
+    q.0 = Color::srgba(0.0, 0.0, 0.0, perk.fade);
 }
 
 /// DarkPlastic roots: every mesh below gets a plain dark material.
