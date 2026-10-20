@@ -72,6 +72,8 @@ switch (cmd)
         break;
     case "tex": // tex <asset>... -> <outDir>/<Name>.png
         foreach (var a in args.Skip(4)) if (provider.LoadPackageObject<UTexture2D>(a) is UTexture2D t) SaveTexture(t, outDir); break;
+    case "texraw": // texraw <asset>...: raw mip0 bytes -> <outDir>/<Name>.<PixelFormat>.<w>x<h>.raw (for formats the managed decoder can't: BC7/BC5 need tools/raw_bc.py)
+        foreach (var a in args.Skip(4)) if (provider.LoadPackageObject<UTexture2D>(a) is UTexture2D t) { var m = t.PlatformData.Mips[0]; Directory.CreateDirectory(outDir); File.WriteAllBytes(Path.Combine(outDir, $"{t.Name}.{t.Format}.{m.SizeX}x{m.SizeY}.raw"), m.BulkData.Data!); } break;
     case "all": ExportAll(args.Length > 4 ? args[4].Split(',') : null); break;
     case "props": // props <asset> -> every export's property list
         foreach (var e in provider.LoadPackage(args[4]).GetExports()) { Console.WriteLine("## " + e.Name + " : " + e.ExportType); foreach (var q in e.Properties) Console.WriteLine("  " + q.Name + " = " + q.Tag?.GenericValue); }

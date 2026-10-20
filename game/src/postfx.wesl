@@ -148,14 +148,7 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let vv = dot((in.uv - 0.5) * vec2<f32>(aspect, 1.0), (in.uv - 0.5) * vec2<f32>(aspect, 1.0));
     col *= mix(1.0, 1.0 / ((1.0 + vv * 1.1) * (1.0 + vv * 1.1)), fx.vignette);
 
-    // Damage: red edge darkening + blood splatter on the lens.
-    if (fx.damage_amount > 0.001) {
-        let e = smoothstep(0.15, 1.0, r2_edge);
-        let splat = smoothstep(0.45, 0.75, fbm(in.uv * vec2<f32>(aspect, 1.0) * 4.0 + 3.0));
-        let m = clamp(fx.damage_amount * (e * (0.6 + 0.8 * splat) + 0.15 * splat), 0.0, 1.0);
-        let l = dot(col, vec3<f32>(0.3, 0.59, 0.11));
-        col = mix(col, vec3<f32>(0.5, 0.02, 0.01) * (0.3 + l), m * 0.85);
-    }
+    // Blood on the lens (damage_amount) is drawn after this pass by lens.rs from the real droplet texture.
 
     // Lens housing: smooth circular rim centred on the view (|uv| in height units: 0.5 top/bottom, 0.89 mid-sides,
     // 1.02 corners), so only the corners go dark, curving around the centre. Replaces the BodycamBorders photo plane,
