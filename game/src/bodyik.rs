@@ -12,7 +12,7 @@ use bevy::prelude::*;
 
 /// Foot offsets (m, + = ground above the player's feet plane) and pelvis drop, smoothed (AnimBP FInterpTo 15 / 10).
 #[derive(Resource, Default)]
-struct FootIk {
+pub(crate) struct FootIk {
     off: [f32; 2],
     pelvis: f32,
 }
@@ -144,7 +144,7 @@ fn two_bone(root: Entity, [a, b, c]: [Entity; 3], target: Vec3, pole: Vec3, end_
     set_rot(c, root, end_rot.unwrap_or(rc), q);
 }
 
-fn apply_ik(
+pub(crate) fn apply_ik(
     ik: Res<FootIk>,
     roots: Query<(Entity, &BodyRoot, &BodyAnim, &ChildOf)>,
     chars: Query<&crate::character::CharacterState>,

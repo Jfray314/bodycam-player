@@ -9,6 +9,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rand = "0.9"
 bincode = "1"
+bevy_rapier3d = { version = "0.37", default-features = false, features = ["dim3", "async-collider"] }
 
 [dev-dependencies]
 bodycam-core = { path = "../bodycam-core" }

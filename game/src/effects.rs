@@ -21,6 +21,7 @@ pub struct Flashbang {
     pub at: Vec3,
 }
 
+const DEATH_CUT_S: f32 = 1.0;
 const DEATH_RESPAWN_S: f32 = 5.0; // ponytail: respawn flow is menu/server driven in the game; fixed delay here
 const BLOOD_HOLD_S: f32 = 5.0; // Delay 5.0 after StartBloodOnCamera
 const BLOOD_FADE_S: f32 = 1.5; // ponytail: Timeline_1 length not decoded
@@ -190,8 +191,10 @@ fn tick(
         Some(t) => {
             let t = t + dt;
             fx.dead = Some(t);
-            // fade to black after the fall (tint multiplies the final colour)
-            let f = 1.0 - ((t - 2.0) / 1.5).clamp(0.0, 1.0);
+            // Camera.Transition.Disconnected (Bodycam_Player.BroadcastCameraTransitionOnDeath): the feed rides the falling body,
+            // then cuts hard to black (user, from the game). ponytail: CameraTransitionSubsystem is C++; DEATH_CUT_S is by eye,
+            // and the InstantKill (headshot) immediate cut isn't ported (no headshot info reaches here).
+            let f = if t < DEATH_CUT_S { 1.0 } else { 0.0 };
             post.tint_r = f;
             post.tint_g = f;
             post.tint_b = f;
