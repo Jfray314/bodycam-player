@@ -39,6 +39,8 @@ const BATTERY_IDLE: f32 = 0.1;
 const BATTERY_SPEED: f32 = 0.001;
 const RADIUS: f32 = 0.12;
 const G: f32 = 9.8;
+const TOSS_SPEED: f32 = 5.0; // ponytail: UE just drops the physics body; we toss it ahead so the flight starts in front of the player, eye height
+const TOSS_DRAG: f32 = 2.5;
 /// CurveFloat_DroneAcceleration keys.
 const ACC_CURVE: [crate::curve::Key; 2] = [[0.0, 0.0, 2.0, 13.502_299, 13.502_299], [1.0, 1.0, 2.0, 0.079_052_28, 0.079_052_28]];
 
@@ -221,6 +223,11 @@ fn socket(loc: [f32; 3], rot: [f32; 3]) -> Transform {
     Transform { translation: Vec3::new(loc[0], -loc[1], loc[2]) * 0.01, rotation: Quat::from_mat3(&m), ..default() }
 }
 
+fn ctrl_socket() -> Transform {
+    let v: Vec<f32> = std::env::var("BODYCAM_CTRL").unwrap_or_default().split(':').filter_map(|x| x.parse().ok()).collect(); // dev: loc cm + rot deg override
+    if v.len() == 6 { socket([v[0], v[1], v[2]], [v[3], v[4], v[5]]) } else { socket([13.695_484, 12.322_571, -1.742_179], [-7.828_202, 95.434_975, -151.7156]) } // Hand_L socket DroneController (ALS_Mannequin_Skeleton), Y NOT negated: socket() mirrors for right-side/gun bones; hand_l's frame already is the mirrored one (with the UE sign the controller floated beside the hand, through the drone)
+}
+
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn deploy_flow(
     mut cmd: Commands,
@@ -258,7 +265,7 @@ fn deploy_flow(
                 // ponytail: goggles (socket on the arms skeleton's virtual bone 'VB goggles_root', not exported) are not shown
                 let Some((hc, _hg)) = perk.visuals.clone() else { return };
                 for (h, name, bone, sock, clip) in [
-                    (hc, "DroneController", "hand_l", socket([13.695_484, -12.322_571, -1.742_179], [-7.828_202, 95.434_975, -151.7156]), "A_W_Controller_Deploy"),
+                    (hc, "DroneController", "hand_l", ctrl_socket(), "A_W_Controller_Deploy"),
                 ] {
                     let Some(g) = gltfs.get(&h) else { continue };
                     let Some(joint) = joints.iter().find(|(e, n)| n.as_str() == bone && root_of(*e, &parents, |x| arms.contains(x)).is_some()).map(|j| j.0) else { continue };
@@ -291,7 +298,7 @@ fn deploy_flow(
                     let (_, hand_rot, hand_pos) = gt.to_scale_rotation_translation();
                     let (yaw, _, _) = cam.to_scale_rotation_translation().1.to_euler(EulerRot::YXZ);
                     cmd.spawn((
-                        Drone { vel: Vec3::ZERO, yaw, pitch: 0.0, flying: false, hold: 0.0, tilt: Vec2::ZERO, spawn: 0.0, origin: hand_pos },
+                        Drone { vel: *cam.forward() * TOSS_SPEED + Vec3::Y * 0.5, yaw, pitch: 0.0, flying: false, hold: 0.0, tilt: Vec2::ZERO, spawn: 0.0, origin: hand_pos },
                         Transform::from_translation(hand_pos).with_rotation(hand_rot * drone_basis().inverse()),
                         Visibility::default(),
                         Name::new("KamikazeDrone"),
@@ -415,7 +422,11 @@ fn drone_fly(
     if !d.flying {
         // the dropped drone: gravity, rests on the first surface below (physics body in UE)
         d.spawn += dt;
-        d.vel.y -= G * dt;
+        if perk.phase == Phase::Deploy {
+            d.vel *= (1.0 - TOSS_DRAG * dt).max(0.0); // tossed out ahead, hovering (rotors spin up) until the pilot takes over
+        } else {
+            d.vel.y -= G * dt;
+        }
         let step = d.vel * dt;
         if let Some((dist, n)) = cast(tf.translation, step, step.length() + 0.05) {
             tf.translation += step.normalize_or_zero() * (dist - 0.05).max(0.0);

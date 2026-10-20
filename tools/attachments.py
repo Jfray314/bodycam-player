@@ -33,6 +33,18 @@ for f in sorted(glob.glob(os.path.join(weapons, "*.json"))):
         elif cls.startswith("Item.Attachment.") and sk.get("StaticMesh") and not cls.split(".")[-1].startswith(SKIP):
             e["parts"].append({"row": n, "cls": cls, "socket": cls.split(".")[-1].replace(" ", "_"), "mesh": asset(sk["StaticMesh"])})
     out[GUN_NAME.get(row, row)] = e
+# Perk items (drone): DT_PerkItems default attachments -> DT_PerkSkins meshes (Frame = receiver, Rotor/Propeller/Antenna/FPV Camera/Led/Nut = parts)
+pi, ps = rows("Gameplay/DT_PerkItems.json"), rows("Skins/DT_PerkSkins.json")
+for prow in ("Kamikaze",):
+    e = {"receiver": None, "parts": []}
+    for n in [a["RowName"] for a in pi[prow]["DefaultAttachments"]]:
+        sk = ps.get(shop[n]["AssociatedItemSkinRow"]["RowName"])
+        cls = pi.get(sk["AssociatedGameplayRow"]["RowName"], {}).get("ItemClassID", "") if sk else ""
+        if sk and sk.get("SkeletalMesh"):
+            e["receiver"] = asset(sk["SkeletalMesh"])
+        elif sk and cls.startswith("Item.Attachment.") and sk.get("StaticMesh") and not cls.endswith(".Nut"):  # nuts have no socket
+            e["parts"].append({"row": n, "cls": cls, "socket": cls.split(".")[-1].replace(" ", "_"), "mesh": asset(sk["StaticMesh"])})
+    out[prow] = e
 os.makedirs(work, exist_ok=True)
 json.dump(out, open(os.path.join(work, "attachments.json"), "w"), indent=1)
 print({k: (v["receiver"], len(v["parts"])) for k, v in out.items()})
