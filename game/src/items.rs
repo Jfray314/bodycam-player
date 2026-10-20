@@ -222,13 +222,6 @@ struct KnifeProj {
     vel: Vec3,
 }
 
-#[derive(Component)]
-struct Blast {
-    t: f32,
-    life: f32,
-    size: f32,
-}
-
 /// A dropped item (GA_Character_DropItem -> DropItem notify -> DropEquippedItem): F picks it up again.
 #[derive(Component)]
 struct Pickup {
@@ -236,13 +229,10 @@ struct Pickup {
     vel: Vec3,
 }
 
-#[derive(Resource)]
-struct BlastMesh(Handle<Mesh>);
-
 pub struct ItemsPlugin;
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Items>().add_message::<Detonate>().add_message::<DetonateFor>().add_message::<BlastDamage>().add_message::<Thrown>().add_message::<Melee>().add_message::<DroneCrashed>().add_message::<PlayCue>().add_systems(Startup, |mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>| cmd.insert_resource(BlastMesh(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())))).add_systems(Update, (grenade_input, knife_input, knife_flight, projectiles, detonate, blasts, tag_meshes, drop_pickup).chain());
+        app.init_resource::<Items>().add_message::<Detonate>().add_message::<DetonateFor>().add_message::<BlastDamage>().add_message::<Thrown>().add_message::<Melee>().add_message::<DroneCrashed>().add_message::<PlayCue>().add_systems(Update, (grenade_input, knife_input, knife_flight, projectiles, detonate, tag_meshes, drop_pickup).chain());
     }
 }
 
@@ -430,13 +420,12 @@ fn detonate(
     mut flash: MessageWriter<Flashbang>,
     mut dmg: MessageWriter<PlayerDamage>,
     mut snd: MessageWriter<PlayCue>,
-    blast: Res<BlastMesh>,
-    mut mats: ResMut<Assets<StandardMaterial>>,
+    mut fxm: MessageWriter<crate::explosion::ExplosionFx>,
 ) {
     let me = crate::net::MY_ID.load(std::sync::atomic::Ordering::Relaxed);
     let all: Vec<_> = ev.read().map(|d| (d.at, d.spec, me)).chain(ev_for.read().map(|d| (d.at, d.spec, d.owner))).collect();
     for (at, spec, owner) in all {
-        explode(&mut cmd, at, spec, owner, net.is_some(), &mut ray, &ignore, &mut targets, player.translation() + Vec3::Y * 1.6, &mut boom, &mut flash, &mut dmg, &mut bd, &mut snd, &blast.0, &mut mats);
+        explode(&mut cmd, at, spec, owner, net.is_some(), &mut ray, &ignore, &mut targets, player.translation() + Vec3::Y * 1.6, &mut boom, &mut flash, &mut dmg, &mut bd, &mut snd, &mut fxm);
     }
 }
 
@@ -456,8 +445,7 @@ fn explode(
     dmg: &mut MessageWriter<PlayerDamage>,
     bd: &mut MessageWriter<BlastDamage>,
     snd: &mut MessageWriter<PlayCue>,
-    sphere: &Handle<Mesh>,
-    mats: &mut Assets<StandardMaterial>,
+    fxm: &mut MessageWriter<crate::explosion::ExplosionFx>,
 ) {
     let BlastSpec { base, inner, outer, exp, flash: flash_gren, cue } = spec;
     let origin = at + Vec3::Y * 0.5; // BFL call uses ActorLocation + (0,0,50)
@@ -500,34 +488,10 @@ fn explode(
     } else if flash_gren {
         // flash through geometry is still occluded by walls in the game's visibility check; here: no whiteout when blocked is not modelled (message already sent)
     }
-    // Visuals + sound: SpawnEmitterAtLocation Explosion_Frag_small / Explosion_Flash_small (particle systems not ported: flash ball + light).
-    let (col, size, life) = if flash_gren { (Color::srgb(1.0, 1.0, 0.95), 3.0, 0.12) } else { (Color::srgb(1.0, 0.55, 0.15), 2.2, 0.4) };
-    cmd.spawn((
-        Mesh3d(sphere.clone()),
-        MeshMaterial3d(mats.add(StandardMaterial { base_color: col, emissive: LinearRgba::from(col) * 40.0, unlit: true, alpha_mode: AlphaMode::Add, ..default() })),
-        Transform::from_translation(at + Vec3::Y * 0.2).with_scale(Vec3::splat(0.2)),
-        Blast { t: 0.0, life, size },
-        IgnoreTraces,
-    ));
-    cmd.spawn((PointLight { intensity: 8_000_000.0, range: 25.0, color: col, ..default() }, Transform::from_translation(at + Vec3::Y * 0.5), Blast { t: 0.0, life: life + 0.1, size: 0.0 }));
+    // Visuals: SpawnEmitterAtLocation Explosion_Frag_small / Explosion_Flash_small (explosion.rs).
+    fxm.write(crate::explosion::ExplosionFx { at, flash: flash_gren });
     // G67_C: AC_Detonation.DetonationSound = Bodycam_Grenade_G67; Flash_C: Explosions_flash.
     snd.write(PlayCue { bools: vec![], cue: cue.into(), dist_cm: dp });
-}
-
-fn blasts(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Blast, &mut Transform, Option<&mut PointLight>)>) {
-    for (e, mut b, mut tf, light) in &mut q {
-        b.t += time.delta_secs();
-        let k = (b.t / b.life).clamp(0.0, 1.0);
-        if b.size > 0.0 {
-            tf.scale = Vec3::splat(0.2 + (b.size - 0.2) * (1.0 - (1.0 - k).powi(2)));
-        }
-        if let Some(mut l) = light {
-            l.intensity = 8_000_000.0 * (1.0 - k);
-        }
-        if k >= 1.0 {
-            cmd.entity(e).despawn();
-        }
-    }
 }
 
 /// Thrown grenades are skinned meshes with stale bounds: never cull them.
