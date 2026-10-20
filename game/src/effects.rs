@@ -23,8 +23,10 @@ pub struct Flashbang {
 
 const DEATH_CUT_S: f32 = 1.0;
 const DEATH_RESPAWN_S: f32 = 5.0; // ponytail: respawn flow is menu/server driven in the game; fixed delay here
-const BLOOD_HOLD_S: f32 = 5.0; // Delay 5.0 after StartBloodOnCamera
-const BLOOD_FADE_S: f32 = 1.5; // ponytail: Timeline_1 length not decoded
+// StartBloodOnCamera: Drops Intensity 0.5 while Timeline_0 runs (2.94 s, CurveFloat_1), Delay 5.0, then Timeline_1 (1.0 s, CurveFloat_3) and the PP
+// is disabled. ponytail: UE pops off after that last second (its curve rises 0.03 -> 0.40); here it fades out over it.
+const BLOOD_HOLD_S: f32 = 2.94 + 5.0;
+const BLOOD_FADE_S: f32 = 1.0;
 
 #[derive(Resource, Default)]
 struct Fx {
@@ -135,7 +137,7 @@ fn tick(
         Some(t) => {
             let t = t + dt;
             fx.blood = (t < BLOOD_HOLD_S + BLOOD_FADE_S).then_some(t);
-            1.0 * (1.0 - ((t - BLOOD_HOLD_S) / BLOOD_FADE_S).clamp(0.0, 1.0)) // BloodDropletsIntensity 0.5 -> shader scale
+            1.0 * (1.0 - ((t - BLOOD_HOLD_S) / BLOOD_FADE_S).clamp(0.0, 1.0)) // BloodDropletsIntensity 0.5 -> coverage 1.0 (lens.wesl)
         }
         None => 0.0,
     };
