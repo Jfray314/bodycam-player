@@ -209,7 +209,10 @@ fn gun_joints(
         if g.joint.is_some() {
             continue;
         }
-        let Some((j, _)) = names.iter().find(|(e, n)| n.as_str().eq_ignore_ascii_case("root") && root_of_entity(*e, ge, &parents)) else { continue };
+        // Guns have a `root` joint; items name theirs b_grenade_Root / RootNode / root_goggles. Without a joint the CharGun is never placed and
+        // sits at the body's feet (the "second grenade at the player's feet").
+        let in_gun = |e: Entity| root_of_entity(e, ge, &parents);
+        let Some((j, _)) = names.iter().find(|(e, n)| n.as_str().eq_ignore_ascii_case("root") && in_gun(*e)).or_else(|| names.iter().find(|(e, n)| n.to_lowercase().contains("root") && in_gun(*e))) else { continue };
         g.joint = Some(j);
         let at = fire.get(g.model).map_or(Vec3::new(0.0, -0.4, 0.05), |&(_, x, y, z)| Vec3::new(x, -y, z) * 0.01);
         let m = mats.add(StandardMaterial { base_color: Color::srgb(1.0, 0.85, 0.5), emissive: LinearRgba::rgb(40.0, 24.0, 6.0), unlit: true, alpha_mode: AlphaMode::Add, ..default() });

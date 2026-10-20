@@ -6,6 +6,7 @@ mod bodyik;
 mod camadjust;
 mod curve;
 mod effects;
+mod explosion;
 mod soft;
 mod dev;
 mod bomb;
@@ -54,7 +55,7 @@ fn main() {
         })
         .add_plugins((body::BodyPlugin, character::CharacterPlugin))
         .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, sway::SwayPlugin, recoil::RecoilPlugin, map::MapPlugin, gunfight::GunfightPlugin, grid::GridPlugin, bots::BotsPlugin, camadjust::CamAdjustPlugin, dev::DevPlugin))
-        .add_plugins((effects::EffectsPlugin, lens::LensPlugin, soft::SoftPlugin, attach::AttachPlugin, items::ItemsPlugin, bomb::BombPlugin, perks::PerksPlugin, net::NetPlugin))
+        .add_plugins((effects::EffectsPlugin, lens::LensPlugin, soft::SoftPlugin, attach::AttachPlugin, items::ItemsPlugin, explosion::ExplosionPlugin, bomb::BombPlugin, perks::PerksPlugin, net::NetPlugin))
         .add_plugins((ui::UiPlugin, ragdoll::RagdollPlugin))
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
         .add_systems(Startup, test_range.run_if(|| !map::available()))

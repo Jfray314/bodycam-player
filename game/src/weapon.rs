@@ -448,7 +448,7 @@ struct Particle {
 /// Default / SurfaceType2 / 50 = Concrete (Concrete_impact_Dyn + Decals_Concrete), 6/36/37/51 = Wood (Wood_impact_Dyn + Decals_Wood),
 /// 15/16 = Metal (MetalDull/Metal_impact_Dyn2 + Decals_Metal). Other rows fall back to concrete.
 #[derive(Clone, Copy)]
-struct Surf(Option<u8>);
+pub(crate) struct Surf(Option<u8>);
 /// Per-surface impact look (FXMaterialDataTable_GenericBullets rows -> *_impact_Dyn systems).
 // ponytail: emitter counts/speeds are in unparsed distributions; colours/counts are eyeballed per material family.
 struct SurfSpec {
@@ -463,7 +463,7 @@ struct SurfSpec {
     sparks: bool,
 }
 impl Surf {
-    fn of(surface: Option<u8>) -> Self {
+    pub(crate) fn of(surface: Option<u8>) -> Self {
         Surf(surface)
     }
     fn spec(self) -> SurfSpec {
@@ -1162,7 +1162,7 @@ fn blood_fx(cmd: &mut Commands, fx: &FireFx, soft: &mut Assets<crate::soft::Soft
 /// the row's Concrete/Wood/Metal_impact_Dyn Cascade system. Its emitters (counts/velocities are in unparsed distributions, so
 /// the numbers below are ponytail: guesses): Dust x2 (whisp sprites), debris bits (gravity -1000 cm/s2 for concrete,
 /// Spattering -690), Metal adds Sparks (gravity -960 cm/s2, enabled only in the metal row).
-fn impact_fx(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial>, soft: &mut Assets<crate::soft::SoftMat>, surf: Surf, pt: Vec3, n: Vec3) {
+pub(crate) fn impact_fx(cmd: &mut Commands, fx: &FireFx, mats: &mut Assets<StandardMaterial>, soft: &mut Assets<crate::soft::SoftMat>, surf: Surf, pt: Vec3, n: Vec3) {
     if n == Vec3::ZERO {
         return;
     }

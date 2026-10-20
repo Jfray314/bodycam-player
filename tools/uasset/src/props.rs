@@ -33,7 +33,7 @@ const UNSUPPORTED: &[&str] = &[
     "MaterialOverrideNanite", "StateTreeInstanceData", "UniversalObjectLocatorFragment", "AttributeCurve",
     "AnimationAttributeIdentifier", "WorldConditionQueryDefinition", "NavAgentSelector", "MidiEvent",
     "KConvexElem", "KLevelSetElem", "KSkinnedLevelSetElem", "SkeletalMeshSamplingLODBuiltData",
-    "SkeletalMeshSamplingRegionBuiltData", "RawDistributionFloat", "RawDistributionVector", "FloatDistribution",
+    "SkeletalMeshSamplingRegionBuiltData", "FloatDistribution",
     "VectorDistribution",
 ];
 
