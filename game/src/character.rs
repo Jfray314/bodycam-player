@@ -108,7 +108,9 @@ fn sync_local(
     s.vel = pl.vel;
     (s.grounded, s.crouched, s.sprinting, s.lean, s.aiming, s.dead) = (pl.grounded, pl.crouched, pl.sprinting, pl.lean, pl.aiming, pl.dead);
     if let Some(i) = inv {
-        s.item = i.slots[i.current].name.clone();
+        // Grenade_C RemoveItemInSlot on release: a thrown grenade leaves the hand at once (the body copy kept it until the holster).
+        let slot = &i.slots[i.current];
+        s.item = if slot.kind == crate::weapon::ItemKind::Grenade && slot.ammo == 0 { String::new() } else { slot.name.clone() };
     }
     s.fired += fired.read().count() as u32;
     s.hits += dmg.read().count() as u32;

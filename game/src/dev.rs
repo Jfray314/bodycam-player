@@ -6,6 +6,7 @@
 //!   BODYCAM_RECORD=dir:fps:secs     frame sequence dir/f_0001.png.. at a fixed sim step of 1/fps, then exit
 //!   BODYCAM_POS=x:z:yaw_deg[:y]         place the player after start (yaw 0 = -Z)
 //!   BODYCAM_SPEED=N                 virtual time speed multiplier
+//!   BODYCAM_EXPLOSIVE=row             grenade slot override (DT_PerkItems row, e.g. "Grenade G67")
 //!   BODYCAM_DUMMY=dist:wall         a Health capsule `dist` m ahead of the player with a wall `wall` m behind it (blood tests)
 use crate::viewmodel::{ArmsRoot, GunRoot};
 use bevy::prelude::*;
@@ -187,10 +188,11 @@ pub(crate) fn autotest(
                 "CurL" => Ok(KeyCode::F20),
                 "CurD" => Ok(KeyCode::F19),
                 "CurU" => Ok(KeyCode::F18),
-                // Fake mouse motion for the viewmodel sway (sway::FakeLook): counts per frame while held.
+                // Fake mouse motion (sway::FakeLook): turns the view and drives the viewmodel sway: counts per frame while held.
                 "LookR" => Ok(KeyCode::F24),
                 "LookL" => Ok(KeyCode::F23),
                 "LookU" => Ok(KeyCode::F22),
+                "LookD" => Ok(KeyCode::F17),
                 _ => return None,
             };
             Some((key, t.parse().ok()?, hold.parse().ok()?))
@@ -205,6 +207,7 @@ pub(crate) fn autotest(
             Ok(KeyCode::F24) if on => fake.0.x += 12.0,
             Ok(KeyCode::F23) if on => fake.0.x -= 12.0,
             Ok(KeyCode::F22) if on => fake.0.y -= 12.0,
+            Ok(KeyCode::F17) if on => fake.0.y += 12.0,
             Ok(KeyCode::F21) if on => cur.0.x += 12.0,
             Ok(KeyCode::F20) if on => cur.0.x -= 12.0,
             Ok(KeyCode::F19) if on => cur.0.y += 12.0,

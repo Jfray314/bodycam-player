@@ -246,13 +246,13 @@ impl CtlRecoil {
     }
 }
 
-fn look(time: Res<Time>, motion: Res<AccumulatedMouseMotion>, mouse: Res<ButtonInput<MouseButton>>, cursor: Single<&CursorOptions>, mut q: Single<&mut Player>) {
+fn look(time: Res<Time>, motion: Res<AccumulatedMouseMotion>, mouse: Res<ButtonInput<MouseButton>>, cursor: Single<&CursorOptions>, fake: Res<crate::sway::FakeLook>, mut q: Single<&mut Player>) {
     let p = &mut **q;
     if p.dead || p.locked {
         return;
     }
     let sens = SENS * crate::ui::settings::sens_mult(); // Settings > Game > Mouse Sensitivity
-    let d = if cursor.grab_mode == CursorGrabMode::Locked { motion.delta } else { Vec2::ZERO };
+    let d = if cursor.grab_mode == CursorGrabMode::Locked { motion.delta } else { Vec2::ZERO } + fake.0; // + scripted look (dev.rs)
     let input = Vec2::new(d.x, -d.y) * sens.to_degrees(); // same sign convention as the recoil step
     let step = p.ctl_recoil.tick(time.delta_secs(), input, mouse.pressed(MouseButton::Left));
     p.yaw -= d.x * sens + step.x.to_radians();

@@ -2,7 +2,7 @@
 //  - blood droplets: UE Bodycam_Player.ScreenDroplets (UltraDynamicSky Screen_Droplets, WaterDroplets_Small: R height, A cell id), 'Drops Intensity'
 //  - lens dirt: PostProcess/T_DirtMask_01 as a faint overlay (alpha = its luma)
 struct Lens {
-    // x: blood coverage 0..1, y: dirt strength, z: droplet tiling, w: unused
+    // x: blood coverage 0..1, y: dirt strength, z: droplet tiling, w: death-cut fade (1 visible)
     p: vec4<f32>,
 }
 @group(1) @binding(0) var<uniform> lens: Lens;
@@ -30,16 +30,20 @@ fn fragment(in: In) -> @location(0) vec4<f32> {
     var rgb = min(d / dl, vec3<f32>(1.0));
     var a = clamp(dl * 2.0, 0.0, 1.0) * lens.p.y;
 
-    // Blood droplets: tile the droplet texture over the screen; bigger drops (high R) show first, more of them as coverage grows.
+    // Blood: splat shapes from the droplet texture magnified (bilinear -> smooth blobs), fine droplets of the texture as detail;
+    // the centre stays mostly clear (Screen Center / Edge Strength). ponytail: the UE material graph is compiled away, look tuned by eye.
     if (lens.p.x > 0.001) {
-        let t = textureSample(drops, drops_s, in.uv * vec2<f32>(aspect, 1.0) * lens.p.z);
-        let edge = mix(0.75, 1.0, smoothstep(0.1, 0.9, hr)); // Screen Center / Edge Strength
-        let th = 1.0 - lens.p.x * 0.6 * edge + (t.a - 0.5) * 0.25;
-        let m = smoothstep(th, th + 0.12, t.r);
-        let n = normalize(vec3<f32>((t.g - 0.5) * 2.0, (t.b - 0.5) * 2.0, 0.6));
+        let sc = in.uv * vec2<f32>(aspect, 1.0);
+        let field = textureSample(drops, drops_s, sc * 0.045).r * 0.6 + textureSample(drops, drops_s, sc * 0.11 + 0.37).r * 0.4;
+        let t = textureSample(drops, drops_s, sc * lens.p.z);
+        let edge = smoothstep(0.2, 0.95, hr);
+        let th = 0.6 - lens.p.x * (0.05 + 0.25 * edge); // field percentiles: 0.55 ~ top 2 %, 0.3 ~ top 18 %
+        let m = smoothstep(th, th + 0.04, field + t.r * 0.06);
+        let n = normalize(vec3<f32>((t.g - 0.5) * 2.0, (t.b - 0.5) * 2.0, 0.8));
         let spec = pow(max(dot(n, normalize(vec3<f32>(-0.4, 0.5, 0.75))), 0.0), 24.0);
-        let blood = vec3<f32>(0.32, 0.015, 0.012) + vec3<f32>(0.55, 0.3, 0.3) * spec * m;
-        let ba = m * 0.9;
+        let thick = smoothstep(th, th + 0.2, field);
+        let blood = mix(vec3<f32>(0.45, 0.03, 0.02), vec3<f32>(0.2, 0.005, 0.005), thick) + vec3<f32>(0.4, 0.25, 0.25) * spec;
+        let ba = m * mix(0.55, 0.92, thick) * lens.p.w;
         let oa = ba + a * (1.0 - ba);
         rgb = (blood * ba + rgb * a * (1.0 - ba)) / max(oa, 1e-4);
         a = oa;

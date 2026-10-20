@@ -39,7 +39,8 @@ pub fn load_item(row: &str) -> Option<Weapon> {
 
 /// The three item slots of the saved loadout; missing rows are skipped.
 pub fn load_items(cfg: &Settings) -> Vec<Weapon> {
-    [&cfg.explosive, &cfg.melee, &cfg.gadget].into_iter().filter_map(|r| load_item(r)).collect()
+    let explosive = std::env::var("BODYCAM_EXPLOSIVE").unwrap_or_else(|_| cfg.explosive.clone()); // dev: "Grenade G67" / "Grenade Flash"
+    [&explosive, &cfg.melee, &cfg.gadget].into_iter().filter_map(|r| load_item(r)).collect()
 }
 
 /// Tablet names (the M67 label is the loadout screen's: the row is the G67).
@@ -786,3 +787,4 @@ mod tests {
         assert!(toss_velocity(from, Vec3::new(0.0, 0.0, -100.0), OVERHAND_SPEED).is_none());
     }
 }
+

@@ -12,7 +12,7 @@ use crate::postfx::BodycamPostFx;
 /// Dirt overlay opacity. ponytail: UE only shows the mask through bloom near bright lights (bloom is off here), so a fixed faint layer.
 const DIRT: f32 = 0.35;
 /// Material 'Droplet Tiling' (value not in the dump).
-const TILING: f32 = 1.0;
+const TILING: f32 = 0.5;
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct LensMat {
@@ -49,7 +49,7 @@ fn spawn(mut cmd: Commands, assets: Res<AssetServer>, mut mats: ResMut<Assets<Le
         })
         .load("textures/fx/screen_droplets.png");
     let dirt = assets.load("textures/fx/lens_dirt.png");
-    let m = mats.add(LensMat { p: Vec4::new(0.0, DIRT, TILING, 0.0), drops, dirt });
+    let m = mats.add(LensMat { p: Vec4::new(0.0, DIRT, TILING, 1.0), drops, dirt });
     cmd.spawn((
         Node { position_type: PositionType::Absolute, width: percent(100), height: percent(100), ..default() },
         MaterialNode(m),
@@ -61,11 +61,13 @@ fn spawn(mut cmd: Commands, assets: Res<AssetServer>, mut mats: ResMut<Assets<Le
 fn drive(fx: Option<Single<&BodycamPostFx>>, mut mats: ResMut<Assets<LensMat>>) {
     let Some(fx) = fx else { return };
     // The death cut tints the frame to black (effects.rs): the lens layers fade with it.
-    let (x, y) = (fx.damage_amount, DIRT * fx.tint_g.clamp(0.0, 1.0));
-    if mats.iter().any(|(_, m)| m.p.x != x || m.p.y != y) {
+    let fade = fx.tint_g.clamp(0.0, 1.0);
+    let (x, y) = (fx.damage_amount, DIRT * fade);
+    if mats.iter().any(|(_, m)| m.p.x != x || m.p.y != y || m.p.w != fade) {
         for (_, m) in mats.iter_mut() {
             m.p.x = x;
             m.p.y = y;
+            m.p.w = fade;
         }
     }
 }
