@@ -1,4 +1,4 @@
-//! Player reactions: blood on the lens, death + respawn, fall kill, explosion shake/ringing, flashbang.
+//! Player reactions: hit camera shake, death + respawn, fall kill, explosion shake/ringing, flashbang.
 //! Sources: Bodycam_Player.StartBloodOnCamera (ScreenDroplets 0.5 for 5 s), GA_Character_HandleFall (kill when falling faster than
 //! SpeedRagdoll -1000 cm/s or > VacuumLimit 825 cm above the floor; GE_InstantKill = Health Override -500),
 //! GA_Character_ExplosionNearby + ExplosionShake (pitch 10 deg @15 Hz, yaw 4 @5, roll 5 @2, 1 s + 1.5 s blend out),
@@ -25,12 +25,9 @@ const DEATH_CUT_S: f32 = 1.0;
 const DEATH_RESPAWN_S: f32 = 5.0; // ponytail: respawn flow is menu/server driven in the game; fixed delay here
 // StartBloodOnCamera: Drops Intensity 0.5 while Timeline_0 runs (2.94 s, CurveFloat_1), Delay 5.0, then Timeline_1 (1.0 s, CurveFloat_3) and the PP
 // is disabled. ponytail: UE pops off after that last second (its curve rises 0.03 -> 0.40); here it fades out over it.
-const BLOOD_HOLD_S: f32 = 2.94 + 5.0;
-const BLOOD_FADE_S: f32 = 1.0;
 
 #[derive(Resource, Default)]
 struct Fx {
-    blood: Option<f32>,
     shake: Option<f32>,
     shake_gain: f32,
     /// GCN_HitReaction camera shake: (time, scale, noise seed).
@@ -85,9 +82,6 @@ fn events(
         if fx.dead.is_none() {
             fx.hit = Some((0.0, map_range_clamped(d.0, 0.0, 100.0, 0.0, 1.0), rand::random::<f32>() * 1000.0));
         }
-        if fx.blood.is_none() && fx.dead.is_none() {
-            fx.blood = Some(0.0); // DoOnce until the 5 s delay ran out
-        }
     }
     let ring = |cmd: &mut Commands, fx: &mut Fx| {
         if fx.ring.is_none() {
@@ -138,15 +132,8 @@ fn tick(
     if !pl.grounded && pl.vel.y < -10.0 && fx.dead.is_none() {
         st.health = 0.0;
     }
-    // blood
-    post.damage_amount = match fx.blood {
-        Some(t) => {
-            let t = t + dt;
-            fx.blood = (t < BLOOD_HOLD_S + BLOOD_FADE_S).then_some(t);
-            1.0 * (1.0 - ((t - BLOOD_HOLD_S) / BLOOD_FADE_S).clamp(0.0, 1.0)) // BloodDropletsIntensity 0.5 -> coverage 1.0 (lens.wesl)
-        }
-        None => 0.0,
-    };
+    // No lens blood: Bodycam_Player.StartBloodOnCamera has no caller, its MID is never created and the ScreenDroplets PP has no
+    // blendables, so the real game shows nothing on screen when hit (GCN_HitReaction = camera shake only).
     if let Some((t, k, seed)) = fx.hit {
         fx.hit = (t + dt < HIT_SHAKE_S).then_some((t + dt, k, seed));
     }
@@ -209,7 +196,6 @@ fn tick(
             post.tint_r = f;
             post.tint_g = f;
             post.tint_b = f;
-            post.damage_amount = post.damage_amount.max(0.8 * (t / 0.6).min(1.0) * f);
             if t > DEATH_RESPAWN_S {
                 st.health = st.health_max;
                 st.stress = 0.1;
@@ -221,7 +207,6 @@ fn tick(
                 pl.pitch = 0.0;
                 pl.dead = false;
                 fx.dead = None;
-                fx.blood = None;
                 post.tint_r = 1.0;
                 post.tint_g = 1.0;
                 post.tint_b = 1.0;
