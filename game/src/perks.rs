@@ -1,4 +1,6 @@
-//! Perk slot (Inventory.Slots.Perk.First): the Kamikaze FPV drone.
+//! Perk slot (Inventory.Slots.Perk.First): the Kamikaze / Sentinel FPV drones (BP_FPV_Drone_Kamikaze / _Sentinel).
+//! Sentinel (Pulse_Frame, Sentinel Basic Bundle) has no Long Range Device Explosive, so GA_DroneCrash's TryActivate GA_ExplodePerk fails
+//! and it only self-damages (no blast); its Crash Sensibility Angl is 100000.
 //! Flow (A_FP_Drone_Deploy_Montage notifies -> Bodycam_Player.DeployPerk / DetachDrone / GA_LaunchPerk): LMB plays Deploy; at 0 s the
 //! goggles + RC controller appear on the arms (goggles/controller deploy clips at 1.5x), at 1.7955 s the held drone detaches and drops,
 //! at 3.0354 s ("GameplayEvent.Perk.Drone.Deploy.Finished") the camera cuts to the drone (CameraTransition Disconnected) and the body is
@@ -7,7 +9,7 @@
 //! (350) fires GameplayEvent.Perk.Crash -> GA_DroneCrash -> GA_ExplodePerk (200 dmg, inner 200 / outer 1000 cm, exp 2). F = GA_LeavePerk
 //! (Drone_Exit montage, back to Primary); battery drain GE_PerkStat_Default IdleBatteryConsumption 0.1 + 0.001 x speed(cm/s) per second,
 //! empty = GA_OutOfBattery -> Perk.Leave; GadgetCooldown after use (GE_Perk_Cooldown).
-// ponytail: not ported - goggles visual (virtual-bone socket), propeller/rotor spin, Acro/Horizon flight modes (IA_FlightMode/IA_HUDMode/IA_RatesPresetMode are gamepad-only in IMC_Drone),
+// ponytail: not ported - Sentinel motor SEP_FPV_Drone source-effect chain, goggles visual (virtual-bone socket), propeller/rotor spin, Acro/Horizon flight modes (IA_FlightMode/IA_HUDMode/IA_RatesPresetMode are gamepad-only in IMC_Drone),
 // FPV post-process/night vision, Spectator/Sentinel drones, RC car, bomb (GA_TriggerBomb, Special slot / game-mode item), GoPro PerkDeploy camera montage.
 // GA_Flashlight is this drone light (GameplayCue.Perk.RcCar.Flashlight): on foot, C toggles the gun-mounted flashlight attachment (GA_ToggleAttachment_Flashlight), not a helmet light.
 use crate::audio::PlayCue;
@@ -32,6 +34,7 @@ const SIDE_FORCE: f32 = 0.5; // Throttle Left Right Force
 const VERT_FORCE: f32 = 0.5; // IA_Jump / IA_Crouch AddMovementInput +-0.5
 const DRONE_FOV: f32 = 130.0; // BP_FPV_Drone Camera FieldOfView
 const CRASH_SPEED: f32 = 3.5; // Crash Sensibility Angl 350 (impulse, mass 1)
+const SENTINEL_CRASH_SPEED: f32 = 1000.0; // BP_FPV_Drone_Sentinel Crash Sensibility Angl 100000
 const DETACH_T: f32 = 1.7955;
 const FINISH_T: f32 = 3.0354;
 const COOLDOWN: f32 = 15.0; // ponytail: GadgetCooldown of Kamikaze is not in the dump (Sentinel GE_PerkStat sets 15)
@@ -71,6 +74,8 @@ pub struct Perk {
     visuals: Option<(Handle<Gltf>, Handle<Gltf>)>,
     fade: f32,
     fade_to: f32,
+    /// Drone glb / row being flown ("Kamikaze", "Sentinel").
+    model: &'static str,
 }
 
 impl Perk {
@@ -250,7 +255,8 @@ fn deploy_flow(
             if on_drone && mouse.just_pressed(MouseButton::Left) && !inv.busy() && !p.dead && perk.cooldown <= 0.0 && inv.slots[cur].ammo > 0 {
                 let m = inv.slots[cur].montage("Fire");
                 inv.use_item(m, &mut out);
-                *perk = Perk { phase: Phase::Deploy, visuals: perk.visuals.take(), battery: 100.0, ..default() };
+                let model = crate::viewmodel::gun_model(&inv.slots[cur].name, &inv.slots[cur].anims).unwrap_or("Kamikaze");
+                *perk = Perk { phase: Phase::Deploy, visuals: perk.visuals.take(), battery: 100.0, model, ..default() };
             }
         }
         Phase::Deploy => {
@@ -289,8 +295,8 @@ fn deploy_flow(
             if crossed(DETACH_T) && !perk.detached {
                 // DetachDrone_C: the held drone leaves the hand (K2_DetachFromComponent keep world) and drops.
                 perk.detached = true;
-                if let Some((_, _, gt, mut vis)) = guns.iter_mut().find(|(_, g, _, _)| g.0 == "Kamikaze")
-                    && let Some(g) = gltfs.get(&assets.load::<Gltf>("models/guns/Kamikaze.glb"))
+                if let Some((_, _, gt, mut vis)) = guns.iter_mut().find(|(_, g, _, _)| g.0 == perk.model)
+                    && let Some(g) = gltfs.get(&assets.load::<Gltf>(format!("models/guns/{}.glb", perk.model)))
                 {
                     *vis = Visibility::Hidden;
                     let (_, hand_rot, hand_pos) = gt.to_scale_rotation_translation();
@@ -474,10 +480,13 @@ fn drone_fly(
     if let Some((dist, n)) = cast(tf.translation, step, step.length() + RADIUS) {
         let n = if n.dot(d.vel) > 0.0 { -n } else { n }; // face the surface toward the drone (mesh normals are not reliably outward)
         let impact = -d.vel.dot(n);
-        if impact > CRASH_SPEED {
-            // GameplayEvent.Perk.Crash -> GA_DroneCrash -> GA_ExplodePerk
-            boom.write(Detonate { at: tf.translation, spec: DRONE_BLAST });
-            crashed.write(crate::items::DroneCrashed { at: tf.translation });
+        let explosive = perk.model == "Kamikaze";
+        if impact > if explosive { CRASH_SPEED } else { SENTINEL_CRASH_SPEED } {
+            // GameplayEvent.Perk.Crash -> GA_DroneCrash -> GA_ExplodePerk (needs the Explosive device) else GE_Grenade_Damage 1000 on itself
+            if explosive {
+                boom.write(Detonate { at: tf.translation, spec: DRONE_BLAST });
+                crashed.write(crate::items::DroneCrashed { at: tf.translation });
+            }
             snd.write(PlayCue { bools: vec![], cue: "/Game/FPV_Drone/Sfx/DroneCrash/DroneCrashBipAndPropellerCut_Cue".into(), dist_cm: 0.0 });
             cmd.entity(e).despawn();
             for l in &lights {

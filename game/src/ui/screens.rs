@@ -290,7 +290,7 @@ const GEAR: [&[(&str, &str, &str, bool)]; 3] = [
     ],
     &[
         ("Kamikaze", "Kamikaze", "icons/Kamikaze", true),
-        ("Sentinel", "Sentinel", "icons/Sentinel", false),
+        ("Sentinel", "Sentinel", "icons/Sentinel", true),
         ("Trataxes", "Trataxes", "icons/Icon_Trataxes", false),
         ("Kyoshin", "Kyoshin", "icons/Icon_Kyoshin", false),
     ],

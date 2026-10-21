@@ -85,6 +85,7 @@ pub(crate) fn gun_model(row: &str, anims: &serde_json::Value) -> Option<&'static
         "Folding" => return Some("Folding"),
         "Blade" => return Some("Blade"),
         "Kamikaze" => return Some("Kamikaze"),
+        "Sentinel" => return Some("Sentinel"),
         "Bomb" => return Some("Bomb"),
         _ => {}
     }

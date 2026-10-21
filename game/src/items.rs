@@ -24,7 +24,7 @@ pub const SLOT_PERK: usize = 4;
 pub fn load_item(row: &str) -> Option<Weapon> {
     let kind = if row.starts_with("Grenade") {
         ItemKind::Grenade
-    } else if row == "Kamikaze" {
+    } else if row == "Kamikaze" || row == "Sentinel" {
         ItemKind::Drone
     } else if row == "Bomb" {
         ItemKind::Bomb
@@ -51,6 +51,7 @@ pub fn display_name(row: &str) -> &str {
         "Grenade G67" => "M67 Frag Grenade",
         "Grenade Flash" => "Flashbang",
         "Kamikaze" => "Kamikaze",
+        "Sentinel" => "Sentinel",
         "Knife" => "Knife",
         "Grenade N67" => "N67 Sticky",
         "Grenade RGN" => "RGN Impact",
