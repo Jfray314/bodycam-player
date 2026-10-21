@@ -1,93 +1,82 @@
-# Handoff — Bodycam player 1:1 Rust/Bevy rewrite + multiplayer (2026-10-15, session 10)
+# Handoff — Bodycam player 1:1 Rust/Bevy rewrite (2026-10-20, end of session 12)
 
 ## 1. Goal
-1:1 Rust (Bevy 0.20) rewrite of UE 5.5.4 game Bodycam's first-person player (movement, camera/lens, guns, viewmodel, attachments,
-items, sounds, effects, tablet UI) on the real lobby map, plus multiplayer and a reusable core lib (`bodycam-core`) for other games.
-Game install `F:\SteamLibrary\steamapps\common\Bodycam` is READ-ONLY. User wants: keep going through the whole list autonomously,
-low usage, builder subagents on `model: sonnet` in worktrees. Done = matches the real game in every state + playable multiplayer.
+1:1 Rust (Bevy 0.20) rewrite of UE 5.5.4 game Bodycam's first-person player (movement, camera/lens, guns, viewmodel, items,
+sounds, effects, UI) on the real lobby map, plus multiplayer and a reusable core lib (`bodycam-core`).
+STRICT RULE (user, memory `port-1to1`): everything ported 1:1 from the real game's files. If the real game doesn't have
+something, we don't either (even if asked earlier). Approximate only where the source truly can't be read; mark `ponytail:`
+and list it here. Only exception kept by the user: T_DirtMask_01 lens scratches overlay.
+Game install `F:\SteamLibrary\steamapps\common\Bodycam` is READ-ONLY. User wants autonomy (don't ask until done), low usage,
+builders on `model: sonnet` in worktrees with own CARGO_TARGET_DIR (but the user found builders slow; do focused work yourself).
+Done = matches the real game in every state + playable multiplayer + portable core/adapters (wasm, mods).
 
-## 2. Current state (master `618d047`, `cargo test -p game` 52 pass, `-p bodycam-core` 16 pass, build clean)
-Works (merged, screenshot-checked unless noted):
-- Lens/post (postfx.wesl; lens-dirt clamped so the skylight no longer stripes), auto exposure (map.rs), real map `scene2` (emissive,
-  1024 tex, PhysMat surfaces, Brightness/AlbedoBrightness params), bots A* + accuracy (test map only).
-- Guns: 20 rows, reload/bolt reload/mag check/inspect, flinch, GoPro camera adjust (hand visible), muzzle light now WEP Intensity 40
-  unitless (~13 lm, 30 ms cap).
-- Attachments (attach.rs): 9 glbs, tablet MODIFY, optic ADS, real MI_ReticleData reticles (tools/reticles.py), per-optic magnification
-  (ACOG 3x), C flashlight / Z laser / MMB canted, click cues, suppressor sound + FireLocation.
-- Items (items.rs, perks.rs, bomb.rs): slots 1-5 (+6 C4 in bomb mode), G drop / F pickup, G67 + flashbang, knife stab X + throw
-  (RMB/LMB, no head-follow), Kamikaze FPV drone + real drone HUD, bots blinded by flashbangs, bomb mode `BODYCAM_MODE=bomb`.
-- Body: owner FP body (upper body fades out below -40..-65 deg pitch, ponytail), `character.rs` full 3P character
-  (`spawn_character(cmd, tf, CharacterState)`) seen from drone/Insert 3P/remote players; `BODYCAM_PUPPET=dx:dz:dyaw` mirror puppet.
-- Multiplayer (net.rs): custom UDP + bincode, host-authoritative damage incl. blasts with kill credit, 30 Hz state, interpolation,
-  lag-comp rewind (RTT + 100 ms), deathmatch score 40, max 7 players, tablet PLAY > HOST SERVERS (HOST/JOIN/address), MENU scoreboard
-  tile. `BODYCAM_HOST=port` / `BODYCAM_JOIN=ip:port`; tests tools/net-test.sh, tools/ui-net-test.sh.
-- bodycam-core: weapon_data, sway, recoil, gunfire, ballistics, cues, lens, ffi + include/bodycam_core.h; C example
-  bodycam-core/examples/c/main.c (MinGW gcc); parity tests game/src/core_parity.rs; docs/MODDING.md per-engine notes.
-- 3P montages (session 9): UE multicasts the owner's A_FP_* character montage onto the full-body Mesh (AC_BodycamAnimationComponent
-  PlayCharacterWeaponMontage, slot UpperBody); there are NO separate 3P montages in the paks. Ported 1:1: CharacterState
-  montage/clip/blend + Ev::Montage; body.rs `montage_clips` retargets the clip (glTF root `arms`->`body`) into the shared graph masked
-  to spine_01 + ik_hand_*; bodyik blends gun onto ik_hand_gun + arms by `montage_w`. Screenshot-checked with puppet (shots_tp/side_*).
-- Session 10: deaths = body collapses via ALS_CLF_GetUp_Back/Front played backwards (body.rs DEATH_CLIPS; UE ragdolls, no
-  physics here) + ScreamBlood_Cue after 0.1-1 s (`suffer` 20%, character.rs death_scream); gun leaves the hands. Bomb over the net:
-  teams = id parity (host carries, team 0 attacks), Ev::Bomb(BombMsg Planted/Defused), every machine runs its own fuse (host's
-  blast does damage), OEM beep loop (whole-second FuzeTimer, Access_Granted_8 once at 2 s), plant/announcer cues, C4 explosion
-  cue (BlastSpec.cue). Tested with two local instances (plant -> defuse) and offline (explosion). Soft-particle shader fix
-  (DepthPrepass on every Camera3d).
-Half-done / approximate:
-- 3P fire kick / hit flinch procedural; death is a reversed GetUp clip, not a physics ragdoll (no impulse direction / slopes).
-  3P gun's own A_W_* weapon montage (mag out) not played. Drone close-up and FP shadow after character refactor unverified.
-- Workbench top MI_auto_repair_table_01 renders bright: not a material bug — the UE dust layer (Dust Color 0.05, Dust High 0.68)
-  isn't ported, and lights/exposure aren't retuned.
-- Bomb: team = id parity (GameState objective team not ported), fuse per machine, beep volume ramp not ported, zones only on test map.
-- No underhand grenade (no FP anims), no Acro/Horizon drone modes (gamepad-only), no NAT traversal, no HUD kill feed (game has none).
+## 2. Current state
+master HEAD = `022d0ed`, clean (handoff.md aside). `cargo test -p game` 57 pass, `-p bodycam-core` 16 pass. Release built.
+Working (this session): physics ragdoll + 1 s body ride; drone electronics/toss/controller; world blood (decals, spatter,
+pools, Blood_Dripping); grenade explosion VFX from Cascade data; fake grenade fixed (body CharGun + FP viewmodel copy hidden on
+release); GCN_HitReaction camera shake on damage (no screen blood: real game has none); death "CAM DISCONNECTED" /
+"CAM CONNECTED" transition + loading screen (W_ConnectionMenu / W_LoadingMenu exact keys) over the real Vhs_01.bk2 frames;
+showcase.bat (demo / play / map).
+Stopped builders with uncommitted partial work: match flow (`.claude/worktrees/agent-a5862966f8a3d867e`), real-map bomb
+zones/spawns/bots (`.claude/worktrees/agent-a25044b7d67aab522`).
+
+Session 13: shot ragdoll impulse 1:1; drone dropped (no toss); flashbang hold/cancel (ABP_Grenade G67 clips for all grenades);
+item idle = BAS IdlePose loop; drone basic bundle (battery + PG-9 warhead/tripwire); tablet 3 cm further out, no gun stress/regrip
+layers on it, slow drift (user request); PLAY > CASUAL = world cards (relaunch into lobby/grid/range/course/CQB/test/bodybomb);
+ALL real attachments (tools/build_attachments.py + attdata.py, attach.rs mount tree, stat mods, MODIFY slot tabs, grip hand IK).
 
 ## 3. Active files
-- `game/src/character.rs`, `body.rs`, `bodyik.rs` — 3P character / owner body
-- `game/src/net.rs` — multiplayer; `drive_remotes` writes CharacterState
-- `game/src/items.rs`, `perks.rs`, `bomb.rs`, `attach.rs`, `weapon.rs`, `viewmodel.rs` (`follow_head`, `no_follow`)
-- `game/src/map.rs`, `postfx.wesl`, `effects.rs`, `soft.rs`, `ui/{mod,screens,settings}.rs`
-- `tools/ue-export/Scene.cs` (map materials), `tools/blender/ueblender.py`, `tools/bake_tint.py`, `tools/attlib.py`, `tools/reticles.py`
-- `bodycam-core/`, `docs/MODDING.md`, `REWRITE.md` (per-system UE provenance)
+- `game/src/transition.rs` + `vhs.wesl` — death/loading screens; `effects.rs` — death/respawn, hit_shake, flashbang
+- `game/src/items.rs` (grenades, hide_thrown), `explosion.rs`, `blood.rs`, `ragdoll.rs`, `perks.rs` (drone), `character.rs`
+- `game/src/lens.rs`/`lens.wesl` (dirt only), `postfx.rs`/`postfx.wesl`, `ui/` (tablet UMG rebuild), `hud.rs`
+- `game/src/dev.rs` — env hooks (BODYCAM_AUTO keys incl. LookL/R/U/D, Hit, Kill; BODYCAM_SHOTS; BODYCAM_LOADING;
+  BODYCAM_EXPLOSIVE; BODYCAM_DUMMY; BODYCAM_MAP=grid; BODYCAM_START=range)
+- Tools: `target/release/bp2txt.exe extracted/Bodycam.usmap <x.uasset>` (BP -> txt), `target/release/dump.exe <usmap> <uasset> <outdir>`
+  (asset -> json; now decodes MovieSceneFloatChannel), `tools/bk2dump` (Bink 2 frames via NihAV, needs ../nihav checkout),
+  `tools/audio-bake`, `tools/vfx_export.py`, `tools/raw_bc.py`
+- `REWRITE.md` (per-system provenance + export recipes), `extracted/bp/*.txt`, `extracted/json/...`
 
-## 4. Changes made
-See `git log` since `6f7ed1a` (wave 1 end): waves 2-3 merges (att-optics, polish, items-inventory, net, FP fixes, core lib,
-gap list, 3P character, knife/boards/bomb).
+## 4. Changes made (session 12)
+a7b2414 ragdoll+death cut; f406dff drone; 599adc5/b7ab6da blood; aaf4abe grenade VFX; 5180121+3430da2+b6fb761 fake grenade +
+showcase + hit shake; 23ad5d8 lens blood removed; 34d6628 transition/loading; 0b2a201 real VHS frames.
 
 ## 5. Failed attempts / gotchas
-- Project moved C: -> F:/code/bodycam-player (2.2 TB free). tools/* paths repointed (commit 5e2cd38). `git worktree list` still shows
-  stale C:/code/... worktrees (old copy) — `git worktree prune` once the C: copy is deleted. ue-export dll was corrupt after the copy:
-  rebuilt with `dotnet build -c Release` in tools/ue-export. Master builds in `target-main` (untracked); builders may use
-  `CARGO_TARGET_DIR=F:/code/bodycam-player/target`. MSYS mangles args starting with `/` (use `find Animations`, not `/Animations/`).
-- Shared target's game.exe is overwritten by every builder: build+copy to a per-builder exe name in one command.
-- Bevy system fn limit 16 params: group into tuples (done in items.rs knife_input).
-- Turning on a camera mid-run panics Bevy directional-light cascades: scope camera parks on a 1 px viewport instead.
-- Bevy `Atmosphere` washed out the map — dropped; sky is a gradient cubemap stand-in.
-- Spring omega fits (see older history): constant omega 10 is best.
-- Builders hit usage limits mid-task; worktrees were sometimes removed — resume via SendMessage, merge master first.
+- Ragdoll NaN = zero-scale FP-hidden bones on the death frame (not colliders/limits).
+- Grenade aim = camera ray (UE): on grid range the white panel ahead of spawn bounces it back.
+- NihAV Bink 2: KB2n inter frames mis-decode from ~frame 1500 (vertical streaks); frames 0..300 clean. `git://` blocked; use
+  https://nihav.org/nihav.gitbundle.
+- String tables: JSON export drops them; read the raw `.uexp` FStrings (ST_UI_*.uexp).
+- Builder worktrees with no changes get auto-deleted; user may run a stale target/release exe — rebuild release after fixes.
+- Bevy 0.20: BorderRadius is a Node field; system param limit 16; bevy_rapier3d 0.37 only physics option.
+- Never push (no remote; derived game data is a licensing question).
 
-## 6. Specific next steps
-**User priorities (session 10 feedback):**
-1. DONE (session 11): own death. `body::DeadCam` (pl.dead, not 3P/drone) makes the view detached (no VM layer, owner copy hidden,
-   local world copy on layer 0) and scales the world copy's head away; `effects::camera` pins the camera to that copy's `neck_01`
-   at the offset it had at death (UE EventRagdollStart attaches Camera to Mesh 'fp_camera'). Screenshot-checked (shots_death/).
-   BroadcastCameraTransitionOnDeath = C++ CameraTransitionSubsystem 'Camera.Transition.Disconnected' (+InstantKill on headshot),
-   not in the BP dumps: its visual is unknown. Dev quirk: BODYCAM_AUTO "F2" before "Kill" makes the kill not fire; put Kill first.
-2. Death poses: not always flat on the back. Real game ragdolls into varied results (falls to the side, curls into a fetal
-   position, or drops fast). Pick from several collapse variants (GetUp_Front/Back reversed, side falls; maybe a curl pose from
-   ALS/WW_RollRagdoll clips in AnimationExamples/Base/InAir, ALS_CLF_Pose) by random + hit direction; slumps vary in speed.
-   Proper answer is a physics ragdoll (WW_RagdollSystem; needs a physics crate, e.g. avian) - weigh that first.
-3. "Feels like a bodycam" features missing: the in-game HUD/UI overlays (bodycam timestamp/REC/battery-style overlay, whatever
-   the real HUD widgets show - find them in Content/MenuSystemPro/INGAME and UI/ widgets, WBP_* HUD), and the loading screen
-   (a bodycam booting/loading screen - find the real loading widget/movie in the paks). Survey all small bodycam-presentation
-   features (overlays, boot/shutdown, death screen, sounds) and list them before building.
-   Survey (session 11, BP dumps only; extracted/json search timed out, so unconfirmed): NO bodycam REC/timestamp/battery text
-   widget, loading movie, boot/shutdown or static overlay found. Bodycam_Player has ScreenDroplets, BodycamBorders /
-   SpringArmBodycamBorders (mesh borders), Censor Face (SM_FaceCensorProxy_a on FP_Camera). Drone HUD (Widget_Battery/LQ/Warning)
-   already ported in perks.rs. Next: search extracted/json + paks (Content/MenuSystemPro, UI/, Movies/) for loading widgets/movies
-   and the BodycamBorders mesh/material before building anything; ask the user what they remember seeing in-game.
-
-4. Optional 3P polish: play the gun's A_W_* montage on the 3P CharGun (net Ev::Montage could carry the weapon clip); ALS ragdoll on
-   death; check FP gun shadow + drone close-up.
-5. Real two-machine LAN test (only two local instances tested). Overkill (<-350 HP) no-scream branch + StopScream on respawn.
-6. Port the UE dust layer (up-facing dust blend) in map loader to fix bright workbench tops; retune if needed.
-7. Delete the old C:/code/bodycam-player copy (user's call), then `git worktree prune`.
+## 6. Specific next steps (1:1 TODO list, priority order)
+0. Session 13 follow-ups: attachment rate/recoil attributes have no base in GE_WeaponStat (1.0 assumed); some attachment
+   skins have no ItemIcons (blank SELECT cards); GripPose socket rotation unused (the grip clip's hand_l vs ik_hand_gun is);
+   gear SWAP lists only the items items.rs plays (G67, Flash, Knife, Kamikaze); weapon preview camera framing fixed per view.
+   Menus: loadout row / weapon view (showcase.rs 3D render) / MODIFY / SELECT / SWAP follow the user's real-game screenshots.
+1. Audit for things we have that the real game doesn't (rule!): grep `ponytail:` in game/src, check each against the BPs;
+   e.g. drone TOSS_SPEED (UE just drops it — user asked for toss, ask before removing), random ragdoll knock, showcase-only code.
+2. Ragdoll impulse: DONE (1c7d07f) for gun shots. Left: corpse shots (GCN_HitReaction picks 1000 when bRagdollOnGround &&
+   FullyRagdoll; host targets_at skips dead players), knife/blast pushes (None now), hit bone = nearest ragdoll body to the hit
+   point. Headshot: Camera.Transition.Data.InstantKill -> DeactivatePanelInstant (transition.rs supports `instant`),
+   DeadHeadShot anim exists. WW_RagdollSystem decompiled to extracted/bp/WW_RagdollSystem.txt.
+3. W_ConnectionMenu remaining: decode the ColorTrack (VHS ColorAndOpacity) fully (GreenCurve parse fails in tools/uasset
+   props.rs MovieSceneFloatChannel after RedCurve — probably per-channel padding/serialization flag), FastTransition rate 2/4,
+   SkipUIAnimation tag; SpectatorHud + WBP_Vhs (REC/BATT/DATE overlay) for spectating after death (round modes).
+4. Loading screen details from materials: M_UI_RecIndicator, M_UI_LoadingBar, M_UI_BatteryIndicator are compiled away —
+   try the material's exported parameters/expressions in the pak (UE shader bytecode not usable); W_SystemInfoConfigEntry
+   ProjectVersion/BuildVersion values from the game's DefaultGame.ini in the pak.
+5. In-game HUD audit vs real widgets (UI/Game/Player/*, MenuSystemPro/INGAME): compass (Widget_Compass), warning
+   (Widget_Warning), SD card, tablet screens — fonts/positions/colours/animations from the widget json.
+6. Sounds audit: death scream exists; check WW_SurvivorStatus Overkill (< -350 HP no scream) + StopScream on respawn;
+   GCN_PlayerExplosionNearby / GCN_PlayerFlashed cues (bp files exist) vs effects.rs flashbang/explosion (ear ring 6 m guess).
+7. Grenade VFX gaps (aaf4abe report): M_Flare/M_Radial_Gradient/Whisps_trans material looks tuned by eye; smoke flipbook
+   linear blend; spark collision; Flash light lumens. Blood gaps (b7ab6da): NS_BloodSquirt_Big / NS_Dripping_Slow / puddle
+   Niagara counts (bytecode) are guesses; DustTrail skipped; bleed rate 12/s vs 50/s.
+8. Drone: goggles (VB goggles_root virtual bone) not shown; propeller placement approximate; controller pose by eye — use
+   the UE hand_l socket + ABP pose.
+9. Resume stopped builders (match flow; real-map bomb zones/spawns/bots) or redo directly: review their worktree diffs first.
+10. Remaining older items: Workbench top bright (UE dust layer), HUD/loading search in paks (Movies/GameIntro etc. only if
+    the game shows them in-match), real two-machine LAN test, NAT traversal, delete old C: copy + `git worktree prune`.
+11. Portability (ask the user first): git remote, wasm build of `game`, a concrete mod adapter on bodycam-core.
