@@ -9,3 +9,5 @@ player_manifest.txt
 /target-*
 /shots_*
 tools/nihav/
+tools/bk2dump/target/
+tools/bk2dump/Cargo.lock
