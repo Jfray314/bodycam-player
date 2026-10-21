@@ -10,7 +10,7 @@
 //! (Drone_Exit montage, back to Primary); battery drain GE_PerkStat_Default IdleBatteryConsumption 0.1 + 0.001 x speed(cm/s) per second,
 //! empty = GA_OutOfBattery -> Perk.Leave; GadgetCooldown after use (GE_Perk_Cooldown).
 // ponytail: not ported - Sentinel motor SEP_FPV_Drone source-effect chain, goggles visual (virtual-bone socket), propeller/rotor spin, Acro/Horizon flight modes (IA_FlightMode/IA_HUDMode/IA_RatesPresetMode are gamepad-only in IMC_Drone),
-// FPV post-process/night vision, Spectator/Sentinel drones, RC car, bomb (GA_TriggerBomb, Special slot / game-mode item), GoPro PerkDeploy camera montage.
+// FPV post-process/night vision, Spectator drone, bomb (GA_TriggerBomb, Special slot / game-mode item), GoPro PerkDeploy camera montage.
 // GA_Flashlight is this drone light (GameplayCue.Perk.RcCar.Flashlight): on foot, C toggles the gun-mounted flashlight attachment (GA_ToggleAttachment_Flashlight), not a helmet light.
 use crate::audio::PlayCue;
 use crate::items::{Detonate, DRONE_BLAST, SLOT_PERK};
@@ -70,12 +70,15 @@ pub struct Perk {
     pub battery: f32,
     light: bool,
     detached: bool,
-    wants_exit: bool,
+    pub(crate) wants_exit: bool,
     visuals: Option<(Handle<Gltf>, Handle<Gltf>)>,
     fade: f32,
     fade_to: f32,
-    /// Drone glb / row being flown ("Kamikaze", "Sentinel").
-    model: &'static str,
+    /// Drone / RC car glb (= row) being piloted ("Kamikaze", "Sentinel", "Trataxes", "Kyoshin").
+    pub(crate) model: &'static str,
+    /// Pawn speed (m/s) and distance (m: drone from its start, car from the player) for the HUD.
+    pub(crate) speed: f32,
+    pub(crate) dist: f32,
 }
 
 impl Perk {
@@ -244,7 +247,7 @@ fn deploy_flow(
     (drones, visuals, mut visual_cmd): (Query<(Entity, &Transform), With<Drone>>, Query<Entity, With<PerkVisual>>, Query<&mut PerkVisual>),
     cam: Single<&GlobalTransform, With<BodycamCamera>>,
     (mut fx, settings, mut out, mut snd): (ResMut<crate::postfx::PostFxState>, Res<crate::ui::settings::Settings>, MessageWriter<MontageStarted>, MessageWriter<PlayCue>),
-    motors: Query<Entity, With<Motor>>,
+    (motors, cars): (Query<Entity, With<Motor>>, Query<Entity, With<crate::rccar::Car>>),
 ) {
     let dt = time.delta_secs();
     perk.cooldown = (perk.cooldown - dt).max(0.0);
@@ -264,6 +267,25 @@ fn deploy_flow(
             perk.t += dt;
             let t1 = perk.t;
             let crossed = |at: f32| t0 < at && t1 >= at;
+            let car = crate::rccar::is_car(perk.model);
+            if car {
+                // RC: no DeployDrone notifies; BP_PerkProxy.SpawnPerk at Deploy.Finished (held item transform), possessed at once
+                if crossed(crate::rccar::finish_time(perk.model)) {
+                    if let Some((_, _, gt, mut vis)) = guns.iter_mut().find(|(_, g, _, _)| g.0 == perk.model) {
+                        *vis = Visibility::Hidden;
+                        crate::rccar::spawn(&mut cmd, &assets, perk.model, gt, &cam);
+                    }
+                    perk.phase = Phase::Piloting;
+                    perk.fade = 1.0;
+                    perk.fade_to = 0.0;
+                    p.locked = true;
+                    fx.base_fov_deg = DRONE_FOV; // BP_RC_Car_Base Camera FieldOfView 130
+                    for mut v in &mut arms_vis {
+                        *v = Visibility::Hidden;
+                    }
+                }
+                return;
+            }
             if t0 == 0.0 {
                 // DeployDrone_C (bIsDeploy) at 0.0001: DeployPerk -> goggles + controller visible, Montage_Play rate 1.5.
                 // ponytail: goggles (socket on the arms skeleton's virtual bone 'VB goggles_root', not exported) are not shown
@@ -351,6 +373,9 @@ fn deploy_flow(
                     for (e, _) in &drones {
                         cmd.entity(e).despawn();
                     }
+                }
+                for e in &cars {
+                    cmd.entity(e).despawn();
                 }
                 let m = inv.slots[SLOT_PERK].anims["Extra"].get("Exit").and_then(crate::weapon::Montage::from_value);
                 inv.use_item(m, &mut out);
@@ -512,6 +537,8 @@ fn drone_fly(
         m.set_speed(0.85 + 0.5 * k);
         m.set_volume(bevy::audio::Volume::Linear(0.4 + 0.3 * k));
     }
+    perk.speed = d.vel.length();
+    perk.dist = tf.translation.distance(d.origin);
     // battery: IdleBatteryConsumption + SpeedBatteryConsumptionFactor x speed (cm/s) per second
     perk.battery -= (BATTERY_IDLE + BATTERY_SPEED * d.vel.length() * 100.0) * dt;
     // C: GA_Flashlight toggle
@@ -567,7 +594,6 @@ fn hud(
     perk: Res<Perk>,
     inv: Single<&Inventory>,
     mut text: Single<(&mut Text, &mut TextColor), With<PerkText>>,
-    drone: Query<(&Drone, &Transform)>,
     mut root: Single<&mut Node, With<DroneHud>>,
     mut fields: Query<(&HudKind, Option<&mut Text>, Option<&mut ImageNode>), Without<PerkText>>,
     assets: Res<AssetServer>,
@@ -577,9 +603,9 @@ fn hud(
     let held = inv.current == SLOT_PERK && inv.slots.get(SLOT_PERK).is_some_and(|w| w.kind == ItemKind::Drone);
     let piloting = perk.phase == Phase::Piloting;
     root.display = if piloting { Display::Flex } else { Display::None };
-    if piloting && let Ok((d, tf)) = drone.single() {
+    if piloting {
         // IMU_Data: Distance = metres from the initial position, velocity cm/s; BP_FPV_Drone broadcasts it every tick.
-        let dist = tf.translation.distance(d.origin);
+        let dist = perk.dist;
         let power = (100.0 - dist).clamp(0.0, 100.0).round();
         let n = (3.0 - dist * 3.0 / 100.0).clamp(0.0, 3.0).round() as usize; // MIC_SignalIndicator CurrentBars
         let bars = bars.get_or_insert_with(|| (1..=4).map(|i| assets.load(format!("ui/drone/T_Signal_{i}.png"))).collect());
@@ -591,7 +617,7 @@ fn hud(
                 tx.0 = match k {
                     HudKind::Lq => format!("3:{power:.0}"),
                     HudKind::Battery => format!("{pack:.1}v  {cell:.1}v  {batt:.0}%"),
-                    HudKind::Velocity => format!("{:.0}", d.vel.length() * 3.6),
+                    HudKind::Velocity => format!("{:.0}", perk.speed * 3.6),
                     HudKind::Distance => format!("{dist:.0}"),
                     HudKind::Throttle => format!("TH {}", (100.0 - dist.clamp(0.0, 100.0)).round().max(9.0)), // Widget_TH shows a noisy 100 - distance
                     HudKind::Mode => "ANGLE".into(), // DroneFlightMode 0 (Acro is gamepad-only)
@@ -609,7 +635,7 @@ fn hud(
     }
     match perk.phase {
         Phase::Idle if held && perk.cooldown > 0.0 => {
-            t.0 = format!("KAMIKAZE COOLDOWN {:.0}s", perk.cooldown.ceil());
+            t.0 = format!("{} COOLDOWN {:.0}s", crate::items::display_name(&inv.slots[SLOT_PERK].name).to_uppercase(), perk.cooldown.ceil());
             c.0 = Color::srgb(1.0, 0.7, 0.2);
         }
         Phase::Idle if held => {

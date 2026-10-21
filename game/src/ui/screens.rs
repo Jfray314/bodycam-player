@@ -291,8 +291,8 @@ const GEAR: [&[(&str, &str, &str, bool)]; 3] = [
     &[
         ("Kamikaze", "Kamikaze", "icons/Kamikaze", true),
         ("Sentinel", "Sentinel", "icons/Sentinel", true),
-        ("Trataxes", "Trataxes", "icons/Icon_Trataxes", false),
-        ("Kyoshin", "Kyoshin", "icons/Icon_Kyoshin", false),
+        ("Trataxes", "Trataxes", "icons/Icon_Trataxes", true),
+        ("Kyoshin", "Kyoshin", "icons/Icon_Kyoshin", true),
     ],
 ];
 
@@ -691,4 +691,18 @@ fn credits(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
 
 pub fn default_help(tab: usize) -> Option<Set> {
     sections(tab).first().and_then(|s| s.1.first().copied())
+}
+
+#[cfg(test)]
+mod tests {
+    /// Every playable SWAP row loads its assets/items anim set and has a model.
+    #[test]
+    fn gear_rows_load() {
+        for &(row, _, _, playable) in super::GEAR.iter().flat_map(|g| g.iter()) {
+            if playable {
+                let w = crate::items::load_item(row).unwrap_or_else(|| panic!("{row}: no assets/items json"));
+                assert!(crate::viewmodel::gun_model(row, &w.anims).is_some(), "{row}: no model");
+            }
+        }
+    }
 }

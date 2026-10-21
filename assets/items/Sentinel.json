@@ -1,5 +1,23 @@
 {
- "extra": {},
+ "extra": {
+  "Exit": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Drone/Character/A_FP_Drone_Exit_Montage.A_FP_Drone_Exit_Montage",
+    "length": 1.7333333,
+    "rate": 1.0,
+    "notifies": [
+     {
+      "name": "DeployDrone_C",
+      "time": 0.0001,
+      "duration": 0.0,
+      "props": {}
+     }
+    ],
+    "blend_in": 0.0,
+    "blend_out": 0.25
+   }
+  }
+ },
  "row": "Sentinel",
  "item_class": "Item.Perk.Drone.Sentinel.Sentinel",
  "actor": "/Game/FPV_Drone/Blueprint/BP_FPV_Drone_Sentinel.BP_FPV_Drone_Sentinel_C",

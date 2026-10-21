@@ -86,6 +86,8 @@ pub(crate) fn gun_model(row: &str, anims: &serde_json::Value) -> Option<&'static
         "Blade" => return Some("Blade"),
         "Kamikaze" => return Some("Kamikaze"),
         "Sentinel" => return Some("Sentinel"),
+        "Trataxes" => return Some("Trataxes"),
+        "Kyoshin" => return Some("Kyoshin"),
         "Bomb" => return Some("Bomb"),
         _ => {}
     }
@@ -156,7 +158,7 @@ pub(crate) fn ads_axes(gun: &str) -> Mat3 {
 }
 
 fn load(mut cmd: Commands, assets: Res<AssetServer>) {
-    let names = ["M4A1", "Glock17", "Akm", "Deagle", "FAL", "Mossberg590", "Remington700", "Revolver", "SCAR-H", "SVD", "UZI", "MP9", "Vector", "MP5", "Benelli", "Crossbow", "Vaiga", "G67", "Flashbang", "Knife", "Karambit", "Kamikaze", "Bomb"];
+    let names = ["M4A1", "Glock17", "Akm", "Deagle", "FAL", "Mossberg590", "Remington700", "Revolver", "SCAR-H", "SVD", "UZI", "MP9", "Vector", "MP5", "Benelli", "Crossbow", "Vaiga", "G67", "Flashbang", "Knife", "Karambit", "Kamikaze", "Trataxes", "Kyoshin", "Bomb"];
     // Only the default loadout is preloaded (guns are 40 MB glbs each: all 17 cost ~20 s); the rest load on first equip.
     let mut guns: HashMap<&'static str, Handle<Gltf>> = names[..2].iter().map(|n| (*n, assets.load(format!("models/guns/{n}.glb")))).collect();
     guns.insert("Tablet", assets.load("ui/Tablet.glb")); // the menu tablet (ui module), attached like a gun

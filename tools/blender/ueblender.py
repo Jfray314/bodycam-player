@@ -171,7 +171,19 @@ def attach_parts(arm, gun_dir):
     bones = {b.name.lower(): b for b in arm.data.bones}
     global MAX_TEX
     MAX_TEX = min(MAX_TEX, 1024)  # attachment parts: smaller textures (file size)
-    for part in att["parts"]:
+    def sock_m(s):  # json loc = UE cm, rot = UE (Pitch, Yaw, Roll) degrees -> Blender matrix (Y mirrored like the PSK import)
+        S = mathutils.Matrix.Translation(mathutils.Vector((s["loc"][0], -s["loc"][1], s["loc"][2])) / 100)
+        ry, rz, rx = (math.radians(v) for v in s["rot"])
+        Rue = mathutils.Matrix.Rotation(rz, 3, "Z") @ mathutils.Matrix.Rotation(ry, 3, "Y") @ mathutils.Matrix.Rotation(-rx, 3, "X")
+        F = mathutils.Matrix.Diagonal((1, -1, 1))  # R conjugated by the Y mirror (cancels the rotated Revolver Root bone)
+        return S @ (F @ Rue @ F).to_4x4()
+    # Sockets of parts already placed (RC car: chassis Body -> shell FPV_Camera_Support -> carbon FPV_Camera -> camera; antenna Led).
+    placed = {}
+    pending = list(att["parts"])
+    known = lambda p: p["socket"].lower() in sockets or p["socket"].split("_")[-1].lower() in sockets or p["socket"].lower() in placed
+    while pending:
+        part = ([p for p in pending if known(p)] or pending)[0]  # a part whose socket is on another part waits for that part
+        pending.remove(part)
         key = part["row"].replace(" ", "_")
         pj = os.path.join(gun_dir, "parts", key, key + ".json")
         if not os.path.exists(pj):
@@ -180,17 +192,16 @@ def attach_parts(arm, gun_dir):
         parm, meshes = import_item(pj, name="_part_" + key)
         # Missing socket -> last word of the class leaf (AK "Long_Barrel" -> "Barrel"; parts at the root origin were 21 cm short).
         s = sockets.get(part["socket"].lower()) or sockets.get(part["socket"].split("_")[-1].lower())
-        bone = bones.get((s["bone"] if s else "root").lower()) or bones["root"]
-        # Drone motors: rotor + propeller sit on every Rotor0N bone (the socket only names Rotor01).
+        on_part = placed.get(part["socket"].lower()) if not s else None
+        bone = on_part[0] if on_part else bones.get((s["bone"] if s else "root").lower()) or bones["root"]
+        # Drone motors: rotor + propeller sit on every Rotor0N bone (the socket only names Rotor01); RC wheels on every wheel_* bone.
         pbones = [b for k, b in sorted(bones.items()) if k.startswith("rotor0")] if part["socket"] in ("Rotor", "Propeller") else []
+        pbones = pbones or ([b for k, b in sorted(bones.items()) if k.startswith("wheel_")] if part["socket"] == "Wheel" else [])
         bone = pbones[0] if pbones else bone
-        loc = mathutils.Vector((s["loc"][0], -s["loc"][1], s["loc"][2])) / 100 if s else mathutils.Vector()  # UE cm, Y mirrored like the PSK import
-        S = mathutils.Matrix.Translation(loc)
-        if s:  # json rot = UE (Pitch, Yaw, Roll) degrees; R = Rz(yaw) Ry(pitch) Rx(-roll), conjugated by the Y mirror (cancels the rotated Revolver Root bone)
-            ry, rz, rx = (math.radians(v) for v in s["rot"])
-            Rue = mathutils.Matrix.Rotation(rz, 3, "Z") @ mathutils.Matrix.Rotation(ry, 3, "Y") @ mathutils.Matrix.Rotation(-rx, 3, "X")
-            F = mathutils.Matrix.Diagonal((1, -1, 1))
-            S = S @ (F @ Rue @ F).to_4x4()
+        S = on_part[1] if on_part else sock_m(s) if s else mathutils.Matrix()
+        loc = S.to_translation()
+        for ps in json.load(open(pj)).get("sockets") or []:
+            placed.setdefault(ps["name"].lower(), (bone, S @ sock_m(ps)))
         targets = [(m, bone) for m in meshes]
         for pb in pbones:  # extra copies for the other rotors
             if pb is not bone:

@@ -119,7 +119,7 @@ for name, row in load('/Game/BodycamCore/ItemsDefinition/Gameplay/DT_PerkItems.D
     if name == 'Bomb':  # GA_TriggerBomb.HandleFuse: plant montage (event GameplayEvent.Bomb.Initiated -> Start Fuse), defuse montage (Defused -> Defuse)
         B = '/BodycamAnimationFramework/Animations/Bomb/Character/A_FP_C4_'
         extra = {k: expand({'Character': B + k + '_Montage.A_FP_C4_' + k + '_Montage'}) for k in ('Plant', 'Defuse')}
-    if name == 'Kamikaze':  # GA_LaunchPerk leave: A_FP_Drone_Exit_Montage (its DeployDrone(bIsDeploy=false) notify plays the goggles/controller exit clips)
+    if name in ('Kamikaze', 'Sentinel', 'Trataxes', 'Kyoshin'):  # GA_LaunchPerk leave (every perk): A_FP_Drone_Exit_Montage (its DeployDrone(bIsDeploy=false) notify plays the goggles/controller exit clips)
         extra = {'Exit': expand({'Character': '/BodycamAnimationFramework/Animations/Drone/Character/A_FP_Drone_Exit_Montage.A_FP_Drone_Exit_Montage'})}
     json.dump({'extra': extra, 'row': name, 'item_class': row.get('ItemClassID'), 'actor': row.get('ActorClassOverride'),
                'stats_effects': row.get('GameplayDataDefinition', {}).get('GameplayEffectsModifier', []),

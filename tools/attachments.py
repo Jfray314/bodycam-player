@@ -35,15 +35,17 @@ for f in sorted(glob.glob(os.path.join(weapons, "*.json"))):
     out[GUN_NAME.get(row, row)] = e
 # Perk items (drone): DT_PerkItems default attachments -> DT_PerkSkins meshes (Frame = receiver, Rotor/Propeller/Antenna/FPV Camera/Led/Nut = parts)
 pi, ps = rows("Gameplay/DT_PerkItems.json"), rows("Skins/DT_PerkSkins.json")
-# DT_BasicBundles "<Row> Basic Bundle" adds the rest (Kamikaze: battery + Long Range Device Explosive (PG-9 warhead); Sentinel: its frame + battery).
+# DT_BasicBundles "<Row> Basic Bundle" adds the rest (Kamikaze: battery + Long Range Device Explosive (PG-9 warhead); Sentinel: its frame + battery; RC cars: chassis, shell, wheels).
 bundles = rows("DT_BasicBundles.json")
-for prow in ("Kamikaze", "Sentinel"):
+for prow in ("Kamikaze", "Sentinel", "Trataxes", "Kyoshin"):
     e = {"receiver": None, "parts": []}
     names = [a["RowName"] for a in pi[prow]["DefaultAttachments"]]
     names += [a["RowName"] for a in bundles[prow + " Basic Bundle"]["ShopBundleRows"] if a["RowName"] not in names]
     for n in names:
-        sk = ps.get(shop[n]["AssociatedItemSkinRow"]["RowName"])
-        cls = pi.get(sk["AssociatedGameplayRow"]["RowName"], {}).get("ItemClassID", "") if sk else ""
+        sr = shop[n]["AssociatedItemSkinRow"]  # perk parts (frames, rotors) are DT_PerkSkins rows; RC shells / camera support / LED are DT_WeaponSkins
+        weapon_skin = "DT_WeaponSkins" in (sr["DataTable"] or "")
+        sk = (skins if weapon_skin else ps).get(sr["RowName"])
+        cls = ((wi if weapon_skin else pi).get(sk["AssociatedGameplayRow"]["RowName"], {}).get("ItemClassID", "")) if sk else ""
         if sk and sk.get("SkeletalMesh"):
             e["receiver"] = asset(sk["SkeletalMesh"])
         elif sk and cls.startswith("Item.Attachment.") and sk.get("StaticMesh") and not cls.endswith(".Nut"):  # nuts have no socket
