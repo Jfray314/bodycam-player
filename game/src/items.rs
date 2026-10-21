@@ -1,4 +1,5 @@
-//! Non-gun inventory items: M67/G67 frag + flashbang (GA_Character_Aim_Grenade / GA_ThrowGrenade / Grenade_C / G67_C / Flash_C),
+//! Non-gun inventory items: grenades (GA_Character_Aim_Grenade / GA_ThrowGrenade / Grenade_C and its G67_C / Flash_C / n74_C / RGN_C /
+//! MB78_C / Flash_9-Bangers_C children),
 //! knife (GA_Character_QuickAttack / GA_TriggerKnife / Knife_C.CloseRangeAttack) and drop/pick up (GA_Character_DropItem).
 //! Slots follow Bodycam_Player IA_Slot1..5: Primary, Secondary, Grenade, Melee, Perk.First (drone: perks.rs).
 use crate::audio::PlayCue;
@@ -12,7 +13,8 @@ use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
 use bevy::prelude::*;
 use serde_json::Value;
 
-// ponytail: underhand grenade throw (the FP BAS only has Overhand; AC_BodycamAnimationComponent.bOverhandGrenade is set by C++), knife stab/stick physics (stuck = pickup at the impact), sticky/RGN/G68 grenades, ReceivePointDamage fuse shortening,
+// ponytail: underhand grenade throw (the FP BAS only has Overhand; AC_BodycamAnimationComponent.bOverhandGrenade is set by C++), knife stab/stick physics (stuck = pickup at the impact), ReceivePointDamage fuse shortening,
+// N67/RGN only collide with the scene (not characters), MB78 P_Explosion emitter / decals / Cubit impact FX traces are the frag FX,
 // bots are not flashed (GE_Flashed 18 s), BFL_Explosion falloff formula is UE's ApplyRadialDamageWithFalloff shape.
 pub const SLOT_GRENADE: usize = 2;
 pub const SLOT_MELEE: usize = 3;
@@ -50,6 +52,10 @@ pub fn display_name(row: &str) -> &str {
         "Grenade Flash" => "Flashbang",
         "Kamikaze" => "Kamikaze",
         "Knife" => "Knife",
+        "Grenade N67" => "N67 Sticky",
+        "Grenade RGN" => "RGN Impact",
+        "Grenade G68" => "MB78",
+        "Grenade Flash 9-Bangers" => "Flash 9-Bangers",
         r => r,
     }
 }
@@ -105,24 +111,37 @@ pub struct BlastSpec {
     pub inner: f32,
     pub outer: f32,
     pub exp: f32,
+    /// Applies GE_Flashed (whiteout).
     pub flash: bool,
-    /// Explosion SoundCue.
+    /// Applies the radial damage (Flash_C: flash only).
+    pub hurt: bool,
+    /// Explosion SoundCue ("" = none).
     pub cue: &'static str,
 }
 const G67_CUE: &str = "/Game/Audio/Grenade/Cue/Bodycam_Grenade_G67";
 /// G67_C: (1.0, 350, 1000, 1.3) x GE_GrenadeStat_G67 Damage 200.
-pub const G67_BLAST: BlastSpec = BlastSpec { base: 200.0, inner: 350.0, outer: 1000.0, exp: 1.3, flash: false, cue: G67_CUE };
+pub const G67_BLAST: BlastSpec = BlastSpec { base: 200.0, inner: 350.0, outer: 1000.0, exp: 1.3, flash: false, hurt: true, cue: G67_CUE };
 /// Flash_C: (1.0, 250, 1000, 2.0) x GE_GrenadeStat_Flash Damage 50; the flash applies GE_Flashed instead.
-pub const FLASH_BLAST: BlastSpec = BlastSpec { base: 50.0, inner: 250.0, outer: 1000.0, exp: 2.0, flash: true, cue: "/Game/BallisticsVFX/SFX/Explodes/Explosions_flash" };
+pub const FLASH_BLAST: BlastSpec = BlastSpec { base: 50.0, inner: 250.0, outer: 1000.0, exp: 2.0, flash: true, hurt: false, cue: "/Game/BallisticsVFX/SFX/Explodes/Explosions_flash" };
 /// GA_ExplodePerk: ExplosionDamage 200, Inner 200, Outer 1000, exponent 2.0.
-pub const DRONE_BLAST: BlastSpec = BlastSpec { base: 200.0, inner: 200.0, outer: 1000.0, exp: 2.0, flash: false, cue: G67_CUE };
+/// n74_C (N67 Sticky): (1.0, 250, 1000, 2.0) x GE_GrenadeStat_N74 Damage 200.
+const N74_BLAST: BlastSpec = BlastSpec { base: 200.0, inner: 250.0, outer: 1000.0, exp: 2.0, flash: false, hurt: true, cue: "/Game/BallisticsVFX/SFX/Explodes/Explosions_fragN74" };
+/// RGN_C: (1.0, 80, 500, 2.0) x GE_GrenadeStat_RGN Damage 200.
+const RGN_BLAST: BlastSpec = BlastSpec { base: 200.0, inner: 80.0, outer: 500.0, exp: 2.0, flash: false, hurt: true, cue: "/Game/BallisticsVFX/SFX/Explodes/Explosions_fragRGN" };
+/// MB78_C (row G68): (1.0, 200, 2000, 2.0) then three (0.4, 100, 2000, 2.0) x GE_GrenadeStat_G68 Damage 50; the fireworks cue plays once.
+const MB78_BLAST: BlastSpec = BlastSpec { base: 50.0, inner: 200.0, outer: 2000.0, exp: 2.0, flash: false, hurt: true, cue: "" };
+const MB78_TAIL: BlastSpec = BlastSpec { base: 20.0, inner: 100.0, outer: 2000.0, exp: 2.0, flash: false, hurt: true, cue: "" };
+/// Flash_9-Bangers_C bang: (0.05, 250, 1000, 2.0) x GE_GrenadeStat_Flash_9-Bangers Damage 150; its ApplyRadialDamageWithFalloff override adds GE_Flashed.
+const BANG: BlastSpec = BlastSpec { base: 7.5, inner: 250.0, outer: 1000.0, exp: 2.0, flash: true, hurt: true, cue: "" };
+pub const DRONE_BLAST: BlastSpec = BlastSpec { base: 200.0, inner: 200.0, outer: 1000.0, exp: 2.0, flash: false, hurt: true, cue: G67_CUE };
 
 /// The local player threw a grenade (net.rs replicates it).
 #[derive(Message)]
 pub struct Thrown {
     pub start: Vec3,
     pub vel: Vec3,
-    pub flash: bool,
+    /// Grenade row (DT_PerkItems).
+    pub row: String,
 }
 
 /// The local player swung the knife from `origin` along `dir` (net.rs: host resolves hits on other players).
@@ -138,10 +157,65 @@ pub struct DroneCrashed {
     pub at: Vec3,
 }
 
-pub fn spawn_grenade(cmd: &mut Commands, assets: &AssetServer, start: Vec3, vel: Vec3, flash: bool, owner: u8) {
-    let path = if flash { "models/guns/Flashbang.glb" } else { "models/guns/G67.glb" };
+/// Grenade_C children by DT_PerkItems row (ActorClassOverride).
+#[derive(Clone, Copy, PartialEq)]
+enum GKind {
+    Frag,
+    Flash,
+    /// n74_C: sticks on the first hit, explodes 1.5 s later.
+    Sticky,
+    /// RGN_C: explodes on the first hit.
+    Impact,
+    /// MB78_C: four staggered blasts.
+    Mb78,
+    /// Flash_9-Bangers_C: nine flash bangs.
+    Bangers,
+}
+
+impl GKind {
+    fn of(row: &str) -> Self {
+        match row {
+            "Grenade Flash" => Self::Flash,
+            "Grenade N67" => Self::Sticky,
+            "Grenade RGN" => Self::Impact,
+            "Grenade G68" => Self::Mb78,
+            "Grenade Flash 9-Bangers" => Self::Bangers,
+            _ => Self::Frag,
+        }
+    }
+    /// Wep Body mesh (GrenadeInfo.Mesh / the BP's Wep Body override).
+    fn glb(self) -> &'static str {
+        match self {
+            Self::Frag => "G67",
+            Self::Flash => "Flashbang",
+            Self::Sticky => "N67",
+            Self::Impact => "RGN",
+            Self::Mb78 => "MB78",
+            Self::Bangers => "Flashbang02",
+        }
+    }
+    /// GrenadeExplosion: (seconds after it, blast) and the cue it spawns once.
+    fn salvo(self) -> (&'static str, Vec<(f32, BlastSpec)>) {
+        match self {
+            Self::Frag => ("", vec![(0.0, G67_BLAST)]),
+            Self::Flash => ("", vec![(0.0, FLASH_BLAST)]),
+            Self::Sticky => ("", vec![(0.0, N74_BLAST)]),
+            Self::Impact => ("", vec![(0.0, RGN_BLAST)]),
+            // Sequence: blast now; latent Delays 0.2 / 0.5 / 1.0 each fire one more
+            Self::Mb78 => ("/Game/Ultimate_SFX/Explosion_Sounds_Pro_HD_Remake/Cues/Explosion_Grenade_fireworks_Cue", vec![(0.0, MB78_BLAST), (0.2, MB78_TAIL), (0.5, MB78_TAIL), (1.0, MB78_TAIL)]),
+            // DoN 9: light on, Delay 0.1, light off + bang, Delay 0.2
+            Self::Bangers => ("/Game/Ultimate_SFX/Explosion_Sounds_Pro_HD_Remake/Cues/Explosion_Grenade_Flash_9-Bangers_Cue", (0..9).map(|i| (0.1 + 0.3 * i as f32, BANG)).collect()),
+        }
+    }
+}
+
+const STICK_DELAY: f32 = 1.5; // n74_C hit: Delay 1.5 -> Explosion
+
+pub fn spawn_grenade(cmd: &mut Commands, assets: &AssetServer, start: Vec3, vel: Vec3, row: &str, owner: u8) {
+    let kind = GKind::of(row);
+    let path = format!("models/guns/{}.glb", kind.glb());
     cmd.spawn((
-        Grenade { vel, fuse: FUSE - THROW_DELAY, flash, hits: 0, spin: Vec3::new(9.0, 3.0, 7.0), rest: false, owner },
+        Grenade { vel, fuse: FUSE - THROW_DELAY, kind, hits: 0, spin: Vec3::new(9.0, 3.0, 7.0), rest: false, owner },
         WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(path))),
         Transform::from_translation(start),
     ));
@@ -209,12 +283,22 @@ struct QuickAttack {
 struct Grenade {
     vel: Vec3,
     fuse: f32,
-    flash: bool,
+    kind: GKind,
     hits: u32,
     spin: Vec3,
     rest: bool,
     /// Thrower's net id (kill credit).
     owner: u8,
+}
+
+/// A detonated grenade running its GrenadeExplosion sequence (one blast for most, MB78 / 9-Bangers several).
+#[derive(Component)]
+struct Salvo {
+    t: f32,
+    kind: GKind,
+    owner: u8,
+    blasts: Vec<(f32, BlastSpec)>,
+    light: Option<Entity>,
 }
 
 /// Knife_C in flight (ProjectileMovement + RotatingMovement).
@@ -234,7 +318,7 @@ pub struct ItemsPlugin;
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PostUpdate, hide_thrown);
-        app.init_resource::<Items>().add_message::<Detonate>().add_message::<DetonateFor>().add_message::<BlastDamage>().add_message::<Thrown>().add_message::<Melee>().add_message::<DroneCrashed>().add_message::<PlayCue>().add_systems(Update, (grenade_input, knife_input, knife_flight, projectiles, detonate, tag_meshes, drop_pickup).chain());
+        app.init_resource::<Items>().add_message::<Detonate>().add_message::<DetonateFor>().add_message::<BlastDamage>().add_message::<Thrown>().add_message::<Melee>().add_message::<DroneCrashed>().add_message::<PlayCue>().add_systems(Update, (grenade_input, knife_input, knife_flight, projectiles, bip_glow, salvos, detonate, tag_meshes, drop_pickup).chain());
     }
 }
 
@@ -323,7 +407,7 @@ fn grenade_input(
             st.t += dt;
             if st.t >= THROW_DELAY && !st.spawned {
                 st.spawned = true;
-                let flash = inv.slots[cur].name.contains("Flash");
+                let row = inv.slots[cur].name.clone();
                 let c = cam.compute_transform();
                 let fwd = c.forward().as_vec3();
                 // Grenade_C.CalculateGrenadeVelocity: target = camera line trace 1500 cm (-100 cm z), launch from the held grenade.
@@ -335,8 +419,8 @@ fn grenade_input(
                     .and_then(|d| ray.cast_ray(Ray3d::new(c.translation, d), &MeshRayCastSettings::default().with_filter(&filter)).first().map(|(_, h)| h.point))
                     .unwrap_or(end);
                 let vel = toss_velocity(start, target, OVERHAND_SPEED).unwrap_or(fwd * OVERHAND_SPEED);
-                spawn_grenade(&mut cmd, &assets, start, vel, flash, crate::net::MY_ID.load(std::sync::atomic::Ordering::Relaxed));
-                thrown.write(Thrown { start, vel, flash });
+                spawn_grenade(&mut cmd, &assets, start, vel, &row, crate::net::MY_ID.load(std::sync::atomic::Ordering::Relaxed));
+                thrown.write(Thrown { start, vel, row });
                 // Grenade_C: RemoveItemInSlot(Grenade) -> the slot is empty and the inventory switches to the best other slot.
                 inv.slots[cur].ammo = 0;
             }
@@ -360,7 +444,6 @@ fn projectiles(
     mut ray: MeshRayCast,
     ignore: Query<(), With<IgnoreTraces>>,
     targets: Query<(), With<Health>>,
-    mut out: MessageWriter<DetonateFor>,
     mut snd: MessageWriter<PlayCue>,
     cam: Single<&GlobalTransform, With<BodycamCamera>>,
 ) {
@@ -368,7 +451,11 @@ fn projectiles(
     for (e, mut tf, mut g) in &mut q {
         g.fuse -= dt;
         if g.fuse <= 0.0 {
-            out.write(DetonateFor { at: tf.translation, spec: if g.flash { FLASH_BLAST } else { G67_BLAST }, owner: g.owner });
+            let (cue, blasts) = g.kind.salvo();
+            if !cue.is_empty() {
+                snd.write(PlayCue { bools: vec![], cue: cue.into(), dist_cm: cam.translation().distance(tf.translation) * 100.0 });
+            }
+            cmd.spawn((Salvo { t: 0.0, kind: g.kind, owner: g.owner, blasts, light: None }, Transform::from_translation(tf.translation)));
             cmd.entity(e).despawn();
             continue;
         }
@@ -387,6 +474,21 @@ fn projectiles(
         match hit {
             Some((pt, n, _)) => {
                 let n = n.normalize_or_zero();
+                match g.kind {
+                    // RGN_C hit (bIsThrown) -> Explosion
+                    GKind::Impact => g.fuse = 0.0,
+                    // n74_C hit: SetSimulatePhysics(false), Grenade_ImpactStick bip, BipGlow sphere on, Delay 1.5 -> Explosion
+                    GKind::Sticky => {
+                        tf.translation = pt + n * 0.02;
+                        g.vel = Vec3::ZERO;
+                        g.rest = true;
+                        g.fuse = g.fuse.min(STICK_DELAY);
+                        snd.write(PlayCue { bools: vec![], cue: "/Game/BallisticsVFX/SFX/Impacts/Grenade/Grenade_ImpactStick".into(), dist_cm: cam.translation().distance(pt) * 100.0 });
+                        cmd.entity(e).insert(Bip);
+                        continue;
+                    }
+                    _ => {}
+                }
                 let vn = g.vel.dot(n) * n;
                 let vt = g.vel - vn;
                 if g.vel.length() > 3.0 {
@@ -404,6 +506,47 @@ fn projectiles(
         }
         let s = g.spin * (g.vel.length() / 8.0).min(1.0) * dt;
         tf.rotate(Quat::from_euler(EulerRot::XYZ, s.x, s.y, s.z));
+    }
+}
+
+/// n74_C stuck: its BipGlow sphere.
+#[derive(Component)]
+struct Bip;
+
+// ponytail: BipGlow's material graph is not decompiled; a small red emissive sphere at the BP's Sphere offset.
+fn bip_glow(mut cmd: Commands, q: Query<Entity, Added<Bip>>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
+    for e in &q {
+        cmd.entity(e).with_child((Mesh3d(meshes.add(Sphere::new(0.035))), MeshMaterial3d(mats.add(StandardMaterial { base_color: Color::BLACK, emissive: LinearRgba::rgb(40.0, 0.0, 0.0), ..default() })), Transform::from_xyz(0.0, 0.0458, 0.001)));
+    }
+}
+
+/// Fires each Salvo blast at its time. 9-Bangers: Flash_9-Bangers_C PointLight (30000 cd, 1800 K) on for the 0.1 s before each bang,
+/// bangs scattered 0..150 cm in X/Y around the grenade.
+fn salvos(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &Transform, &mut Salvo)>, mut out: MessageWriter<DetonateFor>) {
+    let dt = time.delta_secs();
+    for (e, tf, mut s) in &mut q {
+        let t0 = s.t;
+        s.t += dt;
+        let t = s.t;
+        let at = tf.translation;
+        for (_, spec) in s.blasts.iter().filter(|(bt, _)| (*bt >= t0 && *bt < t) || (*bt == 0.0 && t0 == 0.0)) {
+            let off = if s.kind == GKind::Bangers { Vec3::new(rand::random::<f32>() * 1.5, 0.0, rand::random::<f32>() * 1.5) } else { Vec3::ZERO };
+            out.write(DetonateFor { at: at + off, spec: *spec, owner: s.owner });
+        }
+        if s.kind == GKind::Bangers {
+            let on = t < 2.6 && t % 0.3 < 0.1;
+            match (on, s.light) {
+                (true, None) => s.light = Some(cmd.spawn((PointLight { intensity: 377_000.0, range: 10.0, color: Color::srgb(1.0, 0.56, 0.17), ..default() }, Transform::from_translation(at))).id()),
+                (false, Some(l)) => {
+                    cmd.entity(l).despawn();
+                    s.light = None;
+                }
+                _ => {}
+            }
+        }
+        if s.blasts.iter().all(|(bt, _)| *bt < t) && s.light.is_none() {
+            cmd.entity(e).despawn();
+        }
     }
 }
 
@@ -449,14 +592,14 @@ fn explode(
     snd: &mut MessageWriter<PlayCue>,
     fxm: &mut MessageWriter<crate::explosion::ExplosionFx>,
 ) {
-    let BlastSpec { base, inner, outer, exp, flash: flash_gren, cue } = spec;
+    let BlastSpec { base, inner, outer, exp, flash: flash_gren, hurt, cue } = spec;
     let origin = at + Vec3::Y * 0.5; // BFL call uses ActorLocation + (0,0,50)
     let blocked = |ray: &mut MeshRayCast, to: Vec3, ignore: &Query<(), With<IgnoreTraces>>, targets: &Query<(Entity, &GlobalTransform, &mut Health)>| {
         let d = to - origin;
         let filter = |e: Entity| !ignore.contains(e) && !targets.contains(e);
         Dir3::new(d).ok().is_some_and(|dir| ray.cast_ray(Ray3d::new(origin, dir), &MeshRayCastSettings::default().with_filter(&filter)).first().is_some_and(|(_, h)| h.distance < d.length() - 0.15))
     };
-    if !flash_gren {
+    if hurt {
         let hit: Vec<(Entity, f32)> = targets.iter().map(|(e, t, _)| (e, t.translation().distance(origin) * 100.0)).filter(|(_, d)| *d < outer).collect();
         for (e, d) in hit {
             let to = targets.get(e).unwrap().1.translation();
@@ -473,27 +616,30 @@ fn explode(
             }
         }
         boom.write(Explosion { at });
-    } else {
+    }
+    if flash_gren {
         flash.write(Flashbang { at });
     }
     let dp = head.distance(origin) * 100.0; // the body, not the (drone) camera
     if networked {
         // players: the host applies it to everyone (LOS + falloff) and credits the owner
-        if !flash_gren {
+        if hurt {
             bd.write(BlastDamage { origin, spec, owner });
         }
     } else if !blocked(ray, head, ignore, targets) {
         let f = falloff(dp, inner, outer, exp);
-        if f > 0.0 && !flash_gren {
+        if f > 0.0 && hurt {
             dmg.write(PlayerDamage(base * f, None));
         }
     } else if flash_gren {
         // flash through geometry is still occluded by walls in the game's visibility check; here: no whiteout when blocked is not modelled (message already sent)
     }
     // Visuals: SpawnEmitterAtLocation Explosion_Frag_small / Explosion_Flash_small (explosion.rs).
-    fxm.write(crate::explosion::ExplosionFx { at, flash: flash_gren });
+    fxm.write(crate::explosion::ExplosionFx { at, flash: !hurt });
     // G67_C: AC_Detonation.DetonationSound = Bodycam_Grenade_G67; Flash_C: Explosions_flash.
-    snd.write(PlayCue { bools: vec![], cue: cue.into(), dist_cm: dp });
+    if !cue.is_empty() {
+        snd.write(PlayCue { bools: vec![], cue: cue.into(), dist_cm: dp });
+    }
 }
 
 /// Thrown grenades are skinned meshes with stale bounds: never cull them.

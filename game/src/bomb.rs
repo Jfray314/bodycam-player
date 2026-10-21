@@ -27,7 +27,7 @@ const DEFUSE_EVENT: f32 = 6.4613;
 const DEFUSE_REACH: f32 = 2.0;
 const RESTART: f32 = 6.0;
 /// Bombe_C.Explode: damage 1000, RadialDamageWithFalloff inner 250 / outer 2000 cm, exponent 2.
-const BOMB_BLAST: BlastSpec = BlastSpec { base: 1000.0, inner: 250.0, outer: 2000.0, exp: 2.0, flash: false, cue: "/Game/Ultimate_SFX/Survival_Sound_Kit_HD_Remake/Cues/C4_Explosion_2_Cue" };
+const BOMB_BLAST: BlastSpec = BlastSpec { base: 1000.0, inner: 250.0, outer: 2000.0, exp: 2.0, flash: false, hurt: true, cue: "/Game/Ultimate_SFX/Survival_Sound_Kit_HD_Remake/Cues/C4_Explosion_2_Cue" };
 /// BombZone Box half extents (m) on the test map.
 const ZONE_HALF: f32 = 3.0;
 

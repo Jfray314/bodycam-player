@@ -62,7 +62,7 @@ pub enum Ev {
     Sounds(Vec<(f32, String)>),
     /// Character montage started (A_FP_* clip, blend in / out s): played on the remote's body (CharacterState::montage).
     Montage { clip: String, blend: (f32, f32) },
-    Grenade { start: [f32; 3], vel: [f32; 3], flash: bool },
+    Grenade { start: [f32; 3], vel: [f32; 3], row: String },
     /// Knife swing (host resolves the hit).
     Melee { origin: [f32; 3], dir: [f32; 3] },
     /// Drone crash blast.
@@ -440,7 +440,7 @@ fn local_events(
         }
     }
     for t in thrown.read() {
-        evs.push(Ev::Grenade { start: t.start.to_array(), vel: t.vel.to_array(), flash: t.flash });
+        evs.push(Ev::Grenade { start: t.start.to_array(), vel: t.vel.to_array(), row: t.row.clone() });
     }
     for m in melee.read() {
         evs.push(Ev::Melee { origin: m.origin.to_array(), dir: m.dir.to_array() });
@@ -606,10 +606,10 @@ fn apply(
                     (c.montage, c.clip, c.blend) = (c.montage + 1, clip.clone(), *blend);
                 }
             }
-            Ev::Grenade { start, vel, flash } => {
+            Ev::Grenade { start, vel, row } => {
                 info!("net: player {from} threw a grenade");
                 if *from != my_id {
-                    crate::items::spawn_grenade(&mut cmd, &assets, Vec3::from(*start), Vec3::from(*vel), *flash, *from);
+                    crate::items::spawn_grenade(&mut cmd, &assets, Vec3::from(*start), Vec3::from(*vel), row, *from);
                 }
             }
             Ev::Damage(a) => {

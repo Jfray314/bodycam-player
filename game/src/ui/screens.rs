@@ -276,11 +276,11 @@ fn icon_of(row: &str) -> String {
 const GEAR: [&[(&str, &str, &str, bool)]; 3] = [
     &[
         ("Grenade G67", "Frag Grenade", "icons/GrenadeG67", true),
-        ("Grenade Flash 9-Bangers", "Flash 9-Bangers", "icons/GrenadeFlash9-Bangers", false),
+        ("Grenade Flash 9-Bangers", "Flash 9-Bangers", "icons/GrenadeFlash9-Bangers", true),
         ("Grenade Flash", "Flash", "icons/GrenadeFlash", true),
-        ("Grenade N67", "N67 Sticky", "icons/GrenadeN67", false),
-        ("Grenade RGN", "RGN Impact", "icons/GrenadeRGN", false),
-        ("Grenade G68", "MB78", "icons/GrenadeG68", false),
+        ("Grenade N67", "N67 Sticky", "icons/GrenadeN67", true),
+        ("Grenade RGN", "RGN Impact", "icons/GrenadeRGN", true),
+        ("Grenade G68", "MB78", "icons/GrenadeG68", true),
     ],
     &[
         ("Knife", "Knife", "icons/KnifeBaseReceiver", true),
