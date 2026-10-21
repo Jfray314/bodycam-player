@@ -75,9 +75,24 @@ pub struct Montage {
     pub blend_out: f32,
     /// Gun-side montage asset path (BAS `Weapon` key), if any.
     pub weapon: Option<String>,
+    /// Play rate (attachment ReloadTime / SwitchSpeed); `length` and notify times are already divided by it.
+    pub rate: f32,
 }
 
 impl Montage {
+    /// PlayCharacterWeaponMontage(PlayRate): the same clip, `r` times faster.
+    pub fn at_rate(mut self, r: f32) -> Self {
+        if r > 0.0 && r != 1.0 {
+            self.length /= r;
+            self.blend_in /= r;
+            self.blend_out /= r;
+            for n in &mut self.notifies {
+                n.0 /= r;
+            }
+            self.rate *= r;
+        }
+        self
+    }
     pub fn from_value(v: &Value) -> Option<Self> {
         Self::from(v)
     }
@@ -90,6 +105,7 @@ impl Montage {
             blend_in: c.get("blend_in").and_then(|b| b.as_f64()).unwrap_or(0.25) as f32,
             blend_out: c.get("blend_out").and_then(|b| b.as_f64()).unwrap_or(0.25) as f32,
             weapon: v.get("Weapon").and_then(|w| w.get("path")).and_then(|p| p.as_str()).map(Into::into),
+            rate: 1.0,
             notifies: c
                 .get("notifies")?
                 .as_array()?
@@ -126,7 +142,11 @@ pub struct Weapon {
     pub kind: ItemKind,
     /// DT_WeaponItems row name.
     pub name: String,
+    /// GE_WeaponStat_* values; `stats` = these with the mounted attachments' modifiers (attach::apply_mods).
+    pub base: Stats,
     pub stats: Stats,
+    /// Attachment rate / recoil multipliers (WeaponAttributeSet ReloadTime, SwitchSpeed, ADSSpeed, recoil).
+    pub mods: Mods,
     pub ammo: u32,
     /// Spare magazines (rounds in each), like MagazineManager.
     pub mags: Vec<u32>,
@@ -137,10 +157,32 @@ pub struct Weapon {
     equipped_once: bool,
 }
 
+/// WeaponAttributeSet attributes the attachments scale (base 1). ReloadTime / SwitchSpeed are montage play rates
+/// (GA_Reload_Base.PlayWeaponCharacterMontage, BP_InventoryComponent.HolsterItem), ADSSpeed the ADS motion playback (AC Stress/ADS).
+#[derive(Clone, Debug)]
+pub struct Mods {
+    pub reload: f32,
+    pub switch: f32,
+    pub ads: f32,
+    /// CameraRecoilStepVertical / Horizontal: controller (camera) recoil steps.
+    pub cam_v: f32,
+    pub cam_h: f32,
+    /// VerticalRecoil / HorizontalRecoil / KickHip / KickUp: procedural viewmodel recoil targets.
+    pub pitch: f32,
+    pub yaw: f32,
+    pub kick: f32,
+    pub kick_up: f32,
+}
+impl Default for Mods {
+    fn default() -> Self {
+        Mods { reload: 1.0, switch: 1.0, ads: 1.0, cam_v: 1.0, cam_h: 1.0, pitch: 1.0, yaw: 1.0, kick: 1.0, kick_up: 1.0 }
+    }
+}
+
 impl Weapon {
     /// A non-gun item (assets/items/<Row>.json anim set).
     pub fn item(name: &str, kind: ItemKind, anims: Value) -> Self {
-        Weapon { kind, name: name.into(), stats: Stats::default(), ammo: 1, mags: vec![], full_auto: false, anims, equipped_once: false }
+        Weapon { kind, name: name.into(), base: Stats::default(), stats: Stats::default(), mods: Mods::default(), ammo: 1, mags: vec![], full_auto: false, anims, equipped_once: false }
     }
     pub fn montage(&self, key: &str) -> Option<Montage> {
         self.one(key)
@@ -388,6 +430,12 @@ impl Inventory {
     }
     fn start(&mut self, kind: ActionKind, montage: Option<Montage>, next_slot: usize, out: &mut MessageWriter<MontageStarted>) {
         let Some(montage) = montage else { return };
+        let m = &self.slots[self.current].mods;
+        let montage = montage.at_rate(match kind {
+            ActionKind::Reload => m.reload,
+            ActionKind::Holster | ActionKind::Draw => m.switch,
+            _ => 1.0,
+        });
         out.write(MontageStarted { row: self.slots[self.current].name.clone(), kind, montage: montage.clone() });
         let refill_at = if kind == ActionKind::Reload { montage.length * 0.7 } else { f32::MAX };
         self.action = Some(Action { kind, montage, t: 0.0, refill_at, next_slot, bolt: None });
@@ -577,7 +625,9 @@ pub(crate) fn load_weapons() -> Vec<Weapon> {
             ammo: s.ammo_capacity.unwrap_or(30.0) as u32,
             mags: vec![s.ammo_capacity.unwrap_or(30.0) as u32; s.mag_amount.unwrap_or(4.0) as usize],
             full_auto: s.fire_modes.iter().any(|m| m == "FullAuto"),
+            base: s.clone(),
             stats: s.clone(),
+            mods: Mods::default(),
             anims: v["anim_set"].clone(),
             equipped_once: false,
             kind: ItemKind::Gun,
@@ -925,7 +975,7 @@ fn fire(
     (joints, parents, mut sights, cfg): (Query<(Entity, &Name, &GlobalTransform)>, Query<&ChildOf>, Local<HashMap<String, Vec3>>, Option<Res<crate::ui::settings::Settings>>),
 ) {
     let (inv, p) = &mut *q;
-    let suppressed = cfg.as_ref().is_some_and(|c| c.has_att(&inv.slots[inv.current].name, "suppressor"));
+    let suppressed = cfg.as_ref().is_some_and(|c| crate::attach::suppressed(c, &inv.slots[inv.current].name));
     inv.cooldown -= time.delta_secs();
     let now = time.elapsed_secs();
     // GA_Fire_Base ability end (trigger released): TryPlayRegripAnimation, then LastFireTime = FireStartTime.
@@ -1047,7 +1097,10 @@ fn fire(
         inv.pull_slider.push(0.0);
     }
     let w = &inv.slots[cur];
-    fired.write(Fired { row: w.name.clone(), controller: ControllerRecoil::from(&w.anims), aiming: p.aiming, fire_rate: s.fire_rate.unwrap_or(0.1), suppressed, origin, dirs });
+    let mut controller = ControllerRecoil::from(&w.anims);
+    let (v, h) = (w.mods.cam_v, w.mods.cam_h);
+    (controller.vertical, controller.horizontal) = ((controller.vertical.0 * v, controller.vertical.1 * v), (controller.horizontal.0 * h, controller.horizontal.1 * h));
+    fired.write(Fired { row: w.name.clone(), controller, aiming: p.aiming, fire_rate: s.fire_rate.unwrap_or(0.1), suppressed, origin, dirs });
 }
 
 /// Another player's shot: impact dust at where each pellet ends and a muzzle flash light.

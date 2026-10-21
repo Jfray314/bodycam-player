@@ -49,6 +49,10 @@ impl Plugin for ViewmodelPlugin {
             .add_systems(
                 PostUpdate,
                 (place_arms, (follow_head.in_set(FollowHead), left_elbow).after(bevy::app::AnimationSystems)).before(bevy::transform::TransformSystems::Propagate),
+            )
+            .add_systems(
+                PostUpdate,
+                grip_hand.after(bevy::transform::TransformSystems::Propagate),
             );
     }
 }
@@ -365,6 +369,7 @@ struct Start {
     action: bool,
     blend_in: f32,
     blend_out: f32,
+    speed: f32,
 }
 
 fn play_events(
@@ -391,6 +396,7 @@ fn play_events(
                 action: m.kind != ActionKind::FireOut,
                 blend_in: m.montage.blend_in,
                 blend_out: m.montage.blend_out,
+                speed: m.montage.rate,
             }
         })
         .collect();
@@ -414,6 +420,7 @@ fn play_events(
             arms: clip,
             pitch: 0.0,
             action: false,
+            speed: 1.0,
         });
     }
     let now = time.elapsed_secs();
@@ -426,6 +433,9 @@ fn play_events(
             let Some(name) = (if is_arms { Some(s.arms.clone()) } else { s.gun.clone() }) else { continue };
             if !play(&mut anim, &mut player, &mut tr, &name, false, Duration::from_secs_f32(s.blend_in)) {
                 continue;
+            }
+            if s.speed != 1.0 && let Some(a) = player.animation_mut(anim.nodes[&name]) {
+                a.set_speed(s.speed);
             }
             if is_additive(&name) {
                 let node = anim.nodes[&name];
@@ -860,6 +870,88 @@ fn left_elbow(
         // new local = parent_old^-1 * q^-1 * parent_old * local (parent rotated by q, world hand rotation kept)
         let po = undo * hpg.rotation();
         t.rotation = po.inverse() * q.inverse() * po * t.rotation;
+    }
+}
+
+/// Left hand on a grip attachment (ABP_Procedural_Viewmodel: ModifyBone ik_hand_l = GripData.HandOffset (the part's GripPose
+/// socket), two-bone IK of the left arm onto it, LeftHandPose layer = the grip pose clip's fingers). Weight AttachHandWeight =
+/// (1 - FP_Action_Weight) x (1 - Mask_AttachLeftHand): off while an action montage plays. Runs after transform propagation and
+/// rewrites the left arm's globals (and its children's) so the skin uses them this frame.
+#[allow(clippy::too_many_arguments)]
+fn grip_hand(
+    time: Res<Time>,
+    cfg: Option<Res<crate::ui::settings::Settings>>,
+    inv: Option<Single<&Inventory>>,
+    arms: Single<(Entity, &Anim), With<ArmsRoot>>,
+    guns: Query<(Entity, &GunRoot)>,
+    joints: Query<(Entity, &Name)>,
+    parents: Query<&ChildOf>,
+    children: Query<&Children>,
+    mut tf: Query<(&mut Transform, &mut GlobalTransform)>,
+    mut w: Local<f32>,
+) {
+    static POSES: std::sync::OnceLock<HashMap<String, HashMap<String, [f32; 4]>>> = std::sync::OnceLock::new();
+    let poses = POSES.get_or_init(|| serde_json::from_str(include_str!("../../assets/grip_poses.json")).expect("grip_poses.json"));
+    let (Some(cfg), Some(inv)) = (cfg, inv) else { return };
+    let (root, anim) = *arms;
+    let grip = guns.iter().next().filter(|(_, g)| g.0 != "Tablet").and_then(|(g, _)| Some((g, crate::attach::grip(&cfg, &inv.slots[inv.current].name)?)));
+    let acting = time.elapsed_secs() < anim.montage_until && anim.action;
+    *w = crate::status::finterp_to(*w, if grip.is_some() && !acting { 1.0 } else { 0.0 }, time.delta_secs(), 10.0);
+    let Some((gun, (pose, bone, sock))) = grip else { return };
+    if *w < 1e-3 {
+        return;
+    }
+    let find = |n: &str, under: Entity| joints.iter().find(|(e, j)| j.as_str().eq_ignore_ascii_case(n) && root_of_entity(*e, under, &parents)).map(|j| j.0);
+    let (Some(up), Some(low), Some(hand), Some(gb)) = (find("upperarm_l", root), find("lowerarm_l", root), find("hand_l", root), find(&bone, gun)) else { return };
+    let g = |e: Entity| tf.get(e).map(|t| t.1.compute_transform()).ok();
+    let (Some(gu), Some(gl), Some(gh), Some(gj)) = (g(up), g(low), g(hand), g(gb)) else { return };
+    let target = gj.mul_transform(sock);
+    let (s, e, h) = (gu.translation, gl.translation, gh.translation);
+    let goal = h.lerp(target.translation, *w);
+    // two-bone IK in the arm's current bend plane
+    let (l1, l2) = ((e - s).length(), (h - e).length());
+    let d = (goal - s).length().clamp((l1 - l2).abs() + 1e-4, l1 + l2 - 1e-4);
+    let dir = (goal - s).normalize_or_zero();
+    let pole = ((e - s) - dir * (e - s).dot(dir)).normalize_or(Vec3::Y);
+    let a = ((l1 * l1 + d * d - l2 * l2) / (2.0 * l1 * d)).clamp(-1.0, 1.0).acos();
+    let e2 = s + (dir * a.cos() + pole * a.sin()) * l1;
+    let q1 = Quat::from_rotation_arc((e - s).normalize_or_zero(), (e2 - s).normalize_or_zero());
+    let h1 = e2 + q1 * (h - e);
+    let q2 = Quat::from_rotation_arc((h1 - e2).normalize_or_zero(), (goal - e2).normalize_or_zero());
+    // ponytail: the hand keeps its IK-carried rotation; GripPose's socket rotation doesn't map onto the imported hand_l axes
+    // (it flips the hand), so only the socket position is used.
+    let hand_rot = q2 * q1 * gh.rotation;
+    let world = [(up, s, q1 * gu.rotation), (low, e2, q2 * q1 * gl.rotation), (hand, goal, hand_rot)];
+    for (ent, pos, rot) in world {
+        let pg = parents.get(ent).ok().and_then(|p| tf.get(p.parent()).ok()).map(|t| t.1.compute_transform()).unwrap_or_default();
+        if let Ok((mut t, mut gt)) = tf.get_mut(ent) {
+            t.rotation = pg.rotation.inverse() * rot;
+            t.translation = pg.compute_affine().inverse().transform_point3(pos);
+            *gt = GlobalTransform::from(pg.mul_transform(*t));
+        }
+    }
+    // grip pose fingers, then refresh the globals under the arm (twist bones, fingers)
+    let fingers = poses.get(pose);
+    let mut stack: Vec<(Entity, GlobalTransform)> = vec![];
+    for (ent, _, _) in world {
+        let pg = tf.get(ent).map(|t| *t.1).unwrap_or_default();
+        for c in children.get(ent).into_iter().flatten() {
+            if !world.iter().any(|x| x.0 == *c) {
+                stack.push((*c, pg));
+            }
+        }
+    }
+    while let Some((ent, pg)) = stack.pop() {
+        let name = joints.get(ent).map(|j| j.1.as_str()).unwrap_or("");
+        let Ok((mut t, mut gt)) = tf.get_mut(ent) else { continue };
+        if let Some(q) = fingers.and_then(|f| f.get(name)) {
+            t.rotation = t.rotation.slerp(Quat::from_array(*q), *w);
+        }
+        *gt = pg * *t;
+        let ng = *gt;
+        for c in children.get(ent).into_iter().flatten() {
+            stack.push((*c, ng));
+        }
     }
 }
 

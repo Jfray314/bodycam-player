@@ -1,6 +1,6 @@
-//! Weapon attachments on the viewmodel gun: data from DT_WeaponItems/DT_WeaponSkins via tools/attlib.py + tools/attsockets.py
-//! (assets/attachments.json: per-gun mount sockets in gun-joint space, per-item AimPoint/Reticle/Light/Laser sockets), meshes in
-//! assets-local/models/attachments/<id>.glb. Optic aim points feed WEP.GetActiveAimpointComponent (viewmodel::place_arms);
+//! Weapon attachments on the viewmodel gun: every DT_WeaponItems attachment that fits (tools/attall.py, tools/attdata.py ->
+//! assets/attachments.json: receiver sockets per gun, per-item sockets / stat modifiers / reticle), meshes in
+//! assets-local/models/attachments/<glb>.glb (tools/build_attachments.py). Optic aim points feed WEP.GetActiveAimpointComponent (viewmodel::place_arms);
 //! C = GA_ToggleAttachment_Flashlight, Z = GA_ToggleAttachment_Laser, MMB = GA_SwitchMagnifiedOptic/SwitchUsedOptic (IMC_KBM_CharacterOnFoot).
 use crate::player::IgnoreTraces;
 use crate::ui::settings::Settings;
@@ -21,19 +21,9 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-/// Selectable attachments (assets/attachments.json items; labels from DT_WeaponSkins ItemName).
-pub const IDS: [(&str, &str); 9] = [
-    ("reddot", "RED DOT"),
-    ("holo", "HOLOGRAPHIC"),
-    ("acog", "ACOG 3X"),
-    ("canted", "CANTED DOT"),
-    ("suppressor", "SUPPRESSOR"),
-    ("laser", "LASER (GREEN)"),
-    ("peq", "LASER (RED)"),
-    ("flashlight", "FLASHLIGHT"),
-    ("foregrip", "FOREGRIP"),
-];
-
+/// Every attachment the guns can take (tools/attall.py + tools/attdata.py -> assets/attachments.json): DT_WeaponItems
+/// ItemCompatibilities decide what fits, DT_WeaponSkins the visible options. `cls` is the ItemClassID under Item.Attachment
+/// ("Muzzle.Suppressor"), `slot` the socket it mounts on (its first segment, snake case: "muzzle", "optic_mount", ...).
 #[derive(Deserialize, Clone, Debug)]
 pub struct Xf {
     pub loc: [f32; 3],
@@ -42,26 +32,45 @@ pub struct Xf {
     pub bone: String,
 }
 impl Xf {
-    pub fn at(&self, p: Vec3) -> Vec3 {
-        Vec3::from(self.loc) + Quat::from_array(self.rot) * p
-    }
     fn tf(&self) -> Transform {
         Transform { translation: self.loc.into(), rotation: Quat::from_array(self.rot), ..default() }
     }
 }
 #[derive(Deserialize, Debug)]
 pub struct Item {
-    pub kind: String,
+    pub cls: String,
+    pub slot: String,
+    pub label: String,
+    /// Mesh file (assets-local/models/attachments/<glb>.glb); skins of one mesh + material set share it.
+    pub glb: String,
+    /// Mesh sockets (item frame): AimPoint / Reticle* / Viewpoint / Light / Socket_Laser / FireLocation and child mounts.
     pub sockets: HashMap<String, Xf>,
+    /// GE_AttachmentStat_* modifiers: (WeaponAttributeSet attribute, "mul" | "add" | "set", value).
+    pub fx: Vec<(String, String, f32)>,
+    #[serde(default)]
+    pub reticle: Option<Reticle>,
+    /// Cosmetic.Weapon.Anim.Idle: left-hand grip pose clip (assets/grip_poses.json).
+    #[serde(default)]
+    pub grip: Option<String>,
 }
 #[derive(Deserialize, Debug)]
 pub struct Data {
     pub items: HashMap<String, Item>,
+    /// Receiver sockets per gun glb (gun-joint space, with their bone).
     pub guns: HashMap<String, HashMap<String, Xf>>,
     pub rows: HashMap<String, String>,
+    /// Weapon row -> ids that fit / its DefaultAttachments.
+    pub compat: HashMap<String, Vec<String>>,
+    pub defaults: HashMap<String, Vec<String>>,
+    /// Gun glb -> node names of the default parts baked into it (tools/attachments.py).
+    pub baked: HashMap<String, Vec<String>>,
+    /// Ids of the old 9-item library (saved settings) -> skin ids.
+    #[serde(default)]
+    pub aliases: HashMap<String, String>,
 }
 
-/// assets/reticles.json (tools/reticles.py): MI_ReticleData_* texture/colour/scale + scope Magnification per optic.
+/// Optic reticle (MI_ReticleData_* of the gun's default Reticle item over the optic's OpticReticleMaterial): texture/colour/scale,
+/// scope Magnification.
 #[derive(Deserialize, Debug)]
 pub struct Reticle {
     pub tex: String,
@@ -72,71 +81,159 @@ pub struct Reticle {
     #[serde(default)]
     pub mag: Option<f32>,
 }
-fn reticles() -> &'static HashMap<String, Reticle> {
-    static D: OnceLock<HashMap<String, Reticle>> = OnceLock::new();
-    D.get_or_init(|| serde_json::from_str(include_str!("../../assets/reticles.json")).expect("assets/reticles.json"))
-}
 
 pub fn data() -> &'static Data {
     static D: OnceLock<Data> = OnceLock::new();
     D.get_or_init(|| serde_json::from_str(include_str!("../../assets/attachments.json")).expect("assets/attachments.json"))
 }
 
-/// Gun socket candidates for an attachment kind (ItemClassID parent tag -> socket on the receiver or its barrel/forearm part).
-fn candidates(kind: &str) -> &'static [&'static str] {
-    match kind {
-        "optic" | "magnified" => &["optic", "optic_mount"],
-        "canted" => &["canted_optic_mount"],
-        "muzzle" => &["muzzle"],
-        "laser" => &["upperbarrel", "siderail"],
-        "flashlight" => &["siderail", "underbarrel"],
-        "underbarrel" => &["underbarrel"],
-        _ => &[],
-    }
+/// Ids that fit weapon `row` (the tablet MODIFY list).
+pub fn available(row: &str) -> &'static [String] {
+    data().compat.get(row).map_or(&[], |v| v.as_slice())
 }
 
-/// (socket name, transform) where `id` mounts on weapon `row`, if the gun has a matching socket.
-pub fn mount(row: &str, id: &str) -> Option<(&'static str, &'static Xf)> {
-    let d = data();
-    let sock = d.guns.get(d.rows.get(row)?)?;
-    let kind = d.items.get(id)?.kind.as_str();
-    candidates(kind).iter().find_map(|c| sock.get(*c).map(|x| (*c, x)))
+/// Slots the current build has a socket for (an optic needs the AK's optic mount, a muzzle device a barrel ...), most used
+/// first: the MODIFY tabs.
+pub fn slots(s: &Settings, row: &str) -> Vec<&'static str> {
+    const ORDER: [&str; 12] = ["optic", "canted_optic", "muzzle", "barrel", "underbarrel", "siderail", "upperbarrel", "stock", "grip", "magazine", "trigger", "slide"];
+    let (_, avail) = place(row, &loadout(s, row));
+    let mut v: Vec<&'static str> = available(row).iter().map(|id| data().items[id.as_str()].slot.as_str()).filter(|s| avail.contains_key(*s)).collect();
+    v.sort_by_key(|s| (ORDER.iter().position(|o| o == s).unwrap_or(ORDER.len()), *s));
+    v.dedup();
+    v
 }
 
-/// Attachment ids selectable on `row` (the tablet MODIFY screen).
-pub fn available(row: &str) -> Vec<(&'static str, &'static str)> {
-    IDS.iter().filter(|(id, _)| mount(row, id).is_some()).copied().collect()
+pub fn label(id: &str) -> &str {
+    data().items.get(id).map_or(id, |i| i.label.as_str())
 }
 
-/// Toggle `id` on `row`; ids that share the gun socket are replaced (one optic, one siderail device...).
+/// Toggle a pick on `row`: it replaces the default and any other pick of the same slot; toggling a pick off restores the default.
 pub fn toggle(s: &mut Settings, row: &str, id: &str) {
+    let Some(item) = data().items.get(id) else { return };
+    for x in s.attachments.get_mut(row).into_iter().flatten() {
+        if let Some(n) = data().aliases.get(x.as_str()) {
+            *x = n.clone(); // old library id saved earlier
+        }
+    }
     if s.has_att(row, id) {
         s.toggle_att(row, id);
         return;
     }
-    let slot = mount(row, id).map(|m| m.0);
-    let others: Vec<String> = s.attachments.get(row).into_iter().flatten().filter(|o| mount(row, o).map(|m| m.0) == slot).cloned().collect();
-    for o in others {
+    let same: Vec<String> = s.attachments.get(row).into_iter().flatten().filter(|o| data().items.get(o.as_str()).is_some_and(|i| i.slot == item.slot)).cloned().collect();
+    for o in same {
         s.toggle_att(row, &o);
     }
-    s.toggle_att(row, id);
+    if !is_default(row, id) {
+        s.toggle_att(row, id);
+    }
 }
 
-/// Mounted ids that still fit the gun, optics ordered primary first.
+pub fn is_default(row: &str, id: &str) -> bool {
+    data().defaults.get(row).is_some_and(|d| d.iter().any(|d| d == id))
+}
+
+/// The player's picks on `row` that still fit it.
+pub fn picks(s: &Settings, row: &str) -> Vec<String> {
+    s.attachments.get(row).into_iter().flatten().map(|id| data().aliases.get(id).unwrap_or(id)).filter(|id| available(row).contains(id)).cloned().collect()
+}
+
+/// Effective parts: the DefaultAttachments with each pick replacing the default(s) of its slot.
 pub fn loadout(s: &Settings, row: &str) -> Vec<String> {
-    s.attachments.get(row).into_iter().flatten().filter(|id| mount(row, id).is_some()).cloned().collect()
+    let picks = picks(s, row);
+    let slot = |id: &str| data().items.get(id).map(|i| i.slot.as_str());
+    let mut out: Vec<String> = data().defaults.get(row).into_iter().flatten().filter(|d| !picks.iter().any(|p| slot(p) == slot(d))).cloned().collect();
+    out.extend(picks);
+    out
 }
 
-/// FireLocation socket of a mounted muzzle device (suppressor): (gun bone, point in that bone's joint frame, m).
+/// A part placed on the gun: the bone it rides and its transform in that bone's joint frame.
+#[derive(Clone, Debug)]
+pub struct Placed {
+    pub id: String,
+    pub bone: String,
+    pub tf: Transform,
+}
+
+/// Mount tree: each part goes on the socket named after its slot, on the receiver or on another part (a barrel carries the
+/// muzzle socket, an optic mount the optic socket ...). A part's sockets replace same-named receiver ones, so a part waits while
+/// another unplaced part would still provide its socket. Returns the placed parts and the final socket table.
+pub fn place(row: &str, ids: &[String]) -> (Vec<Placed>, HashMap<String, (String, Transform)>) {
+    let d = data();
+    let mut avail: HashMap<String, (String, Transform)> = d.rows.get(row).and_then(|g| d.guns.get(g)).into_iter().flatten().map(|(n, x)| (n.clone(), (x.bone.clone(), x.tf()))).collect();
+    let mut pending: Vec<&str> = ids.iter().map(String::as_str).filter(|i| d.items.contains_key(*i)).collect();
+    let mut out = vec![];
+    let mut strict = true;
+    while !pending.is_empty() {
+        let ready = pending.iter().position(|id| {
+            let slot = &d.items[*id].slot;
+            avail.contains_key(slot) && !(strict && pending.iter().any(|o| o != id && d.items[*o].sockets.contains_key(slot)))
+        });
+        let Some(k) = ready else {
+            if strict {
+                strict = false; // a cycle, or the providers can't be placed: take what fits now
+                continue;
+            }
+            break;
+        };
+        let id = pending.remove(k);
+        strict = true;
+        let it = &d.items[id];
+        let (bone, base) = avail[&it.slot].clone();
+        for (n, x) in &it.sockets {
+            avail.insert(n.clone(), (bone.clone(), base * x.tf()));
+        }
+        out.push(Placed { id: id.to_string(), bone, tf: base });
+    }
+    (out, avail)
+}
+
+/// Bullet origin: the mounted muzzle device's FireLocation, else the muzzle socket of the current barrel (bone, joint-frame point, m).
 pub fn fire_location(s: &Settings, row: &str) -> Option<(String, Vec3)> {
-    loadout(s, row).iter().find_map(|id| {
-        let (_, xf) = mount(row, id)?;
-        Some((xf.bone.clone(), xf.at(Vec3::from(data().items[id.as_str()].sockets.get("firelocation")?.loc))))
-    })
+    if picks(s, row).is_empty() {
+        return None; // the gun's own muzzle (weapon.rs)
+    }
+    let (_, avail) = place(row, &loadout(s, row));
+    avail.get("firelocation").or_else(|| avail.get("muzzle")).map(|(b, t)| (b.clone(), t.translation))
 }
 
-fn is_optic(id: &str) -> bool {
-    matches!(data().items.get(id).map(|i| i.kind.as_str()), Some("optic" | "magnified" | "canted"))
+/// WEP.GetActiveGripData: a part's grip pose clip and the GripPose socket the left hand goes to (gun bone, joint-frame transform).
+/// Both are needed (no GripPose socket -> default grip). Defaults-only builds use the baked gun as is: no custom grip.
+pub fn grip(s: &Settings, row: &str) -> Option<(&'static str, String, Transform)> {
+    let ids = loadout(s, row);
+    let pose = ids.iter().find_map(|id| data().items.get(id.as_str())?.grip.as_deref())?;
+    let (_, avail) = place(row, &ids);
+    avail.get("grippose").map(|(b, t)| (pose, b.clone(), *t))
+}
+
+/// Muzzle.Suppressor mounted: Cosmetic.Weapon.SFX.FireSuppressed, no muzzle smoke.
+pub fn suppressed(s: &Settings, row: &str) -> bool {
+    loadout(s, row).iter().any(|id| data().items.get(id.as_str()).is_some_and(|i| i.cls.starts_with("Muzzle.Suppressor")))
+}
+
+/// The mounted parts' GE_AttachmentStat modifiers for one WeaponAttributeSet attribute applied to `base`
+/// (UE aggregator: (base + Additive) x Multiplicitive, Override wins).
+pub fn stat(s: &Settings, row: &str, attr: &str, base: f32) -> f32 {
+    let (mut add, mut mul, mut set) = (0.0, 1.0, None);
+    for id in loadout(s, row) {
+        for (a, op, v) in data().items.get(id.as_str()).map_or(&[][..], |i| &i.fx[..]) {
+            if a == attr {
+                match op.as_str() {
+                    "add" => add += v,
+                    "mul" => mul *= v,
+                    _ => set = Some(*v),
+                }
+            }
+        }
+    }
+    set.unwrap_or((base + add) * mul)
+}
+
+/// Sighting optics: parts with an AimPoint in the Optic / Canted Optic slots that are not the gun's default sights.
+fn is_optic(row: &str, id: &str) -> bool {
+    data().items.get(id).is_some_and(|i| matches!(i.slot.as_str(), "optic" | "canted_optic") && i.sockets.contains_key("aimpoint")) && !is_default(row, id)
+}
+fn is_magnified(id: &str) -> bool {
+    data().items.get(id).and_then(|i| i.reticle.as_ref()).and_then(|r| r.mag).is_some()
 }
 
 #[derive(Resource, Default)]
@@ -169,19 +266,59 @@ impl Plugin for AttachPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<AttState>()
             .add_systems(Startup, scope_setup)
-            .add_systems(Update, (mount_sys, glass, switch_input, state, laser).chain())
+            .add_systems(Update, (apply_mods, mount_sys, glass, switch_input, state, laser).chain())
             .add_systems(PostUpdate, scope.after(bevy::transform::TransformSystems::Propagate));
     }
 }
 
-/// Active optic id: the primary (Optic socket) sight at index 0, the canted one at 1; falls back to whichever is mounted.
-fn active_optic<'a>(ids: &'a [String], idx: usize) -> Option<&'a str> {
-    let kind = |id: &str| data().items.get(id).map(|i| i.kind.as_str());
-    let primary = ids.iter().find(|i| matches!(kind(i), Some("optic" | "magnified")));
-    let canted = ids.iter().find(|i| kind(i) == Some("canted"));
+/// Every gun's stats / rates = its GE_WeaponStat values with the loadout's GE_AttachmentStat modifiers (on load and on every
+/// tablet change). ponytail: the rate / recoil attributes have no GE_WeaponStat base; 1.0 assumed (the BPs read 0 as 1).
+fn apply_mods(cfg: Option<Res<Settings>>, inv: Option<Single<&mut Inventory>>, mut seen: Local<bool>) {
+    let (Some(cfg), Some(mut inv)) = (cfg, inv) else { return };
+    if *seen && !cfg.is_changed() {
+        return;
+    }
+    *seen = true;
+    let inv = &mut **inv;
+    for w in inv.slots.iter_mut().chain(inv.pool.iter_mut()).filter(|w| w.kind == crate::weapon::ItemKind::Gun) {
+        let (r, b) = (w.name.clone(), w.base.clone());
+        let f = |attr: &str, v: Option<f32>| v.map(|v| stat(&cfg, &r, attr, v));
+        let one = |attr: &str| stat(&cfg, &r, attr, 1.0);
+        w.stats = crate::weapon::Stats {
+            damage: f("Damage", b.damage),
+            fire_rate: f("FireRate", b.fire_rate),
+            instability: f("Instability", b.instability),
+            mag_amount: f("MagAmount", b.mag_amount),
+            ammo_capacity: f("AmmoCapacity", b.ammo_capacity).map(f32::round),
+            spread_hip_x: f("SpreadHipX", b.spread_hip_x),
+            spread_hip_y: f("SpreadHipY", b.spread_hip_y),
+            spread_aim_x: f("SpreadAimX", b.spread_aim_x),
+            spread_aim_y: f("SpreadAimY", b.spread_aim_y),
+            ..b
+        };
+        w.mods = crate::weapon::Mods {
+            reload: one("ReloadTime"),
+            switch: one("SwitchSpeed"),
+            ads: one("ADSSpeed"),
+            cam_v: one("CameraRecoilStepVertical") * one("CameraRecoilStep"),
+            cam_h: one("CameraRecoilStepHorizontal") * one("CameraRecoilStep"),
+            pitch: one("VerticalRecoil"),
+            yaw: one("HorizontalRecoil"),
+            kick: one("KickHip"),
+            kick_up: one("KickUp"),
+        };
+    }
+}
+
+/// Active optic: the primary (Optic slot) sight at index 0, the canted one at 1; falls back to whichever is mounted.
+fn active_optic<'a>(row: &str, ids: &'a [String], idx: usize) -> Option<&'a str> {
+    let slot = |id: &str| data().items.get(id).map(|i| i.slot.as_str());
+    let primary = ids.iter().find(|i| is_optic(row, i) && slot(i) == Some("optic"));
+    let canted = ids.iter().find(|i| is_optic(row, i) && slot(i) == Some("canted_optic"));
     (if idx == 1 { canted.or(primary) } else { primary.or(canted) }).map(String::as_str)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn mount_sys(
     mut cmd: Commands,
     assets: Res<AssetServer>,
@@ -192,6 +329,7 @@ fn mount_sys(
     joints: Query<(Entity, &Name)>,
     parents: Query<&ChildOf>,
     old: Query<Entity, With<AttMount>>,
+    mut vis: Query<&mut Visibility>,
     mut done: Local<(Option<Entity>, String)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut mats: ResMut<Assets<StandardMaterial>>,
@@ -203,8 +341,8 @@ fn mount_sys(
         return;
     }
     let row = inv.slots[inv.current].name.clone();
-    let ids = loadout(&cfg, &row);
-    let key = format!("{row}:{}", ids.join(","));
+    let picks = picks(&cfg, &row);
+    let key = format!("{row}:{}", picks.join(","));
     if *done == (Some(gun), key.clone()) {
         return;
     }
@@ -218,20 +356,33 @@ fn mount_sys(
     *done = (Some(gun), key);
     st.scope = None;
     let d = data();
-    for id in &ids {
-        let Some((_, xf)) = mount(&row, id) else { continue };
-        let Some(bone) = joints.iter().find(|(e, n)| n.as_str().eq_ignore_ascii_case(&xf.bone) && root_of_entity(*e, gun, &parents)).map(|j| j.0) else { continue };
-        let item = &d.items[id.as_str()];
-        let scene: Handle<bevy::world_serialization::WorldAsset> = assets.load(GltfAssetLabel::Scene(0).from_asset(format!("models/attachments/{id}.glb")));
-        let root = cmd.spawn((AttMount, Name::new(format!("att_{id}")), WorldAssetRoot(scene), xf.tf())).id();
+    // No picks: the gun glb's baked default parts as they are. Otherwise the whole loadout is mounted here and the baked parts
+    // that got placed (or replaced) are hidden; a default that can't be placed keeps its baked node.
+    let parts = loadout(&cfg, &row);
+    let placed = if picks.is_empty() { vec![] } else { place(&row, &parts).0 };
+    for node in d.rows.get(&row).and_then(|g| d.baked.get(g)).into_iter().flatten() {
+        let id = node.to_lowercase();
+        let keep = picks.is_empty() || (parts.contains(&id) && !placed.iter().any(|p| p.id == id));
+        if let Some(e) = joints.iter().find(|(e, n)| n.as_str() == node && root_of_entity(*e, gun, &parents)).map(|j| j.0)
+            && let Ok(mut v) = vis.get_mut(e)
+        {
+            *v = if keep { Visibility::Inherited } else { Visibility::Hidden };
+        }
+    }
+    for p in &placed {
+        let Some(bone) = joints.iter().find(|(e, n)| n.as_str().eq_ignore_ascii_case(&p.bone) && root_of_entity(*e, gun, &parents)).map(|j| j.0) else { continue };
+        let item = &d.items[p.id.as_str()];
+        let scene: Handle<bevy::world_serialization::WorldAsset> = assets.load(GltfAssetLabel::Scene(0).from_asset(format!("models/attachments/{}.glb", item.glb)));
+        let root = cmd.spawn((AttMount, Name::new(format!("att_{}", p.id)), WorldAssetRoot(scene), p.tf)).id();
         cmd.entity(bone).add_child(root);
-        if item.kind == "magnified" && let Some(v) = item.sockets.get("viewpoint") {
+        if is_magnified(&p.id) && let Some(v) = item.sockets.get("viewpoint") {
             st.scope = Some((root, v.clone()));
         }
-        // WEP optics: the reticle quad sits on the optic's Reticle socket (MI_ReticleData_*: ReticleColor red, unlit).
-        // ponytail: window size 7 cm x ReticleScaleAndOffset (guess); reticle item defaults are guesses too (tools/reticles.py).
-        if let Some(rt) = reticles().get(id.as_str()).filter(|_| item.kind != "magnified")
-            && let Some(r) = item.sockets.get("reticle").or_else(|| item.sockets.get("reticle_magnified")).or_else(|| item.sockets.get("reticle_canted")).filter(|_| is_optic(id)) {
+        // WEP optics: the reticle quad sits on the optic's Reticle socket (MI_ReticleData_*: ReticleColor, unlit).
+        // ponytail: window size 7 cm x ReticleScaleAndOffset (guess).
+        if let Some(rt) = item.reticle.as_ref().filter(|r| r.mag.is_none())
+            && let Some(r) = item.sockets.get("reticle").or_else(|| item.sockets.get("reticle_canted"))
+        {
             cmd.spawn((
                 Mesh3d(meshes.add(Rectangle::new(0.07 * rt.scale[0], 0.07 * rt.scale[1]))),
                 MeshMaterial3d(reticle_mat(&assets, &mut mats, rt)),
@@ -254,7 +405,8 @@ fn mount_sys(
         }
         if let Some(l) = item.sockets.get("socket_laser") {
             // Laser BP: SM_Laser_Beam stretched to the trace hit (x1000 scale when nothing is hit), sphere dot at the hit.
-            let col = if id == "laser" { Color::srgb(0.1, 1.0, 0.2) } else { Color::srgb(1.0, 0.05, 0.05) };
+            // ponytail: beam colour by mesh (the MAWL is the green one); the BP's colour parameter is not in the data.
+            let col = if item.glb.contains("mawl") { Color::srgb(0.1, 1.0, 0.2) } else { Color::srgb(1.0, 0.05, 0.05) };
             let m = mats.add(StandardMaterial { base_color: col, emissive: col.to_linear() * 8.0, unlit: true, alpha_mode: AlphaMode::Add, ..default() });
             cmd.spawn((LaserBeam, Mesh3d(meshes.add(Cuboid::new(0.0015, 1.0, 0.0015).mesh().build().translated_by(Vec3::new(0.0, -0.5, 0.0)))), MeshMaterial3d(m.clone()), Visibility::Hidden, l.tf(), NoFrustumCulling, IgnoreTraces, RenderLayers::layer(VM_LAYER), ChildOf(root)));
             cmd.spawn((AttMount, LaserDot, Mesh3d(meshes.add(Sphere::new(0.012))), MeshMaterial3d(m), Visibility::Hidden, Transform::default(), NoFrustumCulling, IgnoreTraces, RenderLayers::layer(VM_LAYER)));
@@ -318,8 +470,8 @@ fn switch_input(keys: Res<ButtonInput<KeyCode>>, mouse: Res<ButtonInput<MouseBut
     if mouse.just_pressed(MouseButton::Middle)
         && let (Some(cfg), Some(inv)) = (cfg, inv)
     {
-        let ids = loadout(&cfg, &inv.slots[inv.current].name);
-        if ids.iter().filter(|i| is_optic(i)).count() > 1 {
+        let row = &inv.slots[inv.current].name;
+        if loadout(&cfg, row).iter().filter(|i| is_optic(row, i)).count() > 1 {
             st.optic = 1 - st.optic;
             regrip.write(Regrip { delay: 0.1 });
         }
@@ -337,21 +489,22 @@ fn state(
     let (Some(inv), Some(cfg)) = (inv, cfg) else { return };
     let row = &inv.slots[inv.current].name;
     let ids = loadout(&cfg, row);
-    let optic = active_optic(&ids, st.optic);
+    let optic = active_optic(row, &ids, st.optic);
     let mut relief = 0.0;
     st.aim = optic.and_then(|id| {
-        let (_, xf) = mount(row, id)?;
+        let placed = place(row, &ids).0;
+        let p = placed.iter().find(|p| p.id == id)?;
         let a = data().items[id].sockets.get("aimpoint")?;
         // AdsSettings.AimSightDistance / AimMagnifiedSightDistance (cm): the eye sits that far behind the optic's AimPoint.
         let ads = &inv.slots[inv.current].anims["AdsSettings"];
-        let mag = data().items[id].kind == "magnified";
+        let mag = is_magnified(id);
         let d = ads[if mag { "AimMagnifiedSightDistance" } else { "AimSightDistance" }].as_f64().unwrap_or(if mag { 2.5 } else { 12.0 }) as f32;
         relief = d * 0.01;
-        Some((xf.bone.clone(), xf.at(Vec3::from(a.loc)) + Vec3::Y * d * 0.01))
+        Some((p.bone.clone(), p.tf.transform_point(Vec3::from(a.loc)) + Vec3::Y * d * 0.01))
     });
     st.eye_relief = relief;
     // MI_ScopeOpticReticle_*.Magnification
-    st.zoom = optic.filter(|o| data().items[*o].kind == "magnified").and_then(|o| reticles().get(o)?.mag).unwrap_or(1.0);
+    st.zoom = optic.and_then(|o| data().items[o].reticle.as_ref()?.mag).unwrap_or(1.0);
     let (fl, la) = (st.flashlight, st.laser);
     for mut v in &mut lights {
         *v = if fl { Visibility::Inherited } else { Visibility::Hidden };
@@ -418,7 +571,8 @@ fn scope_setup(mut cmd: Commands, mut images: ResMut<Assets<Image>>, assets: Res
         ))
         .id();
     // MI_ReticleMagnifiedData_*: reticle texture scaled by ReticleScaleAndOffset over the lens.
-    if let Some(r) = reticles().get("acog") {
+    // every scope's default reticle is the gun's "Magnified Dot MK1 Red" item, so one overlay serves them all
+    if let Some(r) = data().items.values().filter_map(|i| i.reticle.as_ref()).find(|r| r.mag.is_some()) {
         let c = Color::srgb(r.color[0], r.color[1], r.color[2]);
         cmd.spawn((
             Node { position_type: PositionType::Absolute, width: percent(r.scale[0] * 100.0), height: percent(r.scale[1] * 100.0), ..default() },
@@ -469,4 +623,44 @@ fn scope(
     n.width = px(2.0 * r);
     n.height = px(2.0 * r);
     img.color = Color::WHITE.with_alpha(((ads.alpha - 0.7) / 0.3).clamp(0.0, 1.0));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_mount_and_muzzle_device_extends_the_barrel() {
+        let d = data();
+        for row in ["M4A1", "AK47", "Glock17"] {
+            let ids = &d.defaults[row];
+            assert_eq!(place(row, ids).0.len(), ids.len(), "{row}: every default part finds its socket");
+        }
+        // A suppressor goes on the barrel's muzzle socket and its FireLocation sits further along the bore (joint -Y).
+        let ids = d.defaults["M4A1"].clone();
+        let sup = available("M4A1").iter().find(|i| d.items[i.as_str()].cls.starts_with("Muzzle.Suppressor") && d.items[i.as_str()].sockets.contains_key("firelocation")).expect("an M4 suppressor");
+        let (_, bare) = place("M4A1", &ids);
+        let (_, with) = place("M4A1", &[ids.clone(), vec![sup.clone()]].concat());
+        assert!(with["firelocation"].1.translation.y < bare["muzzle"].1.translation.y - 0.05);
+    }
+
+    #[test]
+    fn stat_applies_modifiers() {
+        // a non-default M4 part with one modifier on an attribute nothing else in the build touches
+        let found = available("M4A1").iter().filter(|i| !is_default("M4A1", i)).find_map(|id| {
+            let fx = &data().items[id.as_str()].fx;
+            let [(attr, op, v)] = fx.as_slice() else { return None };
+            let mut s = Settings::default();
+            toggle(&mut s, "M4A1", id);
+            let alone = loadout(&s, "M4A1").iter().filter(|o| *o != id).all(|o| data().items[o.as_str()].fx.iter().all(|f| &f.0 != attr));
+            alone.then(|| (s, attr.clone(), op.clone(), *v))
+        });
+        let (s, attr, op, v) = found.expect("an M4 part with a lone modifier");
+        let want = match op.as_str() {
+            "mul" => 2.0 * v,
+            "add" => 2.0 + v,
+            _ => v,
+        };
+        assert!((stat(&s, "M4A1", &attr, 2.0) - want).abs() < 1e-5);
+    }
 }

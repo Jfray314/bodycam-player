@@ -73,6 +73,7 @@ pub enum Act {
     Equip,
     /// Toggle an attachment id on the shown weapon (MODIFY).
     Att(&'static str),
+    AttSlot(usize),
     /// LOADOUT EXPLOSIVE / MELEE / GADGET column (0/1/2): equip that DT_PerkItems row.
     Gear(usize, String),
     Search,
@@ -191,7 +192,9 @@ pub struct Ui {
     pub rebinding: Option<usize>,
     cursor: Vec2,
     drag: Option<(Set, f32, f32)>,
-    pub scroll: [f32; 3],
+    pub scroll: [f32; 4],
+    /// Weapon screen MODIFY: selected attachment slot (index into attach slots of the gun).
+    pub att_slot: usize,
     dirty: bool,
     pub toast: (String, f32),
 }
@@ -214,7 +217,8 @@ impl Default for Ui {
             // BODYCAM_CURSOR=x,y: start position of the tablet cursor (scripted tests)
             cursor: std::env::var("BODYCAM_CURSOR").ok().and_then(|v| v.split_once(',').map(|(x, y)| Vec2::new(x.parse().unwrap_or(0.0), y.parse().unwrap_or(0.0)))).unwrap_or(Vec2::new(W / 2.0, H / 2.0)),
             drag: None,
-            scroll: [0.0; 3],
+            scroll: [0.0; 4],
+            att_slot: 0,
             dirty: true,
             toast: (String::new(), 0.0),
         }
@@ -500,6 +504,9 @@ fn handle(act: Act, cx: &mut Cx, rect: Option<(f32, f32)>) {
         }
         Act::Rebind(i) => cx.ui.rebinding = Some(i),
         Act::Weapon(row) => {
+            if row != cx.ui.weapon {
+                (cx.ui.att_slot, cx.ui.scroll[3]) = (0, 0.0);
+            }
             cx.ui.weapon = row;
             if cx.ui.screen != Screen::Weapon {
                 go(cx, Screen::Weapon, true);
@@ -529,8 +536,12 @@ fn handle(act: Act, cx: &mut Cx, rect: Option<(f32, f32)>) {
             let row = cx.ui.weapon.clone();
             crate::attach::toggle(cx.s, &row, id);
             settings::save(cx.s);
-            let label = crate::attach::IDS.iter().find(|i| i.0 == id).map_or(id, |i| i.1);
-            cx.ui.toast = (format!("{label} {}.", if cx.s.has_att(&row, id) { "mounted" } else { "removed" }), 2.0);
+            let on = crate::attach::loadout(cx.s, &row).iter().any(|x| x == id);
+            cx.ui.toast = (format!("{} {}.", crate::attach::label(id), if on { "mounted" } else { "removed" }), 2.0);
+        }
+        Act::AttSlot(i) => {
+            cx.ui.att_slot = i;
+            cx.ui.scroll[3] = 0.0;
         }
         Act::Gear(slot, row) => {
             match slot {

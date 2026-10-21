@@ -347,7 +347,7 @@ fn weapon(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     let mid = add(cmd, body, Node { flex_grow: 1.0, width: percent(100), justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, ..row() });
     let a = button(cmd, mid, Node { padding: UiRect::axes(px(26), px(60)), ..row() }, Act::Cycle(-1), Some(KeyCode::ArrowLeft), CLEAR, PANEL_HOVER, None);
     txt(cmd, a, cx, "<", 60.0, Color::WHITE, Wt::Extra);
-    img(cmd, mid, cx, &icon_of(&it.row), 1000.0, 500.0, Color::WHITE);
+    img(cmd, mid, cx, &icon_of(&it.row), 640.0, 320.0, Color::WHITE); // smaller than the art's 1000x500 so the MODIFY list fits
     let b = button(cmd, mid, Node { padding: UiRect::axes(px(26), px(60)), ..row() }, Act::Cycle(1), Some(KeyCode::ArrowRight), CLEAR, PANEL_HOVER, None);
     txt(cmd, b, cx, ">", 60.0, Color::WHITE, Wt::Extra);
     let strip = add(cmd, body, Node { column_gap: px(10), ..row() });
@@ -355,13 +355,23 @@ fn weapon(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
         let c = button(cmd, strip, Node { padding: UiRect::all(px(4)), ..default() }, Act::Weapon(o.row.clone()), None, PANEL, PANEL_HOVER, Some(if o.row == it.row { RED } else { Color::srgb(0.2, 0.2, 0.22) }));
         img(cmd, c, cx, &icon_of(&o.row), 96.0, 48.0, Color::WHITE);
     }
-    // MODIFY: attachments the gun has sockets for (attach::available); one device per socket.
-    let mods = add(cmd, body, Node { column_gap: px(14), margin: UiRect::top(px(10)), flex_wrap: FlexWrap::Wrap, ..row() });
-    for (n, (id, label)) in crate::attach::available(&it.row).into_iter().enumerate() {
-        let on = cx.s.has_att(&it.row, id);
-        let key = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9][n.min(8)];
-        let b = button(cmd, mods, Node { padding: UiRect::axes(px(14), px(8)), ..row() }, Act::Att(id), Some(key), if on { RED } else { PANEL }, PANEL_HOVER, None);
-        txt(cmd, b, cx, &format!("[{}] {label}", n + 1), 24.0, Color::WHITE, Wt::Bold);
+    // MODIFY: every attachment that fits (attach::available), by slot; a pick replaces the gun's default part of that slot.
+    let slots = crate::attach::slots(cx.s, &it.row);
+    let sel = cx.ui.att_slot.min(slots.len().saturating_sub(1));
+    let tabs = add(cmd, body, Node { column_gap: px(8), row_gap: px(8), margin: UiRect::top(px(10)), flex_wrap: FlexWrap::Wrap, ..row() });
+    for (n, s) in slots.iter().enumerate() {
+        let b = button(cmd, tabs, Node { padding: UiRect::axes(px(12), px(6)), ..row() }, Act::AttSlot(n), None, if n == sel { RED } else { PANEL }, PANEL_HOVER, None);
+        txt(cmd, b, cx, &s.replace('_', " ").to_uppercase(), 20.0, Color::WHITE, Wt::Bold);
+    }
+    let mounted = crate::attach::loadout(cx.s, &it.row);
+    let list = add(cmd, body, (Node { height: px(330), width: percent(100), margin: UiRect::top(px(8)), column_gap: px(8), row_gap: px(8), flex_wrap: FlexWrap::Wrap, align_content: AlignContent::FlexStart, overflow: Overflow::scroll_y(), ..row() }, ScrollPosition(Vec2::new(0.0, cx.ui.scroll[3])), Scroller(3)));
+    if let Some(slot) = slots.get(sel) {
+        for id in crate::attach::available(&it.row).iter().filter(|id| crate::attach::data().items[id.as_str()].slot == *slot) {
+            let on = mounted.contains(id);
+            let tag = if crate::attach::is_default(&it.row, id) { " (DEFAULT)" } else { "" };
+            let b = button(cmd, list, Node { padding: UiRect::axes(px(12), px(6)), ..row() }, Act::Att(id.as_str()), None, if on { GREEN } else { PANEL }, PANEL_HOVER, None);
+            txt(cmd, b, cx, &format!("{}{tag}", crate::attach::label(id).to_uppercase()), 24.0, Color::WHITE, Wt::Bold);
+        }
     }
     let foot = add(cmd, body, Node { column_gap: px(36), margin: UiRect::top(px(14)), ..row() });
     for (label, act, key) in [

@@ -21,6 +21,8 @@ using CUE4Parse.UE4.Assets.Exports.Texture;
 var root = args[0]; var usmap = args[1]; var outDir = args[2]; var cmd = args[3];
 Serilog.Log.Logger = new Serilog.LoggerConfiguration().MinimumLevel.Warning().WriteTo.Sink(new ConSink()).CreateLogger();
 if (root.EndsWith("Paks", StringComparison.OrdinalIgnoreCase)) CUE4Parse.Compression.OodleHelper.Initialize();
+// Detex (BC6H / BC7 / ETC textures some attachment skins use): unpack the embedded DLL next to the exe, then load it.
+{ var dll = Path.Combine(AppContext.BaseDirectory, "Detex.dll"); CUE4Parse_Conversion.Textures.BC.DetexHelper.LoadDll(dll); CUE4Parse_Conversion.Textures.BC.DetexHelper.Initialize(dll); }
 var provider = new DefaultFileProvider(root, SearchOption.AllDirectories, new VersionContainer(EGame.GAME_UE5_5), StringComparer.OrdinalIgnoreCase);
 provider.MappingsContainer = new FileUsmapTypeMappingsProvider(usmap);
 provider.ReadScriptData = true;
@@ -84,7 +86,7 @@ switch (cmd)
         { var m = provider.LoadPackageObject<USkeletalMesh>(args[4]); for (int i = 0; i < m.ReferenceSkeleton.FinalRefBoneInfo.Length; i++) { var t = m.ReferenceSkeleton.FinalRefBonePose[i]; Console.WriteLine($"{m.ReferenceSkeleton.FinalRefBoneInfo[i].Name} parent={m.ReferenceSkeleton.FinalRefBoneInfo[i].ParentIndex} T=({t.Translation.X:F2},{t.Translation.Y:F2},{t.Translation.Z:F2}) Q=({t.Rotation.X:F3},{t.Rotation.Y:F3},{t.Rotation.Z:F3},{t.Rotation.W:F3})"); } break; }
     case "att": // att <attlib.json>: every library mesh -> <outDir>/att/<id>/ (+ static-mesh sockets in the json)
         foreach (var e in JsonSerializer.Deserialize<List<AttLib>>(File.ReadAllText(args[4]))!)
-        { try { ExportMesh(e.mesh, e.id, "att"); } catch (Exception ex) { Console.WriteLine($"att fail {e.id}: {ex.Message}"); } }
+        { try { ExportMesh(e.mesh, e.id, "att", e.materials); } catch (Exception ex) { Console.WriteLine($"att fail {e.id}: {ex.Message}"); } }
         break;
     case "mesh": ExportMesh(args[4], args.Length > 5 ? args[5] : Path.GetFileNameWithoutExtension(args[4])); break;
     case "anim": foreach (var a in args.Skip(4)) ExportAnim(a); break;
@@ -110,7 +112,7 @@ void ExportMesh(string asset, string name, string sub = "", string[]? matOverrid
     for (int i = 0; i < slots.Count; i++)
     {
         var (slot, mref) = slots[i];
-        var mi = (matOverride != null && i < matOverride.Length ? provider.LoadPackageObject<UMaterialInterface>(matOverride[i]) : null) ?? mref?.Load<UMaterialInterface>();
+        var mi = (matOverride != null && i < matOverride.Length && matOverride[i] != "" ? provider.LoadPackageObject<UMaterialInterface>(matOverride[i]) : null) ?? mref?.Load<UMaterialInterface>();
         if (mi == null) { mats.Add(new { slot }); continue; }
         var p = new CMaterialParams2(); mi.GetParams(p, EMaterialDepth.TopLayerOnly);
         var tex = new Dictionary<string, string>();
@@ -261,7 +263,7 @@ List<(string path, string? skel)> ScanSkms()
     File.WriteAllLines(cache, res.Select(r => r.Item1 + "	" + r.Item2));
     return res;
 }
-class AttLib { public string id { get; set; } = ""; public string mesh { get; set; } = ""; }
+class AttLib { public string id { get; set; } = ""; public string mesh { get; set; } = ""; public string[]? materials { get; set; } }
 class AttPart { public string row { get; set; } = ""; public string cls { get; set; } = ""; public string? socket { get; set; } public string mesh { get; set; } = ""; }
 class AttCfg { public string? receiver { get; set; } public List<AttPart> parts { get; set; } = new(); }
 class GunCfg { public string[]? materials { get; set; } public string? name { get; set; } public string? skm { get; set; } public string[]? extraDirs { get; set; } public bool? skip { get; set; } public bool? noWeaponClips { get; set; } public bool? weaponOnly { get; set; } public string[]? variants { get; set; } }

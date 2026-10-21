@@ -93,6 +93,7 @@ fn montage() -> Montage {
         blend_in: 0.25,
         blend_out: 0.25, // montage BlendIn/BlendOut unset = UE defaults
         weapon: None,
+        rate: 1.0,
     }
 }
 
@@ -170,5 +171,5 @@ fn flinch(time: Res<Time>, ready: Res<crate::dev::Ready>, mut dev: Local<Option<
     info!("flinch montage {n}");
     let row = inv.map(|i| i.slots[i.current].name.to_string()).unwrap_or_default();
     // length 1.1 s from the baked clip; PlayAnimMontage defaults BlendIn/Out 0.25.
-    out.write(MontageStarted { row, kind: ActionKind::CameraAdjust, montage: Montage { path, length: 1.1, notifies: vec![], blend_in: 0.25, blend_out: 0.25, weapon: None } });
+    out.write(MontageStarted { row, kind: ActionKind::CameraAdjust, montage: Montage { path, length: 1.1, notifies: vec![], blend_in: 0.25, blend_out: 0.25, weapon: None, rate: 1.0 } });
 }

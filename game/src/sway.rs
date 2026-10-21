@@ -353,7 +353,7 @@ fn tick_motion(
     let (mut pos, mut rot) = (m.pos, m.rot);
     if let Some(a) = &mut m.active {
         let prev = a.t;
-        a.t += dt * a.playback; // ponytail: WeaponAttributeSet ADSSpeed attribute treated as 1.0
+        a.t += dt * a.playback * inv.slots[inv.current].mods.ads; // AC: AdditivePlayback += dt x Playback x ADSSpeed
         a.acc += (sample(&a.c.pos, a.t) - sample(&a.c.pos, prev)).abs();
         let end_v = sample(&a.c.pos, end_time(&a.c.pos));
         let prog = Vec3::new(ratio(a.acc.x, a.total.x), ratio(a.acc.y, a.total.y), ratio(a.acc.z, a.total.z)).clamp(Vec3::ZERO, Vec3::ONE);

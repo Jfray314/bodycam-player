@@ -225,6 +225,9 @@ fn tick(time: Res<Time>, mut rec: ResMut<Recoil>, mut fired: MessageReader<Fired
         let w = &inv.slots[inv.current];
         for e in fired.read() {
             rec.play(&w.anims["RecoilData"], e.aiming, w.stats.fire_rate.unwrap_or(0.1), w.full_auto, &mut rng);
+            // attachment VerticalRecoil / HorizontalRecoil / KickHip / KickUp multipliers
+            let m = &w.mods;
+            (rec.rot_t.y, rec.rot_t.z, rec.loc_t.x, rec.loc_t.z) = (rec.rot_t.y * m.pitch, rec.rot_t.z * m.yaw, rec.loc_t.x * m.kick, rec.loc_t.z * m.kick_up);
         }
     }
     rec.tick(time.delta_secs());
