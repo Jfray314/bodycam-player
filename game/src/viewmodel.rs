@@ -606,6 +606,11 @@ fn base_loop(
     let now = time.elapsed_secs();
     for (mut player, mut tr, link) in &mut players {
         let Ok(mut anim) = roots.get_mut(link.0) else { continue };
+        // Items (drone, grenades, knife) have no "<Fire prefix>Idle_Loop01": their idle is the BAS IdlePose loop.
+        let want = match anims["IdlePose"]["path"].as_str().map(clip_of) {
+            Some(i) if !anim.nodes.contains_key(&want) => i,
+            _ => want.clone(),
+        };
         if now < anim.montage_until || anim.current.as_deref() == Some(want.as_str()) {
             continue;
         }

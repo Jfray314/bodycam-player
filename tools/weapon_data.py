@@ -110,7 +110,7 @@ for name, row in load('/Game/BodycamCore/ItemsDefinition/Gameplay/DT_PerkItems.D
     if not bas:
         continue
     extra = {}
-    if name in ('Grenade G67', 'Grenade G68'):  # clips the BAS does not list (GA_Character_Aim_Grenade cancel, hold pose)
+    if name.startswith('Grenade'):  # clips the BAS does not list: ABP_Grenade (every grenade's overlay ABP) plays the G67 cancel / hold pose
         G = '/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_'
         extra = {k: expand({'Character': G + v + '.A_FP_G67_' + v}) for k, v in (('CancelOverhand', 'Cancel_Overhand'), ('OverhandLoop', 'Overhand_Loop'))}
     if name == 'Knife':  # Knife_C.PlayThrowAnimation (A_FP_Knife_Throw_Montage); RMB aim = Windup hold, release = WindDown (no montages: sequences)

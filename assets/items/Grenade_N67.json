@@ -1,5 +1,22 @@
 {
- "extra": {},
+ "extra": {
+  "CancelOverhand": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Cancel_Overhand.A_FP_G67_Cancel_Overhand",
+    "length": 1.5333333,
+    "rate": 1.0,
+    "notifies": []
+   }
+  },
+  "OverhandLoop": {
+   "Character": {
+    "path": "/BodycamAnimationFramework/Animations/Grenade/G67/Character/A_FP_G67_Overhand_Loop.A_FP_G67_Overhand_Loop",
+    "length": 3.4666667,
+    "rate": 1.0,
+    "notifies": []
+   }
+  }
+ },
  "row": "Grenade N67",
  "item_class": "Item.Grenade.Grenade.Grenade.Grenade N67",
  "actor": "/Game/BodycamWeapons/Core/Blueprint/Grenade/n74.n74_C",

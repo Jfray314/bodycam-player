@@ -35,9 +35,13 @@ for f in sorted(glob.glob(os.path.join(weapons, "*.json"))):
     out[GUN_NAME.get(row, row)] = e
 # Perk items (drone): DT_PerkItems default attachments -> DT_PerkSkins meshes (Frame = receiver, Rotor/Propeller/Antenna/FPV Camera/Led/Nut = parts)
 pi, ps = rows("Gameplay/DT_PerkItems.json"), rows("Skins/DT_PerkSkins.json")
+# BP_FPV_Drone.DefaultBasicBundle (DT_BasicBundles "Kamikaze Basic Bundle") adds the battery + Long Range Device Explosive (PG-9 warhead).
+bundles = rows("DT_BasicBundles.json")
 for prow in ("Kamikaze",):
     e = {"receiver": None, "parts": []}
-    for n in [a["RowName"] for a in pi[prow]["DefaultAttachments"]]:
+    names = [a["RowName"] for a in pi[prow]["DefaultAttachments"]]
+    names += [a["RowName"] for a in bundles["Kamikaze Basic Bundle"]["ShopBundleRows"] if a["RowName"] not in names]
+    for n in names:
         sk = ps.get(shop[n]["AssociatedItemSkinRow"]["RowName"])
         cls = pi.get(sk["AssociatedGameplayRow"]["RowName"], {}).get("ItemClassID", "") if sk else ""
         if sk and sk.get("SkeletalMesh"):
