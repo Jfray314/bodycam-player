@@ -163,7 +163,7 @@ fn spawn(mut cmd: Commands, assets: Res<AssetServer>, mut mats: ResMut<Assets<Vh
                 h.spawn(Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, align_items: AlignItems::End, ..default() }).with_children(|c| {
                     text(c, &ki, "WAITING FOR CONNECTION...", 32.0, Color::WHITE, ()); // TS_Headline32
                     // SizeBox 540: M_UI_LoadingBar (material compiled away; matched to the game's screen): 28 grey segments that
-                    // fill left to right. ponytail: the fill follows time (no load progress), full once the level is up.
+                    // fill left to right with the level load (drive()).
                     c.spawn(Node { width: dp(540.0), height: dp(18.0), margin: UiRect::top(dp(14.0)), column_gap: dp(7.7), ..default() }).with_children(|bar| {
                         for i in 0..SEGMENTS {
                             bar.spawn((Node { width: dp(10.5), height: percent(100), ..default() }, BackgroundColor(Color::srgb(0.62, 0.62, 0.62)), Bar(i)));
@@ -260,7 +260,14 @@ fn drive(
         mat.p = Vec4::new(t, if on { bright } else { 0.0 }, blur, 0.0);
     }
     dot.0 = Color::linear_rgba(0.526042, 0.0, 0.0, if t.fract() < 0.5 { 1.0 } else { 0.0 });
-    let lit = if map.as_ref().is_none_or(|m| m.ready()) { SEGMENTS } else { ((t * 0.25).fract() * SEGMENTS as f32) as usize + 1 };
+    // Load phases (Bevy has no byte progress for one glTF): file loading creeps toward 85 %, the instanced scene is 93 %,
+    // the settled level fills the bar.
+    let lit = match map.as_deref() {
+        None => SEGMENTS,
+        Some(m) if m.ready() => SEGMENTS,
+        Some(m) if m.frames != i32::MAX => SEGMENTS * 93 / 100,
+        Some(_) => 1 + ((1.0 - (-t / 6.0).exp()) * 0.85 * SEGMENTS as f32) as usize,
+    };
     for (b, mut v) in &mut bar {
         *v = if b.0 < lit { Visibility::Inherited } else { Visibility::Hidden };
     }

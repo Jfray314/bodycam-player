@@ -96,6 +96,7 @@ for i, it in meta["items"].items():
     grip = (wi.get(it["gp"], {}).get("GameplayDataDefinition", {}).get("CosmeticEffects") or {}).get("Cosmetic.Weapon.Anim.Idle")
     if grip: e["grip"] = grip.rsplit(".", 1)[-1]
     if it["icon"]: e["icon"] = it["icon"]
+    elif os.path.exists(f"{M}/../ui/tex/icons/gen_{it['glb']}.png"): e["icon"] = "gen_" + it["glb"]  # no ItemIcons: tools/blender/icon_render.py
     if it["cls"].split(".")[0] in ("Optic", "Canted Optic") and (r := reticle(it["glb"], it["cls"])): e["reticle"] = r
     items[i] = e
 

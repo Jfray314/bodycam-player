@@ -270,15 +270,41 @@ fn icon_of(row: &str) -> String {
     }
 }
 
-/// DT_PerkSkins / DT_OperatorSkins ItemIcons of the gear rows (assets-local/ui/tex/icons).
+/// DT_PerkItems rows of each gear slot as the game lists them (SWAP EXPLOSIVE / MELEE / GADGET): row, DT_PerkSkins ItemName,
+/// ItemIcons (assets-local/ui/tex/icons), whether this build plays it (items.rs / perks.rs). The rest show locked, as on an
+/// account that has not unlocked them.
+const GEAR: [&[(&str, &str, &str, bool)]; 3] = [
+    &[
+        ("Grenade G67", "Frag Grenade", "icons/GrenadeG67", true),
+        ("Grenade Flash 9-Bangers", "Flash 9-Bangers", "icons/GrenadeFlash9-Bangers", false),
+        ("Grenade Flash", "Flash", "icons/GrenadeFlash", true),
+        ("Grenade N67", "N67 Sticky", "icons/GrenadeN67", false),
+        ("Grenade RGN", "RGN Impact", "icons/GrenadeRGN", false),
+        ("Grenade G68", "MB78", "icons/GrenadeG68", false),
+    ],
+    &[
+        ("Knife", "Knife", "icons/KnifeBaseReceiver", true),
+        ("Karambit", "Karambit", "icons/KarambitBaseArcticEchoez", false),
+        ("Folding", "Folding", "icons/FoldingBaseReceiver", false),
+        ("Blade", "Blade", "icons/BladeBaseReceiver", false),
+    ],
+    &[
+        ("Kamikaze", "Kamikaze", "icons/Kamikaze", true),
+        ("Sentinel", "Sentinel", "icons/Sentinel", false),
+        ("Trataxes", "Trataxes", "icons/Icon_Trataxes", false),
+        ("Kyoshin", "Kyoshin", "icons/Icon_Kyoshin", false),
+    ],
+];
+
 fn gear_icon(row: &str) -> &'static str {
-    match row {
-        r if r.contains("Flash") => "icons/GrenadeFlash",
-        r if r.contains("Grenade") => "icons/GrenadeG67",
-        "Knife" => "icons/KnifeBaseReceiver",
-        "Kamikaze" => "icons/Kamikaze",
-        _ => "icons/DefaultOperator_02",
-    }
+    GEAR.iter().flat_map(|g| g.iter()).find(|g| g.0 == row).map_or("icons/DefaultOperator_02", |g| g.2)
+}
+
+/// Red padlock (the game's locked-item badge) drawn with nodes.
+fn padlock(cmd: &mut Commands, p: Entity) {
+    let m = add(cmd, p, Node { position_type: PositionType::Absolute, right: px(10), top: px(8), width: px(22), height: px(28), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() });
+    add(cmd, m, (Node { width: px(14), height: px(12), border: UiRect { left: px(3), right: px(3), top: px(3), bottom: px(0) }, border_radius: BorderRadius::top(px(7)), ..default() }, BorderColor::all(RED)));
+    add(cmd, m, (Node { width: px(22), height: px(16), ..default() }, BackgroundColor(RED)));
 }
 
 const CARD_EDGE: Color = Color::srgb(0.2, 0.2, 0.22);
@@ -491,13 +517,14 @@ fn swap(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
         let cat = cats.get(cx.ui.swap_cat);
         cx.roster.0.iter().filter(|i| i.slot == slot && crate::attach::data().classes.get(&i.row) == cat).map(|i| (i.row.clone(), i.display.clone(), icon_of(&i.row), &i.row == eq, Act::SwapGun(i.row.clone()))).collect()
     } else {
-        // the gear rows this build plays (items.rs / perks.rs)
-        let (rows, cur): (&[&str], &String) = match kind {
-            2 => (&["Grenade G67", "Grenade Flash"], &cx.s.explosive),
-            3 => (&["Knife"], &cx.s.melee),
-            _ => (&["Kamikaze"], &cx.s.gadget),
-        };
-        rows.iter().map(|r| (r.to_string(), crate::items::display_name(r).to_string(), gear_icon(r).to_string(), *r == cur.as_str(), Act::Gear(kind - 2, r.to_string()))).collect()
+        let cur = [&cx.s.explosive, &cx.s.melee, &cx.s.gadget][kind - 2];
+        GEAR[kind - 2]
+            .iter()
+            .map(|(r, name, icon, ok)| {
+                let act = if *ok { Act::Gear(kind - 2, r.to_string()) } else { Act::Toast(format!("{name} is locked.")) };
+                (r.to_string(), name.to_string(), icon.to_string(), *r == cur.as_str(), act)
+            })
+            .collect()
     };
     let cur = opts.iter().find(|o| o.3);
     title(cmd, body, cx, cur.map_or("", |o| o.1.as_str()));
@@ -508,12 +535,17 @@ fn swap(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     let list = add(cmd, body, Node { width: percent(100), column_gap: px(10), row_gap: px(10), flex_wrap: FlexWrap::Wrap, ..row() });
     for (_, name, icon, on, act) in &opts {
         let c = card(cmd, list, cx, if kind < 2 { 300.0 } else { 200.0 }, 190.0, "", icon, name, act.clone(), if *on { Color::WHITE } else { CARD_EDGE });
+        if matches!(act, Act::Toast(_)) {
+            padlock(cmd, c);
+        }
         if *on {
             let m = add(cmd, c, Node { position_type: PositionType::Absolute, right: px(8), top: px(8), ..default() });
             img(cmd, m, cx, "T_UI_Checkmark", 28.0, 28.0, Color::WHITE);
         }
     }
     let foot = foot_buttons(cmd, body, cx, &[("[ESC] BACK", Act::Back, Some(KeyCode::Escape), false)]);
+    let open = opts.iter().filter(|o| !matches!(o.4, Act::Toast(_))).count();
+    txt(cmd, foot, cx, &format!("[{open}/{}]", opts.len()), 24.0, GREY, Wt::Bold);
     if cur.is_some() {
         let e = add(cmd, foot, (Node { padding: UiRect::axes(px(16), px(8)), column_gap: px(8), ..row() }, BackgroundColor(Color::srgb(0.1, 0.25, 0.12))));
         img(cmd, e, cx, "T_UI_Checkmark", 22.0, 22.0, GREEN);
