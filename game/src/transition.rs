@@ -53,7 +53,16 @@ struct LoadingUi;
 #[derive(Component)]
 struct RecDot;
 #[derive(Component)]
-struct Bar;
+struct Bar(usize);
+/// "CAM DISCONNECTED" (Ki 34) and the tip (Ki 18) draw larger in the game than their design sizes (measured on its 1080p
+/// loading screen: 27 and 13.8 px per glyph); the 24 / 32 px texts match as they are.
+const CAM_PX: f32 = 45.0;
+const TIP_PX: f32 = 24.0;
+const SEGMENTS: usize = 28;
+#[derive(Component)]
+struct BlurCopy;
+#[derive(Component)]
+struct BlurMain;
 /// Font size in 1920x1080 design px.
 #[derive(Component)]
 struct Fs(f32);
@@ -83,6 +92,8 @@ fn text(cmd: &mut ChildSpawnerCommands, font: &Handle<Font>, s: &str, size: f32,
 
 fn spawn(mut cmd: Commands, assets: Res<AssetServer>, mut mats: ResMut<Assets<VhsMat>>) {
     let ki: Handle<Font> = assets.load("fonts/Ki-Bold.otf"); // Ki_Font "Default" typeface
+    // TS_Body24Grey / the tip rich text: the lighter Ki weight (the game's loading screen header is thinner than the headlines)
+    let kim: Handle<Font> = assets.load("ui/Ki-Medium.otf");
     // Vhs_01.bk2, all 5711 frames as luma cells (vhs.wesl); data texture, linear
     let frames: Handle<Image> = assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load("textures/fx/vhs_01_atlas.png");
     let grey24 = Color::linear_rgb(0.701102, 0.701102, 0.701102); // TS_Body24Grey
@@ -94,8 +105,27 @@ fn spawn(mut cmd: Commands, assets: Res<AssetServer>, mut mats: ResMut<Assets<Vh
         r.spawn((full.clone(), MaterialNode(mats.add(VhsMat { p: Vec4::new(0.0, 1.0, 5.0, 0.0), frames: frames.clone() }))));
         // OverlaySlot HAlign/VAlign_Center, Ki 34, ToUpper
         let centre = Node { position_type: PositionType::Absolute, width: percent(100), height: percent(100), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() };
-        r.spawn(centre.clone()).with_children(|c| text(c, &ki, "CAM DISCONNECTED", 34.0, Color::linear_rgb(1.0, 0.0, 0.0), (Disc, Visibility::Hidden)));
-        r.spawn(centre).with_children(|c| text(c, &ki, "CAM CONNECTED", 34.0, Color::linear_rgb(0.0, 1.0, 0.144128), (Conn, Visibility::Hidden)));
+        // The panel's BackgroundBlur covers the text too (blurred "CAM DISCONNECTED" on the loading screen): offset copies
+        // (BlurCopy) fade in with the blur strength. ponytail: 8 copies on a 5 px ring stand in for the real blur kernel.
+        let blurred = |c: &mut ChildSpawnerCommands, s: &str, col: Color, marker: (Visibility,)| {
+            c.spawn((Node::default(), marker.0)).with_children(|b| {
+                for k in 0..8 {
+                    let a = k as f32 * std::f32::consts::TAU / 8.0;
+                    b.spawn(Node { position_type: PositionType::Absolute, left: dp(5.0 * a.cos()), top: dp(5.0 * a.sin()), ..default() })
+                        .with_children(|o| text(o, &ki, s, CAM_PX, col.with_alpha(0.0), BlurCopy));
+                }
+                text(b, &ki, s, CAM_PX, col, BlurMain);
+            })
+            .id()
+        };
+        r.spawn(centre.clone()).with_children(|c| {
+            let e = blurred(c, "CAM DISCONNECTED", Color::linear_rgb(1.0, 0.0, 0.0), (Visibility::Hidden,));
+            c.commands().entity(e).insert(Disc);
+        });
+        r.spawn(centre).with_children(|c| {
+            let e = blurred(c, "CAM CONNECTED", Color::linear_rgb(0.0, 1.0, 0.144128), (Visibility::Hidden,));
+            c.commands().entity(e).insert(Conn);
+        });
         // W_LoadingMenu VerticalBox_68: 68.79 px spacer, top row, fill, bottom row, 68.79 px spacer
         r.spawn((
             Node { flex_direction: FlexDirection::Column, padding: UiRect::vertical(dp(68.786511)), ..full.clone() },
@@ -103,19 +133,21 @@ fn spawn(mut cmd: Commands, assets: Res<AssetServer>, mut mats: ResMut<Assets<Vh
         ))
         .with_children(|v| {
             v.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, padding: UiRect::horizontal(dp(81.701225)), ..default() }).with_children(|h| {
-                // ponytail: W_BatteryIndicator draws M_UI_BatteryIndicator (graph compiled away): an outlined cell at BatteryCharge 0.8, x1.1
+                // W_BatteryIndicator draws M_UI_BatteryIndicator (graph compiled away; matched to the game's screen): an outlined
+                // cell at BatteryCharge 0.8 with the terminal nub on the right
                 h.spawn(Node { width: dp(44.0), height: dp(22.0), border: UiRect::all(dp(2.5)), padding: UiRect::all(dp(2.5)), ..default() })
                     .insert(BorderColor::all(Color::WHITE))
                     .with_children(|b| {
                         b.spawn((Node { width: percent(80), height: percent(100), ..default() }, BackgroundColor(Color::WHITE)));
                     });
+                h.spawn((Node { width: dp(4.0), height: dp(10.0), ..default() }, BackgroundColor(Color::WHITE)));
                 h.spawn(Node { flex_grow: 1.0, ..default() });
-                text(h, &ki, "BODY EARLY ACCESS", 24.0, grey24, ());
+                text(h, &kim, "BODY EARLY ACCESS", 24.0, grey24, ());
                 h.spawn(Node { width: dp(10.0), ..default() });
-                text(h, &ki, &today(), 24.0, grey24, ());
+                text(h, &kim, &today(), 24.0, grey24, ());
                 h.spawn(Node { width: dp(10.0), ..default() });
-                // ponytail: W_SystemInfoConfigEntry ProjectVersion / BuildVersion read the game's config; this build's version here
-                text(h, &ki, env!("CARGO_PKG_VERSION"), 24.0, grey24, ());
+                // W_SystemInfoConfigEntry ProjectVersion / BuildVersion (the game's config values, as its loading screen shows them)
+                text(h, &kim, "Project Version: V0.8.12.19346 Build Version: 80", 24.0, grey24, ());
                 h.spawn(Node { flex_grow: 1.0, ..default() });
                 text(h, &ki, "REC", 32.0, dark32, ());
                 // Image_808: M_UI_RecIndicator 30x30, tint (0.526, 0, 0). ponytail: material compiled away; a dot that blinks at 1 Hz
@@ -125,14 +157,18 @@ fn spawn(mut cmd: Commands, assets: Res<AssetServer>, mut mats: ResMut<Assets<Vh
             v.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::End, padding: UiRect { left: dp(81.701225), right: dp(66.634717), ..default() }, ..default() }).with_children(|h| {
                 // SizeBox 870, Tip rich text: DT_RichTextLoading Gray / White, Ki 18
                 h.spawn(Node { width: dp(870.0), ..default() }).with_children(|s| {
-                    s.spawn((Text::new("Tip: "), TextFont { font: ki.clone().into(), font_size: 18.0.into(), ..default() }, TextColor(Color::linear_rgb(0.286275, 0.286275, 0.286275)), Fs(18.0)))
-                        .with_child((TextSpan::new(tip), TextFont { font: ki.clone().into(), font_size: 18.0.into(), ..default() }, TextColor(Color::linear_rgb(0.701961, 0.701961, 0.701961)), Fs(18.0)));
+                    s.spawn((Text::new("Tip: "), TextFont { font: kim.clone().into(), font_size: TIP_PX.into(), ..default() }, TextColor(Color::linear_rgb(0.286275, 0.286275, 0.286275)), Fs(TIP_PX)))
+                        .with_child((TextSpan::new(tip), TextFont { font: kim.clone().into(), font_size: TIP_PX.into(), ..default() }, TextColor(Color::linear_rgb(0.701961, 0.701961, 0.701961)), Fs(TIP_PX)));
                 });
                 h.spawn(Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, align_items: AlignItems::End, ..default() }).with_children(|c| {
                     text(c, &ki, "WAITING FOR CONNECTION...", 32.0, Color::WHITE, ()); // TS_Headline32
-                    // SizeBox 540: M_UI_LoadingBar. ponytail: material compiled away; an indeterminate sweep
-                    c.spawn((Node { width: dp(540.0), height: dp(6.0), margin: UiRect::top(dp(10.0)), overflow: Overflow::clip(), ..default() }, BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.15))))
-                        .with_child((Node { position_type: PositionType::Absolute, width: percent(30), height: percent(100), ..default() }, BackgroundColor(Color::WHITE), Bar));
+                    // SizeBox 540: M_UI_LoadingBar (material compiled away; matched to the game's screen): 28 grey segments that
+                    // fill left to right. ponytail: the fill follows time (no load progress), full once the level is up.
+                    c.spawn(Node { width: dp(540.0), height: dp(18.0), margin: UiRect::top(dp(14.0)), column_gap: dp(7.7), ..default() }).with_children(|bar| {
+                        for i in 0..SEGMENTS {
+                            bar.spawn((Node { width: dp(10.5), height: percent(100), ..default() }, BackgroundColor(Color::srgb(0.62, 0.62, 0.62)), Bar(i)));
+                        }
+                    });
                 });
             });
         });
@@ -185,7 +221,8 @@ fn drive(
         Single<&mut Visibility, With<LoadingUi>>,
     )>,
     mut dot: Single<&mut BackgroundColor, With<RecDot>>,
-    mut bar: Single<&mut Node, With<Bar>>,
+    mut bar: Query<(&Bar, &mut Visibility), (Without<Root>, Without<Disc>, Without<Conn>, Without<LoadingUi>)>,
+    mut texts: Query<(&mut TextColor, Has<BlurCopy>), Or<(With<BlurCopy>, With<BlurMain>)>>,
 ) {
     let dt = time.delta_secs();
     let m = &mut *mode;
@@ -223,7 +260,14 @@ fn drive(
         mat.p = Vec4::new(t, if on { bright } else { 0.0 }, blur, 0.0);
     }
     dot.0 = Color::linear_rgba(0.526042, 0.0, 0.0, if t.fract() < 0.5 { 1.0 } else { 0.0 });
-    bar.left = percent((t * 0.6).fract() * 130.0 - 30.0);
+    let lit = if map.as_ref().is_none_or(|m| m.ready()) { SEGMENTS } else { ((t * 0.25).fract() * SEGMENTS as f32) as usize + 1 };
+    for (b, mut v) in &mut bar {
+        *v = if b.0 < lit { Visibility::Inherited } else { Visibility::Hidden };
+    }
+    let k = (blur / 5.0).clamp(0.0, 1.0);
+    for (mut c, copy) in &mut texts {
+        c.0 = c.0.with_alpha(if copy { 0.16 * k } else { 1.0 - 0.6 * k });
+    }
 }
 
 /// TextFont sizes are design px at 1080 lines: scale with the window height.
