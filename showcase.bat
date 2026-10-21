@@ -8,7 +8,7 @@ rem   showcase.bat map     the real lobby map, you drive
 rem Timeline seconds count from "viewmodel ready"; tweak SHOW below to re-cut it.
 setlocal
 cd /d "%~dp0"
-set SHOW=LookL@3:1.2,W@4:2,LookR@4.4:1.2,RMB@7:4,LMB@7.8,LMB@8.3,LMB@8.8,LMB@9.4:1.2,R@12,J@16,C@20,Z@21,C@23,Z@23.2,2@25,RMB@27:2.6,LMB@27.7,LMB@28.3,LMB@28.9,R@30,3@33,LookL@34.2:0.7,RMB@35.5:2.6,LMB@37.3,LookR@41.5:0.7,4@44,LMB@46,LMB@47.2,5@50,LMB@52,W@55:2.5,LookR@57.5:0.6,F@61,1@64,Hit@67,Kill@69
+set SHOW=LookL@3:1.2,W@4:2,LookR@4.4:1.2,RMB@7:4,LMB@7.8,LMB@8.3,LMB@8.8,LMB@9.4:1.2,R@12,J@16,C@20,Z@21,C@23,Z@23.2,2@25,RMB@27:2.6,LMB@27.7,LMB@28.3,LMB@28.9,R@30,3@33,LookL@34.2:0.7,RMB@35.5:2.6,LMB@37.3,LookR@41.5:0.7,4@44,LMB@46,LMB@47.2,5@50,LMB@52,W@55:2.5,LookR@57.5:0.6,F@61,1@64,Hit@67,Kill@67.2
 
 if /i "%1"=="map" (
   set BODYCAM_MAP=

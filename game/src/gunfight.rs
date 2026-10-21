@@ -160,7 +160,7 @@ impl BotGun<'_, '_> {
                 self.near.write(NearMiss { row: SHOOTER_WEAPON.into(), origin_dist_cm: to.length() * 100.0, closest_dist_cm: miss * 100.0 });
             }
             if miss < HIT_RADIUS {
-                self.dmg.write(PlayerDamage(DAMAGE));
+                self.dmg.write(PlayerDamage(DAMAGE, Some(crate::status::hit_push(dir, target, DAMAGE, 35.0, 2100.0)))); // M4A1 Damage / RagdollForce
                 hit = true;
             } else if miss < WHIZ_RADIUS {
                 self.whiz.write(BulletFly { distance_cm: miss * 100.0 });

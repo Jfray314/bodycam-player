@@ -41,10 +41,13 @@ pub struct CharacterState {
     pub clip: String,
     pub blend: (f32, f32),
     pub dead: bool,
+    /// Last shot's ragdoll impulse (N s), world hit point, time (s): WW_RagdollSystem PendingImpulse, applied on Ragdoll Start
+    /// within 0.5 s (ClearPendingImpulse timer).
+    pub push: Option<(Vec3, Vec3, f32)>,
 }
 impl Default for CharacterState {
     fn default() -> Self {
-        Self { pitch: 0.0, vel: Vec3::ZERO, grounded: true, crouched: false, sprinting: false, lean: 0.0, item: String::new(), aiming: false, fired: 0, hits: 0, montage: 0, clip: String::new(), blend: (0.25, 0.25), dead: false }
+        Self { pitch: 0.0, vel: Vec3::ZERO, grounded: true, crouched: false, sprinting: false, lean: 0.0, item: String::new(), aiming: false, fired: 0, hits: 0, montage: 0, clip: String::new(), blend: (0.25, 0.25), dead: false, push: None }
     }
 }
 
@@ -102,6 +105,7 @@ fn sync_local(
     mut fired: MessageReader<Fired>,
     mut montages: MessageReader<MontageStarted>,
     mut dmg: MessageReader<PlayerDamage>,
+    time: Res<Time>,
 ) {
     let Ok((pl, inv, mut s)) = p.single_mut() else { return };
     s.pitch = pl.pitch;
@@ -113,7 +117,12 @@ fn sync_local(
         s.item = if slot.kind == crate::weapon::ItemKind::Grenade && slot.ammo == 0 { String::new() } else { slot.name.clone() };
     }
     s.fired += fired.read().count() as u32;
-    s.hits += dmg.read().count() as u32;
+    for d in dmg.read() {
+        s.hits += 1;
+        if let Some(h) = d.1 {
+            s.push = Some((h.impulse, h.at, time.elapsed_secs()));
+        }
+    }
     for m in montages.read().filter(|m| m.kind.on_body()) {
         s.montage += 1;
         s.clip = crate::viewmodel::clip_of(&m.montage.path);

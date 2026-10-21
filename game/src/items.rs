@@ -485,7 +485,7 @@ fn explode(
     } else if !blocked(ray, head, ignore, targets) {
         let f = falloff(dp, inner, outer, exp);
         if f > 0.0 && !flash_gren {
-            dmg.write(PlayerDamage(base * f));
+            dmg.write(PlayerDamage(base * f, None));
         }
     } else if flash_gren {
         // flash through geometry is still occluded by walls in the game's visibility check; here: no whiteout when blocked is not modelled (message already sent)

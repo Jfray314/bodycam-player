@@ -60,7 +60,9 @@ fn dev_keys(keys: Res<ButtonInput<KeyCode>>, cam: Single<&GlobalTransform, With<
         flash.write(Flashbang { at: ahead });
     }
     if keys.just_pressed(KeyCode::F11) {
-        dmg.write(PlayerDamage(10.0));
+        // Dev hit: an M4A1 chest shot from straight ahead (Damage 35 / RagdollForce 2100), so a kill right after knocks the body back.
+        let back = (cam.back().as_vec3() * Vec3::new(1.0, 0.0, 1.0)).normalize_or_zero();
+        dmg.write(PlayerDamage(10.0, Some(crate::status::hit_push(back, cam.translation() - Vec3::Y * 0.3, 35.0, 35.0, 2100.0))));
     }
     if keys.just_pressed(KeyCode::F12) {
         s.health = 0.0;

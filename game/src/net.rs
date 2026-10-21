@@ -8,7 +8,7 @@
 use crate::items::{KNIFE_DAMAGE, KNIFE_RADIUS, KNIFE_RANGE};
 use crate::audio::{PlayCue, RemoteSfx};
 use crate::player::{IgnoreTraces, Player};
-use crate::status::{PlayerDamage, SurvivorStatus};
+use crate::status::{HitPush, PlayerDamage, SurvivorStatus};
 use crate::weapon::{Fired, Health, Inventory, MontageStarted, RemoteShot, Stats};
 use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
 use bevy::prelude::*;
@@ -69,6 +69,8 @@ pub enum Ev {
     Blast { at: [f32; 3] },
     /// Host -> victim: apply damage (from = attacker).
     Damage(f32),
+    /// Host -> everyone: a shot's ragdoll impulse on `victim` (GCN_HitReaction, multicast Add Impulse).
+    Push { victim: u8, impulse: [f32; 3], at: [f32; 3] },
     Kill { killer: u8, victim: u8 },
     /// Bomb mode plant / defuse (bomb.rs).
     Bomb(crate::bomb::BombMsg),
@@ -509,7 +511,7 @@ fn apply(
     mut dmg: MessageWriter<PlayerDamage>,
     mut blast: MessageWriter<crate::items::DetonateFor>,
     mut st: ResMut<SurvivorStatus>,
-    me: Single<(&Transform, &Player)>,
+    me: Single<(&Transform, &Player, Entity)>,
     mut ray: MeshRayCast,
     ignore: Query<(), With<IgnoreTraces>>,
     body: Query<(), With<RemoteBody>>,
@@ -551,10 +553,15 @@ fn apply(
                             ray_capsule(origin, *dir, *feet, h, 0.35).filter(|(t, _)| *t < wall && *t <= FIRE_RANGE).map(|(t, y)| (*i, t, y / h))
                         })
                         .min_by(|a, b| a.1.total_cmp(&b.1));
-                    let Some((victim, _, frac)) = best else { continue };
+                    let Some((victim, t, frac)) = best else { continue };
                     let bone = if frac < 0.5 { "thigh" } else if frac < 0.72 { "spine_01" } else if frac < 0.85 { "spine_02" } else { "head" };
                     let amount = dmg_base * crate::weapon::bone_multiplier(bone);
-                    deal(net, &mut dmg, *from, victim, amount, now, bone);
+                    let force = net.stats.get(row).and_then(|s| s.ragdoll_force).unwrap_or(0.0);
+                    let push = crate::status::hit_push(*dir, origin + *dir * t, amount, dmg_base, force);
+                    deal(net, &mut dmg, *from, victim, amount, now, bone, Some(push));
+                    if let Some(mut c) = net.others.get(&victim).and_then(|o| o.ent).and_then(|e| chars.get_mut(e).ok()) {
+                        c.push = Some((push.impulse, push.at, now));
+                    }
                 }
             }
             Ev::Melee { origin, dir } => {
@@ -574,7 +581,7 @@ fn apply(
                         .min_by(|a, b| a.1.total_cmp(&b.1));
                     let wall = Dir3::new(d).ok().and_then(|dir| ray.cast_ray(Ray3d::new(o, dir), &MeshRayCastSettings::default().with_filter(&|e: Entity| !ignore.contains(e) && !body.contains(e))).first().map(|(_, h)| h.distance));
                     if let Some((victim, along)) = best && wall.is_none_or(|w| w > along.max(0.0) - 0.05) {
-                        deal(net, &mut dmg, *from, victim, KNIFE_DAMAGE, now, "melee");
+                        deal(net, &mut dmg, *from, victim, KNIFE_DAMAGE, now, "melee", None);
                     }
                 }
             }
@@ -606,7 +613,13 @@ fn apply(
                 }
             }
             Ev::Damage(a) => {
-                dmg.write(PlayerDamage(*a));
+                dmg.write(PlayerDamage(*a, None));
+            }
+            Ev::Push { victim, impulse, at } => {
+                let ent = if *victim == my_id { Some(me.2) } else { net.others.get(victim).and_then(|o| o.ent) };
+                if let Some(mut c) = ent.and_then(|e| chars.get_mut(e).ok()) {
+                    c.push = Some((Vec3::from(*impulse), Vec3::from(*at), now));
+                }
             }
             Ev::Kill { killer, victim } => {
                 info!("kill feed: player {killer} killed player {victim}");
@@ -663,7 +676,7 @@ fn blast_damage(
             let filter = |e: Entity| !ignore.contains(e) && !body.contains(e);
             let blocked = Dir3::new(d).ok().is_some_and(|dir| ray.cast_ray(Ray3d::new(b.origin, dir), &MeshRayCastSettings::default().with_filter(&filter)).first().is_some_and(|(_, h)| h.distance < d.length() - 0.15));
             if f > 0.0 && !blocked {
-                deal(net, &mut dmg, b.owner, v, base * f, now, "blast");
+                deal(net, &mut dmg, b.owner, v, base * f, now, "blast", None);
             }
         }
     }
@@ -683,10 +696,16 @@ fn targets_at(net: &Net, from: u8, tnow: f64, my_pos: Vec3, my_crouch: bool, hos
 }
 
 /// Host: apply `amount` to `victim` (the host itself or a client) and remember who hit last (kill credit).
-fn deal(net: &mut Net, dmg: &mut MessageWriter<PlayerDamage>, from: u8, victim: u8, amount: f32, now: f32, what: &str) {
+#[allow(clippy::too_many_arguments)]
+fn deal(net: &mut Net, dmg: &mut MessageWriter<PlayerDamage>, from: u8, victim: u8, amount: f32, now: f32, what: &str, push: Option<HitPush>) {
     info!("net: player {from} hit player {victim} ({what}) for {amount:.0}");
+    if let Some(p) = push {
+        for o in net.others.values_mut() {
+            o.link.push(from, Ev::Push { victim, impulse: p.impulse.to_array(), at: p.at.to_array() });
+        }
+    }
     if victim == 0 {
-        dmg.write(PlayerDamage(amount));
+        dmg.write(PlayerDamage(amount, push));
         net.host_last_by = Some((from, now));
     } else if let Some(o) = net.others.get_mut(&victim) {
         o.hp -= amount;

@@ -54,9 +54,8 @@ struct Def {
 const RAGDOLL: Group = Group::GROUP_2;
 /// Map trimeshes within this distance (m) of the corpse get colliders.
 const MAP_RADIUS: f32 = 6.0;
-// ponytail: no shot direction reaches here yet (CharacterState carries no hit vector); UE ApplyPointDamage pushes the hit
-// bone along ShotFromDirection * RagdollForce. A random horizontal knock on the chest stands in.
-const KNOCK: f32 = 25.0; // N s
+/// WW_RagdollSystem.InitPendingImpulse: a hit before Ragdoll Start is kept this long (s), then applied on start.
+const PENDING_S: f32 = 0.5;
 
 pub struct RagdollPlugin;
 impl Plugin for RagdollPlugin {
@@ -114,6 +113,7 @@ fn start_stop(
     roots: Query<(Entity, &BodyRoot, &ChildOf, Option<&Ragdoll>)>,
     globals: Query<&GlobalTransform>,
     locals: Query<(&Transform, &ChildOf)>,
+    time: Res<Time>,
 ) {
     for (root, r, co, rag) in &roots {
         let Ok(st) = chars.get(co.parent()) else { continue };
@@ -129,10 +129,11 @@ fn start_stop(
                     continue;
                 }
                 let mut bodies = HashMap::new();
-                let knock = {
-                    let a = rand::random::<f32>() * std::f32::consts::TAU;
-                    Vec3::new(a.cos(), 0.0, a.sin()) * KNOCK * (0.3 + 0.7 * rand::random::<f32>())
-                };
+                let push = st.push.filter(|p| time.elapsed_secs() - p.2 <= PENDING_S);
+                // AddImpulseAtLocation on HitBoneName: the body nearest the hit point.
+                let hit_bone = push.and_then(|p| {
+                    def.0.bodies.iter().filter(|b| b.bone != "root").filter_map(|b| Some((b, globals.get(*r.bones.get(&b.bone)?).ok()?.translation().distance(p.1)))).min_by(|a, b| a.1.total_cmp(&b.1)).map(|b| b.0.bone.clone())
+                });
                 for b in &def.0.bodies {
                     let (Some(&bone), true) = (r.bones.get(&b.bone), b.bone != "root") else { continue };
                     let Ok(g) = globals.get(bone) else { continue };
@@ -166,8 +167,8 @@ fn start_stop(
                         Transform::from_translation(pos).with_rotation(rot),
                         Part { bone },
                     ));
-                    if b.bone == "spine_03" {
-                        e.insert(ExternalImpulse { impulse: knock, torque_impulse: Vec3::ZERO });
+                    if let (Some(p), true) = (push, hit_bone.as_deref() == Some(b.bone.as_str())) {
+                        e.insert(ExternalImpulse::at_point(p.0, p.1, pos));
                     }
                     bodies.insert(b.bone.clone(), e.id());
                 }

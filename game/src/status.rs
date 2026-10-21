@@ -91,7 +91,20 @@ impl SurvivorStatus {
 
 /// Damage to the player (ApplyPointDamage -> K2_OnHealthChanged); `flinch` ponytail: Bodycam_Player's 0.1-0.15 s flinch not ported.
 #[derive(Message)]
-pub struct PlayerDamage(pub f32);
+pub struct PlayerDamage(pub f32, pub Option<HitPush>);
+
+/// GA_HitReaction -> GCN_HitReaction -> WW_RagdollSystem.AddImpulse: the shot's ragdoll impulse (N s) at the hit point.
+#[derive(Clone, Copy, Debug)]
+pub struct HitPush {
+    pub impulse: Vec3,
+    pub at: Vec3,
+}
+
+/// GA_HitReaction: NormalizedMagnitude = clamp(damage / MaxDamage, 0, 1) * RagdollForce; GCN_HitReaction pushes along
+/// FindLookAtRotation(TraceStart, hit) by it (1000 instead once the ragdoll lies on the ground). UE kg cm/s -> N s.
+pub fn hit_push(dir: Vec3, at: Vec3, damage: f32, max_damage: f32, ragdoll_force: f32) -> HitPush {
+    HitPush { impulse: dir.normalize_or_zero() * (damage / max_damage).clamp(0.0, 1.0) * ragdoll_force / 100.0, at }
+}
 
 /// Bodycam_Player.BulletFly: a bullet passed within `distance` cm of the player (whiz): Stress += 0.3.
 #[derive(Message)]
@@ -142,6 +155,14 @@ fn update(time: Res<Time>, p: Single<&Player>, mut s: ResMut<SurvivorStatus>) {
 mod tests {
     use super::*;
     use serde_json::Value;
+
+    #[test]
+    fn hit_push_scales_by_damage_fraction() {
+        // M4A1 body shot (35 of 35, RagdollForce 2100) = 21 N s along the shot; a leg shot at 0.5x halves it; headshot clamps.
+        assert!((hit_push(Vec3::X * 3.0, Vec3::ZERO, 35.0, 35.0, 2100.0).impulse - Vec3::X * 21.0).length() < 1e-4);
+        assert!((hit_push(Vec3::X, Vec3::ZERO, 17.5, 35.0, 2100.0).impulse.x - 10.5).abs() < 1e-4);
+        assert!((hit_push(Vec3::X, Vec3::ZERO, 140.0, 35.0, 2100.0).impulse.x - 21.0).abs() < 1e-4);
+    }
 
     /// Replays the recorded inputs of the bot-fight recordings (assets/status_reference.json, from tools/probe_status.py)
     /// through the status rules and compares against the recorded curves.
