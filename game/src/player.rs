@@ -349,9 +349,10 @@ fn movement(
     // not while aiming (Aiming rotation mode) or crouched (AllowedGait). GA_Character_Sprint needs acceleration.
     let within_100 = input.length() > 0.5 && input.x.atan2(input.y).to_degrees().abs() < 100.0;
     // GA_Reload_Base.TryBlockingSprint: cancels sprint and applies GE_BlockSprint for the whole reload.
-    let reloading = inv.is_some_and(|i| i.action.as_ref().is_some_and(|a| a.kind == crate::weapon::ActionKind::Reload));
+    let reloading = inv.as_ref().is_some_and(|i| i.action.as_ref().is_some_and(|a| a.kind == crate::weapon::ActionKind::Reload));
     p.sprinting = keys.pressed(KeyCode::ShiftLeft) && within_100 && !p.crouched && !p.aiming && !reloading;
     let max = if p.crouched { CROUCH } else if p.sprinting { SPRINT } else if p.aiming { ADS } else { WALK };
+    let max = max * inv.as_ref().map_or(1.0, |i| i.slots[i.current].mods.speed); // attachment Speed (stocks)
 
     let rot = Quat::from_rotation_y(p.yaw);
     let mut v = Vec3::new(p.vel.x, 0.0, p.vel.z);

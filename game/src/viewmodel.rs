@@ -890,7 +890,13 @@ fn grip_hand(
     mut tf: Query<(&mut Transform, &mut GlobalTransform)>,
     mut w: Local<f32>,
 ) {
-    static POSES: std::sync::OnceLock<HashMap<String, HashMap<String, [f32; 4]>>> = std::sync::OnceLock::new();
+    #[derive(serde::Deserialize)]
+    struct GripPose {
+        fingers: HashMap<String, [f32; 4]>,
+        /// hand_l relative to ik_hand_gun in the grip clip (tools/grip_poses.py)
+        hand_rot: [f32; 4],
+    }
+    static POSES: std::sync::OnceLock<HashMap<String, GripPose>> = std::sync::OnceLock::new();
     let poses = POSES.get_or_init(|| serde_json::from_str(include_str!("../../assets/grip_poses.json")).expect("grip_poses.json"));
     let (Some(cfg), Some(inv)) = (cfg, inv) else { return };
     let (root, anim) = *arms;
@@ -918,9 +924,11 @@ fn grip_hand(
     let q1 = Quat::from_rotation_arc((e - s).normalize_or_zero(), (e2 - s).normalize_or_zero());
     let h1 = e2 + q1 * (h - e);
     let q2 = Quat::from_rotation_arc((h1 - e2).normalize_or_zero(), (goal - e2).normalize_or_zero());
-    // ponytail: the hand keeps its IK-carried rotation; GripPose's socket rotation doesn't map onto the imported hand_l axes
-    // (it flips the hand), so only the socket position is used.
-    let hand_rot = q2 * q1 * gh.rotation;
+    // Orientation: the grip clip's hand relative to the gun (the GripPose socket's own rotation is in UE socket axes, not the
+    // imported hand_l axes); position: the socket.
+    let gun_rot = g(gun).map_or(Quat::IDENTITY, |t| t.rotation); // GunRoot = ik_hand_gun (identity attach)
+    let held = poses.get(pose).map_or(q2 * q1 * gh.rotation, |p| gun_rot * Quat::from_array(p.hand_rot));
+    let hand_rot = (q2 * q1 * gh.rotation).slerp(held, *w);
     let world = [(up, s, q1 * gu.rotation), (low, e2, q2 * q1 * gl.rotation), (hand, goal, hand_rot)];
     for (ent, pos, rot) in world {
         let pg = parents.get(ent).ok().and_then(|p| tf.get(p.parent()).ok()).map(|t| t.1.compute_transform()).unwrap_or_default();
@@ -931,7 +939,7 @@ fn grip_hand(
         }
     }
     // grip pose fingers, then refresh the globals under the arm (twist bones, fingers)
-    let fingers = poses.get(pose);
+    let fingers = poses.get(pose).map(|p| &p.fingers);
     let mut stack: Vec<(Entity, GlobalTransform)> = vec![];
     for (ent, _, _) in world {
         let pg = tf.get(ent).map(|t| *t.1).unwrap_or_default();

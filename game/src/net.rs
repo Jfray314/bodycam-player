@@ -716,7 +716,7 @@ fn deal(net: &mut Net, dmg: &mut MessageWriter<PlayerDamage>, from: u8, victim: 
 
 fn local_state(p: &Player, tf: &Transform, inv: Option<&Inventory>, cfg: Option<&crate::ui::settings::Settings>) -> NetState {
     let item = inv.map(|i| i.slots[i.current].name.clone()).unwrap_or_default();
-    let atts = cfg.and_then(|c| c.attachments.get(&item).cloned()).unwrap_or_default();
+    let atts = cfg.map(|c| crate::attach::picks(c, &item)).unwrap_or_default();
     NetState { pos: tf.translation.to_array(), yaw: p.yaw, pitch: p.pitch, vel: p.vel.to_array(), crouch: p.crouched, lean: p.lean, aiming: p.aiming, dead: p.dead, item, atts }
 }
 
@@ -855,6 +855,9 @@ fn drive_remotes(net: Res<Net>, time: Res<Time>, mut q: Query<(&mut Transform, &
         cs.sprinting = rs.vel.xz().length() > 4.0;
         if cs.item != rs.item {
             cs.item = rs.item.clone();
+        }
+        if cs.atts != rs.atts {
+            cs.atts = rs.atts.clone();
         }
     }
 }

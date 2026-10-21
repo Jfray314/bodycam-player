@@ -172,10 +172,12 @@ pub struct Mods {
     pub yaw: f32,
     pub kick: f32,
     pub kick_up: f32,
+    /// Speed: ALS UpdateDynamicMovementSettings MaxWalkSpeed = gait speed x Speed.
+    pub speed: f32,
 }
 impl Default for Mods {
     fn default() -> Self {
-        Mods { reload: 1.0, switch: 1.0, ads: 1.0, cam_v: 1.0, cam_h: 1.0, pitch: 1.0, yaw: 1.0, kick: 1.0, kick_up: 1.0 }
+        Mods { reload: 1.0, switch: 1.0, ads: 1.0, cam_v: 1.0, cam_h: 1.0, pitch: 1.0, yaw: 1.0, kick: 1.0, kick_up: 1.0, speed: 1.0 }
     }
 }
 

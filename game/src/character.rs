@@ -41,13 +41,15 @@ pub struct CharacterState {
     pub clip: String,
     pub blend: (f32, f32),
     pub dead: bool,
+    /// Attachment picks on `item` (attach.rs mounts them on the third-person gun).
+    pub atts: Vec<String>,
     /// Last shot's ragdoll impulse (N s), world hit point, time (s): WW_RagdollSystem PendingImpulse, applied on Ragdoll Start
     /// within 0.5 s (ClearPendingImpulse timer).
     pub push: Option<(Vec3, Vec3, f32)>,
 }
 impl Default for CharacterState {
     fn default() -> Self {
-        Self { pitch: 0.0, vel: Vec3::ZERO, grounded: true, crouched: false, sprinting: false, lean: 0.0, item: String::new(), aiming: false, fired: 0, hits: 0, montage: 0, clip: String::new(), blend: (0.25, 0.25), dead: false, push: None }
+        Self { pitch: 0.0, vel: Vec3::ZERO, grounded: true, crouched: false, sprinting: false, lean: 0.0, item: String::new(), aiming: false, fired: 0, hits: 0, montage: 0, clip: String::new(), blend: (0.25, 0.25), dead: false, atts: vec![], push: None }
     }
 }
 
@@ -106,8 +108,15 @@ fn sync_local(
     mut montages: MessageReader<MontageStarted>,
     mut dmg: MessageReader<PlayerDamage>,
     time: Res<Time>,
+    cfg: Option<Res<crate::ui::settings::Settings>>,
 ) {
     let Ok((pl, inv, mut s)) = p.single_mut() else { return };
+    if let Some(c) = &cfg {
+        let atts = crate::attach::picks(c, &s.item);
+        if s.atts != atts {
+            s.atts = atts;
+        }
+    }
     s.pitch = pl.pitch;
     s.vel = pl.vel;
     (s.grounded, s.crouched, s.sprinting, s.lean, s.aiming, s.dead) = (pl.grounded, pl.crouched, pl.sprinting, pl.lean, pl.aiming, pl.dead);

@@ -139,7 +139,12 @@ pub fn picks(s: &Settings, row: &str) -> Vec<String> {
 
 /// Effective parts: the DefaultAttachments with each pick replacing the default(s) of its slot.
 pub fn loadout(s: &Settings, row: &str) -> Vec<String> {
-    let picks = picks(s, row);
+    parts(row, &picks(s, row))
+}
+
+/// DefaultAttachments of `row` with `picks` replacing the defaults of their slots.
+pub fn parts(row: &str, picks: &[String]) -> Vec<String> {
+    let picks: Vec<String> = picks.iter().map(|id| data().aliases.get(id).unwrap_or(id)).filter(|id| available(row).contains(id)).cloned().collect();
     let slot = |id: &str| data().items.get(id).map(|i| i.slot.as_str());
     let mut out: Vec<String> = data().defaults.get(row).into_iter().flatten().filter(|d| !picks.iter().any(|p| slot(p) == slot(d))).cloned().collect();
     out.extend(picks);
@@ -252,7 +257,7 @@ pub struct AttState {
     pub eye_relief: f32,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct AttMount;
 #[derive(Component)]
 struct FlashLight;
@@ -266,7 +271,7 @@ impl Plugin for AttachPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<AttState>()
             .add_systems(Startup, scope_setup)
-            .add_systems(Update, (apply_mods, mount_sys, glass, switch_input, state, laser).chain())
+            .add_systems(Update, (apply_mods, mount_sys, body_atts, glass, switch_input, state, laser).chain())
             .add_systems(PostUpdate, scope.after(bevy::transform::TransformSystems::Propagate));
     }
 }
@@ -306,6 +311,7 @@ fn apply_mods(cfg: Option<Res<Settings>>, inv: Option<Single<&mut Inventory>>, m
             yaw: one("HorizontalRecoil"),
             kick: one("KickHip"),
             kick_up: one("KickUp"),
+            speed: one("Speed"),
         };
     }
 }
@@ -316,6 +322,76 @@ fn active_optic<'a>(row: &str, ids: &'a [String], idx: usize) -> Option<&'a str>
     let primary = ids.iter().find(|i| is_optic(row, i) && slot(i) == Some("optic"));
     let canted = ids.iter().find(|i| is_optic(row, i) && slot(i) == Some("canted_optic"));
     (if idx == 1 { canted.or(primary) } else { primary.or(canted) }).map(String::as_str)
+}
+
+/// Mounts `row`'s parts (`picks` over the defaults) on a spawned gun scene: the baked default parts that get placed or replaced
+/// are hidden, the rest spawn under their bones tagged with `marker`. No picks: the baked gun as is. Returns (part root, id).
+#[allow(clippy::too_many_arguments)]
+fn mount_parts(
+    cmd: &mut Commands,
+    assets: &AssetServer,
+    gun: Entity,
+    row: &str,
+    picks: &[String],
+    joints: &Query<(Entity, &Name)>,
+    parents: &Query<&ChildOf>,
+    vis: &mut Query<&mut Visibility>,
+    marker: impl Component + Clone,
+) -> Vec<(Entity, String)> {
+    let d = data();
+    let parts = parts(row, picks);
+    let placed = if picks.is_empty() { vec![] } else { place(row, &parts).0 };
+    for node in d.rows.get(row).and_then(|g| d.baked.get(g)).into_iter().flatten() {
+        let id = node.to_lowercase();
+        let keep = picks.is_empty() || (parts.contains(&id) && !placed.iter().any(|p| p.id == id));
+        if let Some(e) = joints.iter().find(|(e, n)| n.as_str() == node && root_of_entity(*e, gun, parents)).map(|j| j.0)
+            && let Ok(mut v) = vis.get_mut(e)
+        {
+            *v = if keep { Visibility::Inherited } else { Visibility::Hidden };
+        }
+    }
+    let mut out = vec![];
+    for p in placed {
+        let Some(bone) = joints.iter().find(|(e, n)| n.as_str().eq_ignore_ascii_case(&p.bone) && root_of_entity(*e, gun, parents)).map(|j| j.0) else { continue };
+        let scene: Handle<bevy::world_serialization::WorldAsset> = assets.load(GltfAssetLabel::Scene(0).from_asset(format!("models/attachments/{}.glb", d.items[p.id.as_str()].glb)));
+        let root = cmd.spawn((marker.clone(), Name::new(format!("att_{}", p.id)), WorldAssetRoot(scene), p.tf)).id();
+        cmd.entity(bone).add_child(root);
+        out.push((root, p.id));
+    }
+    out
+}
+
+/// Attachment parts on a third-person gun (remote players, the own world body): CharacterState.atts = that player's picks.
+#[derive(Component, Clone)]
+struct BodyAtt;
+#[derive(Component)]
+struct BodyAttKey(String);
+
+#[allow(clippy::too_many_arguments)]
+fn body_atts(
+    mut cmd: Commands,
+    assets: Res<AssetServer>,
+    guns: Query<(Entity, &crate::character::CharGun, &ChildOf, Option<&BodyAttKey>)>,
+    roots: Query<&ChildOf, With<crate::body::BodyRoot>>,
+    chars: Query<&crate::character::CharacterState>,
+    joints: Query<(Entity, &Name)>,
+    parents: Query<&ChildOf>,
+    children: Query<&Children>,
+    old: Query<(), With<BodyAtt>>,
+    mut vis: Query<&mut Visibility>,
+) {
+    for (gun, g, co, key) in &guns {
+        let Some(st) = g.joint.and(roots.get(co.parent()).ok()).and_then(|r| chars.get(r.parent()).ok()) else { continue };
+        let k = format!("{}:{}", st.item, st.atts.join(","));
+        if key.is_some_and(|x| x.0 == k) {
+            continue;
+        }
+        for e in children.iter_descendants(gun).filter(|e| old.contains(*e)) {
+            cmd.entity(e).despawn();
+        }
+        mount_parts(&mut cmd, &assets, gun, &st.item, &st.atts, &joints, &parents, &mut vis, BodyAtt);
+        cmd.entity(gun).insert(BodyAttKey(k));
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -356,26 +432,9 @@ fn mount_sys(
     *done = (Some(gun), key);
     st.scope = None;
     let d = data();
-    // No picks: the gun glb's baked default parts as they are. Otherwise the whole loadout is mounted here and the baked parts
-    // that got placed (or replaced) are hidden; a default that can't be placed keeps its baked node.
-    let parts = loadout(&cfg, &row);
-    let placed = if picks.is_empty() { vec![] } else { place(&row, &parts).0 };
-    for node in d.rows.get(&row).and_then(|g| d.baked.get(g)).into_iter().flatten() {
-        let id = node.to_lowercase();
-        let keep = picks.is_empty() || (parts.contains(&id) && !placed.iter().any(|p| p.id == id));
-        if let Some(e) = joints.iter().find(|(e, n)| n.as_str() == node && root_of_entity(*e, gun, &parents)).map(|j| j.0)
-            && let Ok(mut v) = vis.get_mut(e)
-        {
-            *v = if keep { Visibility::Inherited } else { Visibility::Hidden };
-        }
-    }
-    for p in &placed {
-        let Some(bone) = joints.iter().find(|(e, n)| n.as_str().eq_ignore_ascii_case(&p.bone) && root_of_entity(*e, gun, &parents)).map(|j| j.0) else { continue };
-        let item = &d.items[p.id.as_str()];
-        let scene: Handle<bevy::world_serialization::WorldAsset> = assets.load(GltfAssetLabel::Scene(0).from_asset(format!("models/attachments/{}.glb", item.glb)));
-        let root = cmd.spawn((AttMount, Name::new(format!("att_{}", p.id)), WorldAssetRoot(scene), p.tf)).id();
-        cmd.entity(bone).add_child(root);
-        if is_magnified(&p.id) && let Some(v) = item.sockets.get("viewpoint") {
+    for (root, id) in mount_parts(&mut cmd, &assets, gun, &row, &picks, &joints, &parents, &mut vis, AttMount) {
+        let item = &d.items[id.as_str()];
+        if is_magnified(&id) && let Some(v) = item.sockets.get("viewpoint") {
             st.scope = Some((root, v.clone()));
         }
         // WEP optics: the reticle quad sits on the optic's Reticle socket (MI_ReticleData_*: ReticleColor, unlit).
