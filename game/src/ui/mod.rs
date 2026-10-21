@@ -75,7 +75,6 @@ pub enum Act {
     Att(&'static str),
     /// LOADOUT EXPLOSIVE / MELEE / GADGET column (0/1/2): equip that DT_PerkItems row.
     Gear(usize, String),
-    Mode(usize),
     Search,
     /// PLAY > HOST SERVERS: host a match / join the typed address / focus the address field.
     Host,
@@ -164,7 +163,16 @@ fn display_name(row: &str) -> String {
 
 const SECONDARY: [&str; 6] = ["CZ-P-09", "Deagle", "Glock17", "Kobra", "M1911", "Revolver"];
 /// (label, BODYCAM_MAP, BODYCAM_START zone)
-pub const OFFLINE: [(&str, &str, &str); 5] = [("LOBBY", "", ""), ("TEST MAP", "test", ""), ("RANGE", "grid", "range"), ("COURSE", "grid", "course"), ("CQB", "grid", "cqb")];
+/// PLAY > CASUAL worlds: (name, BODYCAM_MAP, BODYCAM_START zone, BODYCAM_MODE, description). Picking one relaunches into it.
+pub const OFFLINE: [(&str, &str, &str, &str, &str); 7] = [
+    ("LOBBY", "", "", "", "The real lobby map: shooting range, workbench and shoot house."),
+    ("TEST GRID", "grid", "", "", "Big test world with lobby, range, obstacle course and CQB. F1 / F3 / F4 / F5 teleport, F7 bots hostile, F10 respawn bots."),
+    ("RANGE", "grid", "range", "", "Test grid, starting on the shooting range: targets at set distances."),
+    ("COURSE", "grid", "course", "", "Test grid, starting on the obstacle course: stairs, ramps, jumps and crouch gaps."),
+    ("CQB", "grid", "cqb", "", "Test grid, starting in the CQB block: rooms, doors and bots."),
+    ("TEST MAP", "test", "", "", "Tiny flat-lit map with distance stripes and targets for quick checks."),
+    ("BODYBOMB", "test", "", "bomb", "Bomb mode on the test map: plant and defuse rounds."),
+];
 
 #[derive(Resource)]
 pub struct Ui {
@@ -173,7 +181,6 @@ pub struct Ui {
     pub tab: usize,
     pub play_tab: usize,
     pub weapon: String,
-    pub modes: [bool; 8],
     pub offline: usize,
     pub search_t: Option<f32>,
     pub ip_focus: bool,
@@ -197,7 +204,6 @@ impl Default for Ui {
             tab: 0,
             play_tab: 0,
             weapon: String::new(),
-            modes: [true; 8],
             offline: 0,
             search_t: None,
             ip_focus: false,
@@ -372,9 +378,9 @@ fn close(t: &mut Tablet) {
 }
 
 fn launch(ui: &mut Ui, tablet: &mut Tablet) {
-    let (_, map, zone) = OFFLINE[ui.offline];
+    let (_, map, zone, mode, _) = OFFLINE[ui.offline];
     let current = if crate::testmap::wanted() { "test" } else if crate::grid::wanted() { "grid" } else { "" };
-    if map == current && map != "grid" {
+    if map == current && zone.is_empty() && map != "grid" && mode == std::env::var("BODYCAM_MODE").unwrap_or_default() {
         ui.search_t = None;
         ui.dirty = true;
         close(tablet);
@@ -390,6 +396,11 @@ fn launch(ui: &mut Ui, tablet: &mut Tablet) {
         c.env_remove("BODYCAM_START");
     } else {
         c.env("BODYCAM_START", zone);
+    }
+    if mode.is_empty() {
+        c.env_remove("BODYCAM_MODE");
+    } else {
+        c.env("BODYCAM_MODE", mode);
     }
     c.env_remove("BODYCAM_AUTO");
     let _ = c.spawn();
@@ -532,8 +543,11 @@ fn handle(act: Act, cx: &mut Cx, rect: Option<(f32, f32)>) {
             }
             cx.ui.toast = (format!("{} equipped.", crate::items::display_name(&row)), 2.5);
         }
-        Act::Mode(i) => cx.ui.modes[i] = !cx.ui.modes[i],
-        Act::Offline(i) => cx.ui.offline = i,
+        Act::Offline(i) => {
+            cx.ui.offline = i;
+            settings::save(cx.s);
+            launch(cx.ui, cx.tablet);
+        }
         Act::Host => cx.ui.net_req = Some(true),
         Act::Join => cx.ui.net_req = Some(false),
         Act::IpField => cx.ui.ip_focus = !cx.ui.ip_focus,

@@ -206,17 +206,6 @@ fn home(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     txt(cmd, b, cx, "[F] > OPEN NEWS", 28.0, Color::WHITE, Wt::Bold);
 }
 
-const MODES: [(&str, &str, &str, &str, &str, bool); 8] = [
-    ("DEATHMATCH", "The first player to 40 kills wins.", "Solo   1-1   5 Min", "T_UI_BannerDeathmatch", "T_UI_GM_Deathmatch", true),
-    ("GUN GAME", "For every 1 kills, the weapon changes. The first to kill with all weapons wins.", "Solo   1-1   10 Min", "T_UI_BannerGunGame", "T_UI_GM_GunGame", true),
-    ("TEAM DEATHMATCH", "Team with the most eliminations at the end of the timer wins", "Teams   5-5   10 Min", "T_UI_BannerTeamDeathmatch", "T_UI_GM_TeamDeathmatch", true),
-    ("HARD POINT", "Stay in the hot zone with your team for as long as possible to win the match.", "Teams   5-5   12 Min", "T_UI_BannerHardPoint", "T_UI_GM_Hard_Point", true),
-    ("BODYBOMB", "One team has a bomb the other has to defuse it.", "Teams   5-5   Rounds", "T_UI_BannerBodybomb", "T_UI_GM_Bodybomb", true),
-    ("WINGMAN", "2v2 bomb defusal Bring your most trusted teammate.", "Duo   2-2   8 Min", "T_UI_BannerWingma", "T_UI_GM_Wingman", true),
-    ("VERSUS", "The last team still alive wins.", "Teams   4-4   10 Min", "T_UI_BannerVersus", "T_UI_GM_Versus", true),
-    ("ZOMBIES", "Survive the waves together.", "Co-op   1-4", "T_UI_BannerZombie", "T_UI_GM_Zombies", false),
-];
-
 fn play(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     let searching = cx.ui.search_t.is_some();
     let label = if searching { "SEARCHING..." } else { "[SPACE] SEARCH >" };
@@ -249,36 +238,19 @@ fn play(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
         txt(cmd, body, cx, "Maintenance in progress - Coming back soon", 34.0, RED, Wt::Bold);
         return;
     }
-    txt(cmd, body, cx, "Maintenance in progress - Coming back soon: online matchmaking is offline in this build.", 22.0, RED, Wt::Medium);
+    // Online matchmaking is offline in this build: CASUAL lists the local worlds; clicking one loads it (ui::launch).
+    txt(cmd, body, cx, "Pick a world to load into.", 22.0, GREY, Wt::Medium);
     let grid = add(cmd, body, Node { margin: UiRect::top(px(14)), flex_wrap: FlexWrap::Wrap, column_gap: px(24), row_gap: px(24), ..row() });
-    for (i, (name, desc, info, banner, _icon, online)) in MODES.iter().enumerate() {
-        let selected = *online && cx.ui.modes[i];
-        let frame_c = if selected { GREEN } else { RED };
-        let card = button(cmd, grid, Node { width: px(390), height: px(250), ..col() }, if *online { Act::Mode(i) } else { Act::Noop }, None, PANEL, PANEL_HOVER, Some(if *online && !selected { Color::srgb(0.2, 0.2, 0.22) } else { frame_c }));
-        let top = add(cmd, card, (Node { width: percent(100), height: px(90), padding: UiRect::all(px(10)), ..col() }, BackgroundColor(CLEAR)));
-        let art = add(cmd, card, (ImageNode { color: Color::srgba(1.0, 1.0, 1.0, 0.4), ..ImageNode::new(cx.a.load(format!("ui/tex/{banner}.png"))) }, Node { position_type: PositionType::Absolute, width: percent(100), height: px(120), ..default() }));
-        let _ = art;
-        txt(cmd, top, cx, name, 30.0, Color::WHITE, Wt::Extra);
-        let d = add(cmd, card, Node { padding: UiRect::axes(px(12), px(0)), height: px(60), margin: UiRect::top(px(30)), ..col() });
-        txt(cmd, d, cx, if *online { desc } else { "Maintenance in progress - Coming back soon" }, 18.0, if *online { GREY } else { RED }, Wt::Medium);
-        let f = add(cmd, card, Node { padding: UiRect::axes(px(12), px(4)), justify_content: JustifyContent::SpaceBetween, width: percent(100), ..row() });
-        txt(cmd, f, cx, info, 18.0, GREY, Wt::Medium);
-        let st = add(cmd, f, Node { column_gap: px(6), ..row() });
-        if selected {
-            txt(cmd, st, cx, "SELECTED", 20.0, GREEN, Wt::Bold);
+    let current = if crate::testmap::wanted() { "test" } else if crate::grid::wanted() { "grid" } else { "" };
+    for (i, (name, map, zone, mode, desc)) in OFFLINE.iter().enumerate() {
+        let here = *map == current && (zone.is_empty() || *map == "grid") && *mode == std::env::var("BODYCAM_MODE").unwrap_or_default();
+        let card = button(cmd, grid, Node { width: px(390), height: px(200), padding: UiRect::all(px(12)), row_gap: px(10), ..col() }, Act::Offline(i), None, PANEL, PANEL_HOVER, Some(if here { GREEN } else { Color::srgb(0.2, 0.2, 0.22) }));
+        txt(cmd, card, cx, name, 30.0, Color::WHITE, Wt::Extra);
+        txt(cmd, card, cx, desc, 18.0, GREY, Wt::Medium);
+        if here && zone.is_empty() {
+            let st = add(cmd, card, Node { column_gap: px(6), margin: UiRect::top(Val::Auto), ..row() });
+            txt(cmd, st, cx, "CURRENT", 20.0, GREEN, Wt::Bold);
             img(cmd, st, cx, "T_UI_Checkmark", 20.0, 20.0, GREEN);
-        } else {
-            txt(cmd, st, cx, "NOT SELECTED", 20.0, RED, Wt::Bold);
-        }
-    }
-    let off = add(cmd, body, Node { margin: UiRect::top(px(30)), column_gap: px(20), ..row() });
-    txt(cmd, off, cx, "OFFLINE", 30.0, Color::WHITE, Wt::Extra);
-    for (i, (name, _, _)) in OFFLINE.iter().enumerate() {
-        let on = cx.ui.offline == i;
-        let b = button(cmd, off, Node { padding: UiRect::axes(px(22), px(10)), column_gap: px(8), ..row() }, Act::Offline(i), None, PANEL, PANEL_HOVER, Some(if on { GREEN } else { Color::srgb(0.2, 0.2, 0.22) }));
-        txt(cmd, b, cx, name, 24.0, if on { GREEN } else { Color::WHITE }, Wt::Bold);
-        if on {
-            img(cmd, b, cx, "T_UI_Checkmark", 20.0, 20.0, GREEN);
         }
     }
 }
