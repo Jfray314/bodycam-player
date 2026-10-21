@@ -305,6 +305,9 @@ struct Salvo {
 #[derive(Component)]
 struct KnifeProj {
     vel: Vec3,
+    /// Melee row (the stuck pickup) and its glb.
+    row: String,
+    model: &'static str,
 }
 
 /// A dropped item (GA_Character_DropItem -> DropItem notify -> DropEquippedItem): F picks it up again.
@@ -709,7 +712,9 @@ fn knife_input(
                     })
                     .min_by(|a, b| a.2.total_cmp(&b.2));
                 let vel = aim.and_then(|(_, at, _)| toss_velocity(start, at, KNIFE_SPEED)).unwrap_or(fwd * KNIFE_SPEED);
-                cmd.spawn((KnifeProj { vel }, WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset("models/guns/Knife.glb"))), Transform::from_translation(start).with_rotation(knife_rot(vel))));
+                let w = &inv.slots[SLOT_MELEE];
+                let model = crate::viewmodel::gun_model(&w.name, &w.anims).unwrap_or("Knife");
+                cmd.spawn((KnifeProj { vel, row: w.name.clone(), model }, WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(format!("models/guns/{model}.glb")))), Transform::from_translation(start).with_rotation(knife_rot(vel))));
                 inv.slots[SLOT_MELEE].ammo = 0; // RemoveItemInSlot(Melee)
                 inv.swap_to(0, &mut out);
             }
@@ -848,8 +853,8 @@ fn knife_flight(
         // bIsStuck: the knife stays where it hit (StabDepth into the surface) and can be picked up again.
         cmd.entity(e).despawn();
         cmd.spawn((
-            Pickup { row: "Knife".into(), vel: Vec3::ZERO },
-            WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset("models/guns/Knife.glb"))),
+            Pickup { row: k.row.clone(), vel: Vec3::ZERO },
+            WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(format!("models/guns/{}.glb", k.model)))),
             Transform::from_translation(pt + dir * KNIFE_STAB_DEPTH).with_rotation(knife_rot(k.vel)),
         ));
     }
@@ -876,11 +881,7 @@ fn drop_pickup(
     if keys.just_pressed(KeyCode::KeyG) && !inv.busy() && matches!(inv.slots[cur].kind, ItemKind::Grenade | ItemKind::Knife) && inv.slots[cur].ammo > 0 {
         let row = inv.slots[cur].name.clone();
         inv.slots[cur].ammo = 0;
-        let path = match row.as_str() {
-            "Knife" => "models/guns/Knife.glb",
-            r if r.contains("Flash") => "models/guns/Flashbang.glb",
-            _ => "models/guns/G67.glb",
-        };
+        let path = format!("models/guns/{}.glb", crate::viewmodel::gun_model(&row, &inv.slots[cur].anims).unwrap_or("G67"));
         let c = cam.compute_transform();
         cmd.spawn((Pickup { row, vel: c.forward().as_vec3() * 2.0 + Vec3::Y }, WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(path))), Transform::from_translation(c.translation + c.forward().as_vec3() * 0.4 - Vec3::Y * 0.3)));
         inv.swap_to(0, &mut out);

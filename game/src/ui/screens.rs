@@ -284,9 +284,9 @@ const GEAR: [&[(&str, &str, &str, bool)]; 3] = [
     ],
     &[
         ("Knife", "Knife", "icons/KnifeBaseReceiver", true),
-        ("Karambit", "Karambit", "icons/KarambitBaseArcticEchoez", false),
-        ("Folding", "Folding", "icons/FoldingBaseReceiver", false),
-        ("Blade", "Blade", "icons/BladeBaseReceiver", false),
+        ("Karambit", "Karambit", "icons/KarambitBaseArcticEchoez", true),
+        ("Folding", "Folding", "icons/FoldingBaseReceiver", true),
+        ("Blade", "Blade", "icons/BladeBaseReceiver", true),
     ],
     &[
         ("Kamikaze", "Kamikaze", "icons/Kamikaze", true),
