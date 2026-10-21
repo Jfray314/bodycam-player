@@ -37,6 +37,7 @@ for g in guns:
                     export.append({"id": i, "kind": c[16:], "row": sk, "mesh": asset(s["StaticMesh"]), "materials": [asset(m) if m else "" for m in mats]})
                 items[i] = {"skin": sk, "gp": gp, "cls": c[16:], "label": (s["ItemName"].get("text") if isinstance(s.get("ItemName"), dict) else s.get("ItemName")) or sk, "glb": seen[key],
                             "icon": (s.get("ItemIcons") or [""])[0].rsplit(".", 1)[0].rsplit("/", 1)[-1],
+                            "icon_path": asset((s.get("ItemIcons") or [""])[0]) if (s.get("ItemIcons") or [""])[0] else "",
                             "effects": [e.rsplit(".", 1)[0].rsplit("/", 1)[-1] for e in v.get("GameplayDataDefinition", {}).get("GameplayEffectsModifier", [])]}
             ids.append(i)
     compat[g] = sorted(set(ids))

@@ -24,6 +24,8 @@ pub struct BuildCx<'a> {
     pub ui: &'a Ui,
     pub s: &'a Settings,
     pub roster: &'a Roster,
+    /// Weapon preview render (showcase.rs).
+    pub show: Handle<Image>,
 }
 
 fn add(cmd: &mut Commands, parent: Entity, b: impl Bundle) -> Entity {
@@ -172,6 +174,9 @@ pub fn build(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
         Screen::Play => play(cmd, root, cx),
         Screen::Loadout => loadout(cmd, root, cx),
         Screen::Weapon => weapon(cmd, root, cx),
+        Screen::Modify => modify(cmd, root, cx),
+        Screen::Select => select(cmd, root, cx),
+        Screen::Swap => swap(cmd, root, cx),
         Screen::Menu => menu(cmd, root, cx),
         Screen::Settings => settings_screen(cmd, root, cx),
         Screen::Social => social(cmd, root, cx),
@@ -265,53 +270,68 @@ fn icon_of(row: &str) -> String {
     }
 }
 
-fn item_card(cmd: &mut Commands, p: Entity, cx: &BuildCx, it: &Item, equipped: bool) {
-    let c = button(cmd, p, Node { width: px(300), flex_shrink: 0.0, padding: UiRect::all(px(8)), margin: UiRect::bottom(px(14)), ..col() }, Act::Weapon(it.row.clone()), None, PANEL, PANEL_HOVER, Some(if equipped { GREEN } else { Color::srgb(0.2, 0.2, 0.22) }));
-    img(cmd, c, cx, &icon_of(&it.row), 280.0, 140.0, Color::WHITE);
-    let r = add(cmd, c, Node { justify_content: JustifyContent::SpaceBetween, width: percent(100), ..row() });
-    txt(cmd, r, cx, &it.display.to_uppercase(), 26.0, Color::WHITE, Wt::Bold);
-    if equipped {
-        let g = add(cmd, r, Node { column_gap: px(5), ..row() });
-        img(cmd, g, cx, "T_UI_Checkmark", 18.0, 18.0, GREEN);
+/// DT_PerkSkins / DT_OperatorSkins ItemIcons of the gear rows (assets-local/ui/tex/icons).
+fn gear_icon(row: &str) -> &'static str {
+    match row {
+        r if r.contains("Flash") => "icons/GrenadeFlash",
+        r if r.contains("Grenade") => "icons/GrenadeG67",
+        "Knife" => "icons/KnifeBaseReceiver",
+        "Kamikaze" => "icons/Kamikaze",
+        _ => "icons/DefaultOperator_02",
     }
+}
+
+const CARD_EDGE: Color = Color::srgb(0.2, 0.2, 0.22);
+
+/// One loadout card (the real LOADOUT / weapon screen strip): slot name top-left, item image, item name.
+fn card(cmd: &mut Commands, p: Entity, cx: &BuildCx, w: f32, h: f32, slot: &str, icon: &str, name: &str, act: Act, edge: Color) -> Entity {
+    let c = button(cmd, p, Node { width: px(w), height: px(h), padding: UiRect::all(px(10)), flex_shrink: 0.0, ..col() }, act, None, Color::srgb(0.05, 0.05, 0.06), PANEL_HOVER, Some(edge));
+    if !slot.is_empty() {
+        txt(cmd, c, cx, slot, 22.0, Color::WHITE, Wt::Bold);
+    }
+    let m = add(cmd, c, Node { flex_grow: 1.0, width: percent(100), min_height: px(0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() });
+    if !icon.is_empty() {
+        img(cmd, m, cx, icon, w - 30.0, (h - 90.0).max(30.0), Color::WHITE);
+    }
+    txt(cmd, c, cx, name, 26.0, Color::WHITE, Wt::Bold);
+    c
+}
+
+/// OPERATOR PRIMARY SECONDARY EXPLOSIVE MELEE GADGET cards; `active` = the highlighted one (0 = operator .. 5 = gadget).
+fn loadout_strip(cmd: &mut Commands, p: Entity, cx: &BuildCx, w: f32, h: f32, active: Option<usize>) {
+    let row = add(cmd, p, Node { column_gap: px(10), ..row() });
+    let gun = |r: &str| cx.roster.0.iter().find(|i| i.row == r).map_or(r.to_string(), |i| i.display.clone());
+    let cards: [(&str, String, String, Act); 6] = [
+        ("OPERATOR", "icons/DefaultOperator_02".into(), "Bodycam".into(), Act::Toast("Operator skins are not part of this build.".into())),
+        ("PRIMARY", icon_of(&cx.s.primary), gun(&cx.s.primary), Act::Weapon(cx.s.primary.clone())),
+        ("SECONDARY", icon_of(&cx.s.secondary), gun(&cx.s.secondary), Act::Weapon(cx.s.secondary.clone())),
+        ("EXPLOSIVE", gear_icon(&cx.s.explosive).into(), crate::items::display_name(&cx.s.explosive).into(), Act::SwapKind(2)),
+        ("MELEE", gear_icon(&cx.s.melee).into(), crate::items::display_name(&cx.s.melee).into(), Act::SwapKind(3)),
+        ("GADGET", gear_icon(&cx.s.gadget).into(), crate::items::display_name(&cx.s.gadget).into(), Act::SwapKind(4)),
+    ];
+    for (i, (slot, icon, name, act)) in cards.into_iter().enumerate() {
+        let ww = if i == 1 || i == 2 { w * 1.6 } else { w };
+        card(cmd, row, cx, ww, h, slot, &icon, &name, act, if Some(i) == active { Color::WHITE } else { CARD_EDGE });
+    }
+}
+
+fn foot_buttons(cmd: &mut Commands, p: Entity, cx: &BuildCx, items: &[(&str, Act, Option<KeyCode>, bool)]) -> Entity {
+    let foot = add(cmd, p, Node { column_gap: px(16), margin: UiRect::top(px(14)), align_items: AlignItems::Center, ..row() });
+    for (label, act, key, red) in items {
+        let b = button(cmd, foot, Node { padding: UiRect::axes(px(16), px(8)), ..row() }, act.clone(), *key, if *red { RED } else { CLEAR }, PANEL_HOVER, if *red { None } else { Some(CARD_EDGE) });
+        txt(cmd, b, cx, label, 26.0, Color::WHITE, Wt::Bold);
+    }
+    foot
 }
 
 fn loadout(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     let body = main_tabs(cx, false, cmd, root, Some(("[SPACE] PLAY >", Act::Push(Screen::Play))));
     cmd.entity(body).insert(BackgroundColor(DARK));
-    header(cmd, body, cx, "LOADOUT 4", "Manage, swap, customize, and upgrade your equipment.");
-    let cols = add(cmd, body, Node { column_gap: px(26), flex_grow: 1.0, min_height: px(0), ..row() });
-    cmd.entity(cols).insert(Node { column_gap: px(26), flex_grow: 1.0, min_height: px(0), align_items: AlignItems::FlexStart, ..row() });
-    let static_col = |cmd: &mut Commands, name: &str, item: &str, msg: &str| {
-        let c = add(cmd, cols, Node { width: px(300), ..col() });
-        txt(cmd, c, cx, name, 22.0, GREY, Wt::Bold);
-        let b = button(cmd, c, Node { width: px(300), height: px(190), margin: UiRect::top(px(8)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, Act::Toast(msg.into()), None, PANEL, PANEL_HOVER, Some(Color::srgb(0.2, 0.2, 0.22)));
-        txt(cmd, b, cx, item, 28.0, Color::WHITE, Wt::Bold);
-    };
-    static_col(cmd, "OPERATOR", "BODYCAM", "Operator skins are not part of this build.");
-    for (name, slot) in [("PRIMARY", Slot::Primary), ("SECONDARY", Slot::Secondary)] {
-        let c = add(cmd, cols, Node { width: px(320), height: percent(100), ..col() });
-        txt(cmd, c, cx, name, 22.0, GREY, Wt::Bold);
-        let list = add(cmd, c, (Node { margin: UiRect::top(px(8)), flex_grow: 1.0, min_height: px(0), overflow: Overflow::scroll_y(), ..col() }, ScrollPosition(Vec2::new(0.0, cx.ui.scroll[slot as usize])), Scroller(slot as usize)));
-        let eq = if slot == Slot::Primary { &cx.s.primary } else { &cx.s.secondary };
-        for it in cx.roster.0.iter().filter(|i| i.slot == slot) {
-            item_card(cmd, list, cx, it, &it.row == eq);
-        }
-    }
-    // EXPLOSIVE / MELEE / GADGET: the real items (items.rs / perks.rs); the card with the check is the equipped one.
-    for (i, (name, rows, cur)) in [("EXPLOSIVE", &["Grenade G67", "Grenade Flash"][..], &cx.s.explosive), ("MELEE", &["Knife"][..], &cx.s.melee), ("GADGET", &["Kamikaze"][..], &cx.s.gadget)].into_iter().enumerate() {
-        let c = add(cmd, cols, Node { width: px(250), ..col() });
-        txt(cmd, c, cx, name, 22.0, GREY, Wt::Bold);
-        for r in rows {
-            let on = *r == cur.as_str();
-            let b = button(cmd, c, Node { width: px(250), height: px(120), margin: UiRect::top(px(8)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, column_gap: px(8), ..row() }, Act::Gear(i, r.to_string()), None, PANEL, PANEL_HOVER, Some(if on { GREEN } else { Color::srgb(0.2, 0.2, 0.22) }));
-            txt(cmd, b, cx, &crate::items::display_name(r).to_uppercase(), 22.0, Color::WHITE, Wt::Bold);
-            if on {
-                img(cmd, b, cx, "T_UI_Checkmark", 18.0, 18.0, GREEN);
-            }
-        }
-    }
-    let foot = add(cmd, body, Node { column_gap: px(20), margin: UiRect::top(px(10)), ..row() });
+    header(cmd, body, cx, "LOADOUT 1", "Manage, swap, customize, and upgrade your equipment.");
+    // the equipped loadout row (red frame = selected); offline there is one loadout
+    let r = add(cmd, body, (Node { padding: UiRect::all(px(10)), border: UiRect::all(px(3)), ..row() }, BorderColor::all(RED), BackgroundColor(Color::srgb(0.08, 0.03, 0.03))));
+    loadout_strip(cmd, r, cx, 230.0, 300.0, None);
+    let foot = add(cmd, body, Node { column_gap: px(20), margin: UiRect::top(px(20)), ..row() });
     let e = add(cmd, foot, (Node { padding: UiRect::axes(px(22), px(10)), column_gap: px(8), ..row() }, BackgroundColor(Color::srgb(0.1, 0.25, 0.12))));
     img(cmd, e, cx, "T_UI_Checkmark", 22.0, 22.0, GREEN);
     txt(cmd, e, cx, "EQUIPPED", 24.0, GREEN, Wt::Bold);
@@ -321,65 +341,183 @@ fn loadout(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     txt(cmd, n, cx, "[C] NEW LOADOUT", 24.0, Color::WHITE, Wt::Bold);
 }
 
+/// Title + rarity (top left of the weapon screens).
+fn title(cmd: &mut Commands, p: Entity, cx: &BuildCx, name: &str) {
+    let l = add(cmd, p, col());
+    txt(cmd, l, cx, &name.to_uppercase(), 80.0, Color::WHITE, Wt::Extra);
+    let rr = add(cmd, l, Node { column_gap: px(12), ..row() });
+    img(cmd, rr, cx, "T_UI_Rarity0", 24.0, 24.0, Color::WHITE);
+    txt(cmd, rr, cx, "Common", 26.0, GREY, Wt::Bold);
+}
+
 fn weapon(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     let body = frame(cmd, root, cx, "< LOADOUTS", None, &[], 0, &|_| Act::Noop);
     cmd.entity(body).insert(BackgroundColor(DARK));
     let Some(it) = cx.roster.0.iter().find(|i| i.row == cx.ui.weapon) else { return };
-    let slot_name = if it.slot == Slot::Primary { "PRIMARY" } else { "SECONDARY" };
-    let eq = if it.slot == Slot::Primary { &cx.s.primary } else { &cx.s.secondary } == &it.row;
-    let top = add(cmd, body, Node { justify_content: JustifyContent::SpaceBetween, width: percent(100), ..row() });
-    let l = add(cmd, top, col());
-    txt(cmd, l, cx, &it.display.to_uppercase(), 92.0, Color::WHITE, Wt::Extra);
-    let rr = add(cmd, l, Node { column_gap: px(12), ..row() });
-    img(cmd, rr, cx, "T_UI_Rarity0", 24.0, 24.0, Color::WHITE);
-    txt(cmd, rr, cx, "Common", 28.0, GREY, Wt::Bold);
-    if eq {
-        img(cmd, rr, cx, "T_UI_Checkmark", 22.0, 22.0, GREEN);
-        txt(cmd, rr, cx, "EQUIPPED", 24.0, GREEN, Wt::Bold);
+    title(cmd, body, cx, &it.display);
+    let mid = add(cmd, body, Node { flex_grow: 1.0, min_height: px(0), width: percent(100), justify_content: JustifyContent::Center, ..row() });
+    show(cmd, mid, cx, 520.0);
+    loadout_strip(cmd, body, cx, 190.0, 200.0, Some(if it.slot == Slot::Primary { 1 } else { 2 }));
+    let kind = if it.slot == Slot::Primary { 0 } else { 1 };
+    let foot = foot_buttons(cmd, body, cx, &[
+        ("[ESC] BACK", Act::Back, Some(KeyCode::Escape), false),
+        ("[SPACE] MODIFY", Act::Push(Screen::Modify), Some(KeyCode::Space), false),
+        (if kind == 0 { "[F] SWAP PRIMARY" } else { "[F] SWAP SECONDARY" }, Act::SwapKind(kind), Some(KeyCode::KeyF), true),
+    ]);
+    for (s, d) in [("<", -1), (">", 1)] {
+        let b = button(cmd, foot, Node { padding: UiRect::axes(px(18), px(4)), margin: UiRect::left(px(if d < 0 { 200.0 } else { 0.0 })), ..row() }, Act::Cycle(d), Some(if d < 0 { KeyCode::ArrowLeft } else { KeyCode::ArrowRight }), CLEAR, PANEL_HOVER, None);
+        txt(cmd, b, cx, s, 40.0, Color::WHITE, Wt::Extra);
     }
-    let st = add(cmd, top, Node { padding: UiRect::all(px(16)), ..col() });
-    cmd.entity(st).insert(BackgroundColor(PANEL));
-    for (k, v) in [("DAMAGE", format!("{:.0}", it.damage)), ("MAGAZINE", format!("{:.0}", it.cap)), ("SLOT", slot_name.into())] {
-        let r = add(cmd, st, Node { width: px(320), justify_content: JustifyContent::SpaceBetween, ..row() });
-        txt(cmd, r, cx, k, 24.0, GREY, Wt::Medium);
-        txt(cmd, r, cx, &v, 24.0, Color::WHITE, Wt::Bold);
+}
+
+fn show(cmd: &mut Commands, p: Entity, cx: &BuildCx, h: f32) {
+    let w = h * super::showcase::W as f32 / super::showcase::H as f32;
+    add(cmd, p, (ImageNode::new(cx.show.clone()), Node { width: px(w), height: px(h), ..default() }));
+}
+
+/// Category of an attachment inside its slot (ItemClassID segment after the slot: "Close Range", "Suppressor"...).
+pub fn cat_of(id: &str) -> String {
+    crate::attach::data().items.get(id).and_then(|i| i.cls.split_once('.')).map_or(String::new(), |(_, c)| c.split('.').next().unwrap_or("").to_string())
+}
+
+/// SELECT category tabs of slot `slot` (index into attach::slots) on `row`, in the game's order where it has one.
+pub fn select_cats(s: &crate::ui::settings::Settings, row: &str, slot: usize) -> Vec<String> {
+    const ORDER: [&str; 4] = ["Iron Sights", "Close Range", "Medium Range", "Long Range"];
+    let Some(sl) = crate::attach::slots(s, row).get(slot).copied() else { return vec![] };
+    let mut v: Vec<String> = crate::attach::available(row).iter().filter(|i| crate::attach::data().items[i.as_str()].slot == sl).map(|i| cat_of(i)).collect();
+    v.sort_by_key(|c| (ORDER.iter().position(|o| o == c).unwrap_or(ORDER.len()), c.clone()));
+    v.dedup();
+    v
+}
+
+/// The mounted part in slot `slot` (default or pick).
+pub fn slot_part(s: &crate::ui::settings::Settings, row: &str, slot: usize) -> Option<String> {
+    let sl = crate::attach::slots(s, row).get(slot).copied()?;
+    crate::attach::loadout(s, row).into_iter().find(|id| crate::attach::data().items.get(id.as_str()).is_some_and(|i| i.slot == sl))
+}
+
+fn att_icon(id: &str) -> String {
+    crate::attach::data().items.get(id).and_then(|i| i.icon.clone()).map_or(String::new(), |i| format!("icons/{i}"))
+}
+
+fn modify(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
+    let Some(it) = cx.roster.0.iter().find(|i| i.row == cx.ui.weapon) else { return };
+    let body = frame(cmd, root, cx, &format!("< MODIFY {}", it.display.to_uppercase()), None, &[], 0, &|_| Act::Noop);
+    cmd.entity(body).insert(BackgroundColor(DARK));
+    title(cmd, body, cx, &it.display);
+    let mid = add(cmd, body, Node { flex_grow: 1.0, min_height: px(0), width: percent(100), align_items: AlignItems::Center, ..row() });
+    // WeaponAttributeSet values of this build (GE_WeaponStat + the parts' GE_AttachmentStat)
+    let stats = add(cmd, mid, Node { width: px(260), row_gap: px(8), ..col() });
+    let st = |a: &str, b: f32| crate::attach::stat(cx.s, &it.row, a, b);
+    for (k, v) in [("Fire Rate", format!("{:.2}", st("FireRate", it.fire_rate))), ("Damage", format!("{:.0}", st("Damage", it.damage))), ("Mag Size", format!("{:.0}", st("AmmoCapacity", it.cap).round()))] {
+        let c = add(cmd, stats, (Node { padding: UiRect::axes(px(12), px(6)), column_gap: px(14), border: UiRect::all(px(2)), ..row() }, BorderColor::all(CARD_EDGE)));
+        txt(cmd, c, cx, &format!("> {k}"), 22.0, Color::WHITE, Wt::Bold);
+        txt(cmd, c, cx, &v, 22.0, Color::WHITE, Wt::Bold);
     }
-    let mid = add(cmd, body, Node { flex_grow: 1.0, width: percent(100), justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, ..row() });
-    let a = button(cmd, mid, Node { padding: UiRect::axes(px(26), px(60)), ..row() }, Act::Cycle(-1), Some(KeyCode::ArrowLeft), CLEAR, PANEL_HOVER, None);
-    txt(cmd, a, cx, "<", 60.0, Color::WHITE, Wt::Extra);
-    img(cmd, mid, cx, &icon_of(&it.row), 640.0, 320.0, Color::WHITE); // smaller than the art's 1000x500 so the MODIFY list fits
-    let b = button(cmd, mid, Node { padding: UiRect::axes(px(26), px(60)), ..row() }, Act::Cycle(1), Some(KeyCode::ArrowRight), CLEAR, PANEL_HOVER, None);
-    txt(cmd, b, cx, ">", 60.0, Color::WHITE, Wt::Extra);
-    let strip = add(cmd, body, Node { column_gap: px(10), ..row() });
-    for o in cx.roster.0.iter().filter(|o| o.slot == it.slot) {
-        let c = button(cmd, strip, Node { padding: UiRect::all(px(4)), ..default() }, Act::Weapon(o.row.clone()), None, PANEL, PANEL_HOVER, Some(if o.row == it.row { RED } else { Color::srgb(0.2, 0.2, 0.22) }));
-        img(cmd, c, cx, &icon_of(&o.row), 96.0, 48.0, Color::WHITE);
-    }
-    // MODIFY: every attachment that fits (attach::available), by slot; a pick replaces the gun's default part of that slot.
+    show(cmd, mid, cx, 420.0);
     let slots = crate::attach::slots(cx.s, &it.row);
-    let sel = cx.ui.att_slot.min(slots.len().saturating_sub(1));
-    let tabs = add(cmd, body, Node { column_gap: px(8), row_gap: px(8), margin: UiRect::top(px(10)), flex_wrap: FlexWrap::Wrap, ..row() });
-    for (n, s) in slots.iter().enumerate() {
-        let b = button(cmd, tabs, Node { padding: UiRect::axes(px(12), px(6)), ..row() }, Act::AttSlot(n), None, if n == sel { RED } else { PANEL }, PANEL_HOVER, None);
-        txt(cmd, b, cx, &s.replace('_', " ").to_uppercase(), 20.0, Color::WHITE, Wt::Bold);
+    let strip = add(cmd, body, Node { width: percent(100), column_gap: px(8), row_gap: px(8), flex_wrap: FlexWrap::Wrap, ..row() });
+    for (n, sl) in slots.iter().enumerate() {
+        let part = slot_part(cx.s, &it.row, n);
+        let (icon, name) = part.as_deref().map_or((String::new(), "+".to_string()), |id| (att_icon(id), crate::attach::label(id).to_string()));
+        card(cmd, strip, cx, 170.0, 165.0, &sl.replace('_', " ").to_uppercase(), &icon, &name, Act::AttSlot(n), CARD_EDGE);
     }
-    let mounted = crate::attach::loadout(cx.s, &it.row);
-    let list = add(cmd, body, (Node { height: px(330), width: percent(100), margin: UiRect::top(px(8)), column_gap: px(8), row_gap: px(8), flex_wrap: FlexWrap::Wrap, align_content: AlignContent::FlexStart, overflow: Overflow::scroll_y(), ..row() }, ScrollPosition(Vec2::new(0.0, cx.ui.scroll[3])), Scroller(3)));
-    if let Some(slot) = slots.get(sel) {
-        for id in crate::attach::available(&it.row).iter().filter(|id| crate::attach::data().items[id.as_str()].slot == *slot) {
-            let on = mounted.contains(id);
-            let tag = if crate::attach::is_default(&it.row, id) { " (DEFAULT)" } else { "" };
-            let b = button(cmd, list, Node { padding: UiRect::axes(px(12), px(6)), ..row() }, Act::Att(id.as_str()), None, if on { GREEN } else { PANEL }, PANEL_HOVER, None);
-            txt(cmd, b, cx, &format!("{}{tag}", crate::attach::label(id).to_uppercase()), 24.0, Color::WHITE, Wt::Bold);
+    let foot = foot_buttons(cmd, body, cx, &[("[ESC] BACK", Act::Back, Some(KeyCode::Escape), false)]);
+    txt(cmd, foot, cx, &format!("[{} Attachments]", crate::attach::available(&it.row).len()), 24.0, GREY, Wt::Bold);
+}
+
+fn select(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
+    let wrow = cx.ui.weapon.clone();
+    let slots = crate::attach::slots(cx.s, &wrow);
+    let Some(sl) = slots.get(cx.ui.att_slot).copied() else { return };
+    let cats = select_cats(cx.s, &wrow, cx.ui.att_slot);
+    let cat = cats.get(cx.ui.att_cat).cloned().unwrap_or_default();
+    let tabs: Vec<String> = cats.iter().map(|c| if c.is_empty() { "STANDARD".into() } else { c.to_uppercase() }).collect();
+    let tabs: Vec<&str> = if tabs.len() > 1 { tabs.iter().map(String::as_str).collect() } else { vec![] };
+    let body = frame(cmd, root, cx, &format!("< SELECT {}", sl.replace('_', " ").to_uppercase()), None, &tabs, cx.ui.att_cat, &|i| match i {
+        usize::MAX => Act::Tab(-1),
+        i if i == usize::MAX - 1 => Act::Tab(1),
+        i => Act::SetTab(i),
+    });
+    cmd.entity(body).insert(BackgroundColor(DARK));
+    let cur = slot_part(cx.s, &wrow, cx.ui.att_slot);
+    title(cmd, body, cx, cur.as_deref().map_or("NONE", crate::attach::label));
+    let mid = add(cmd, body, Node { flex_grow: 1.0, min_height: px(0), width: percent(100), justify_content: JustifyContent::Center, ..row() });
+    show(cmd, mid, cx, 360.0);
+    let ids: Vec<&String> = crate::attach::available(&wrow).iter().filter(|i| crate::attach::data().items[i.as_str()].slot == sl && cat_of(i) == cat).collect();
+    let list = add(cmd, body, (Node { width: percent(100), height: px(380), column_gap: px(10), row_gap: px(10), flex_wrap: FlexWrap::Wrap, align_content: AlignContent::FlexStart, overflow: Overflow::scroll_y(), ..row() }, ScrollPosition(Vec2::new(0.0, cx.ui.scroll[3])), Scroller(3)));
+    for id in &ids {
+        let on = cur.as_deref() == Some(id.as_str());
+        let name = format!("{}{}", crate::attach::label(id), if crate::attach::is_default(&wrow, id) { " *" } else { "" });
+        let c = card(cmd, list, cx, 200.0, 180.0, "", &att_icon(id), &name, Act::Att(id.as_str()), if on { Color::WHITE } else { CARD_EDGE });
+        if on {
+            let m = add(cmd, c, Node { position_type: PositionType::Absolute, right: px(8), top: px(8), ..default() });
+            img(cmd, m, cx, "T_UI_Checkmark", 28.0, 28.0, Color::WHITE);
         }
     }
-    let foot = add(cmd, body, Node { column_gap: px(36), margin: UiRect::top(px(14)), ..row() });
-    for (label, act, key) in [
-        ("[ESC] BACK".to_string(), Act::Back, KeyCode::Escape),
-        (format!("[F] SWAP {slot_name}"), Act::Equip, KeyCode::KeyF),
-    ] {
-        let b = button(cmd, foot, Node { padding: UiRect::axes(px(8), px(6)), ..row() }, act, Some(key), CLEAR, PANEL_HOVER, None);
-        txt(cmd, b, cx, &label, 26.0, Color::WHITE, Wt::Bold);
+    let foot = foot_buttons(cmd, body, cx, &[("[ESC] BACK", Act::Back, Some(KeyCode::Escape), false), ("[SPACE] UNEQUIP", Act::Unequip, Some(KeyCode::Space), false)]);
+    let k = ids.iter().position(|i| cur.as_deref() == Some(i.as_str())).map_or(0, |p| p + 1);
+    txt(cmd, foot, cx, &format!("[{k}/{}]   * = default part", ids.len()), 24.0, GREY, Wt::Bold);
+}
+
+/// SWAP tabs: gun classes of the slot ("Assault Rifles"...), or one tab for the gear slots.
+pub fn swap_cats(roster: &Roster, kind: usize) -> Vec<String> {
+    if kind >= 2 {
+        return vec![];
+    }
+    let slot = if kind == 0 { Slot::Primary } else { Slot::Secondary };
+    let mut v: Vec<String> = roster.0.iter().filter(|i| i.slot == slot).filter_map(|i| crate::attach::data().classes.get(&i.row).cloned()).collect();
+    v.sort();
+    v.dedup();
+    v
+}
+
+fn swap(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
+    let kind = cx.ui.swap;
+    let names = ["PRIMARY", "SECONDARY", "EXPLOSIVE", "MELEE", "GADGET"];
+    let cats = swap_cats(cx.roster, kind);
+    let tabs: Vec<String> = cats.iter().map(|c| c.to_uppercase()).collect();
+    let tabs: Vec<&str> = tabs.iter().map(String::as_str).collect();
+    let body = frame(cmd, root, cx, &format!("< SWAP {}", names[kind]), None, &tabs, cx.ui.swap_cat, &|i| match i {
+        usize::MAX => Act::Tab(-1),
+        i if i == usize::MAX - 1 => Act::Tab(1),
+        i => Act::SetTab(i),
+    });
+    cmd.entity(body).insert(BackgroundColor(DARK));
+    // (row, display, icon, equipped, action)
+    let opts: Vec<(String, String, String, bool, Act)> = if kind < 2 {
+        let slot = if kind == 0 { Slot::Primary } else { Slot::Secondary };
+        let eq = if kind == 0 { &cx.s.primary } else { &cx.s.secondary };
+        let cat = cats.get(cx.ui.swap_cat);
+        cx.roster.0.iter().filter(|i| i.slot == slot && crate::attach::data().classes.get(&i.row) == cat).map(|i| (i.row.clone(), i.display.clone(), icon_of(&i.row), &i.row == eq, Act::SwapGun(i.row.clone()))).collect()
+    } else {
+        // the gear rows this build plays (items.rs / perks.rs)
+        let (rows, cur): (&[&str], &String) = match kind {
+            2 => (&["Grenade G67", "Grenade Flash"], &cx.s.explosive),
+            3 => (&["Knife"], &cx.s.melee),
+            _ => (&["Kamikaze"], &cx.s.gadget),
+        };
+        rows.iter().map(|r| (r.to_string(), crate::items::display_name(r).to_string(), gear_icon(r).to_string(), *r == cur.as_str(), Act::Gear(kind - 2, r.to_string()))).collect()
+    };
+    let cur = opts.iter().find(|o| o.3);
+    title(cmd, body, cx, cur.map_or("", |o| o.1.as_str()));
+    let mid = add(cmd, body, Node { flex_grow: 1.0, min_height: px(0), width: percent(100), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..row() });
+    if let Some(o) = cur {
+        img(cmd, mid, cx, &o.2, if kind < 2 { 900.0 } else { 420.0 }, if kind < 2 { 450.0 } else { 420.0 }, Color::WHITE);
+    }
+    let list = add(cmd, body, Node { width: percent(100), column_gap: px(10), row_gap: px(10), flex_wrap: FlexWrap::Wrap, ..row() });
+    for (_, name, icon, on, act) in &opts {
+        let c = card(cmd, list, cx, if kind < 2 { 300.0 } else { 200.0 }, 190.0, "", icon, name, act.clone(), if *on { Color::WHITE } else { CARD_EDGE });
+        if *on {
+            let m = add(cmd, c, Node { position_type: PositionType::Absolute, right: px(8), top: px(8), ..default() });
+            img(cmd, m, cx, "T_UI_Checkmark", 28.0, 28.0, Color::WHITE);
+        }
+    }
+    let foot = foot_buttons(cmd, body, cx, &[("[ESC] BACK", Act::Back, Some(KeyCode::Escape), false)]);
+    if cur.is_some() {
+        let e = add(cmd, foot, (Node { padding: UiRect::axes(px(16), px(8)), column_gap: px(8), ..row() }, BackgroundColor(Color::srgb(0.1, 0.25, 0.12))));
+        img(cmd, e, cx, "T_UI_Checkmark", 22.0, 22.0, GREEN);
+        txt(cmd, e, cx, "EQUIPPED", 24.0, GREEN, Wt::Bold);
     }
 }
 

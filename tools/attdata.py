@@ -121,7 +121,9 @@ defaults = {r: [i for i in v if i in items] for r, v in meta["defaults"].items()
 old = f"{M}/_work_att/attlib.json"
 aliases = {e["id"]: e["row"].lower().replace(" ", "_") for e in json.load(open(old))} if os.path.exists(old) else {}
 aliases = {k: __import__("re").sub(r"[^a-z0-9]+", "_", v).strip("_") for k, v in aliases.items()}
-json.dump({"items": items, "guns": guns, "rows": rows, "compat": compat, "defaults": defaults, "baked": baked, "aliases": aliases},
+# weapon row -> its class under Item.PrimaryWeapon / SecondaryWeapon ("Assault Rifles", "Pistols"...): the SWAP screen tabs
+classes = {r: wi[r]["ItemClassID"].split(".")[2] for r in meta["compat"] if r in wi and wi[r]["ItemClassID"].count(".") >= 2}
+json.dump({"items": items, "guns": guns, "rows": rows, "compat": compat, "defaults": defaults, "baked": baked, "aliases": aliases, "classes": classes},
           open(os.path.join(HERE, "..", "assets", "attachments.json"), "w"), separators=(",", ":"))
 print(len(items), "items,", len(missing), "without glb;", {r: len(v) for r, v in compat.items()})
 print("reticle textures:", sorted({e["reticle"]["tex_path"] for e in items.values() if "reticle" in e}))

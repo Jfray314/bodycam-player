@@ -52,6 +52,9 @@ pub struct Item {
     /// Cosmetic.Weapon.Anim.Idle: left-hand grip pose clip (assets/grip_poses.json).
     #[serde(default)]
     pub grip: Option<String>,
+    /// DT_WeaponSkins ItemIcons texture (assets-local/ui/tex/icons/<icon>.png).
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 #[derive(Deserialize, Debug)]
 pub struct Data {
@@ -67,6 +70,9 @@ pub struct Data {
     /// Ids of the old 9-item library (saved settings) -> skin ids.
     #[serde(default)]
     pub aliases: HashMap<String, String>,
+    /// Weapon row -> class ("Assault Rifles", "Pistols"...): the SWAP screen tabs.
+    #[serde(default)]
+    pub classes: HashMap<String, String>,
 }
 
 /// Optic reticle (MI_ReticleData_* of the gun's default Reticle item over the optic's OpticReticleMaterial): texture/colour/scale,
@@ -327,7 +333,7 @@ fn active_optic<'a>(row: &str, ids: &'a [String], idx: usize) -> Option<&'a str>
 /// Mounts `row`'s parts (`picks` over the defaults) on a spawned gun scene: the baked default parts that get placed or replaced
 /// are hidden, the rest spawn under their bones tagged with `marker`. No picks: the baked gun as is. Returns (part root, id).
 #[allow(clippy::too_many_arguments)]
-fn mount_parts(
+pub(crate) fn mount_parts(
     cmd: &mut Commands,
     assets: &AssetServer,
     gun: Entity,

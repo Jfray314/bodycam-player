@@ -5,6 +5,7 @@
 //! Settings (settings.rs) are applied live and saved to a JSON file; LOADOUT picks the guns that are actually equipped.
 pub mod settings;
 mod screens;
+pub mod showcase;
 
 use crate::weapon::{Inventory, MontageStarted};
 use bevy::camera::visibility::RenderLayers;
@@ -47,6 +48,12 @@ pub enum Screen {
     Play,
     Loadout,
     Weapon,
+    /// MODIFY <gun>: slot cards of the current build.
+    Modify,
+    /// SELECT <slot>: the options of `Ui::att_slot`, by category.
+    Select,
+    /// SWAP <slot>: `Ui::swap` = 0 primary, 1 secondary, 2 explosive, 3 melee, 4 gadget.
+    Swap,
     Menu,
     Settings,
     Social,
@@ -73,7 +80,14 @@ pub enum Act {
     Equip,
     /// Toggle an attachment id on the shown weapon (MODIFY).
     Att(&'static str),
+    /// MODIFY slot card: open SELECT for that slot.
     AttSlot(usize),
+    /// SELECT: remove the pick of the slot (back to the gun's default part).
+    Unequip,
+    /// Loadout card PRIMARY..GADGET -> its SWAP screen.
+    SwapKind(usize),
+    /// SWAP PRIMARY / SECONDARY: equip this gun.
+    SwapGun(String),
     /// LOADOUT EXPLOSIVE / MELEE / GADGET column (0/1/2): equip that DT_PerkItems row.
     Gear(usize, String),
     Search,
@@ -193,8 +207,12 @@ pub struct Ui {
     cursor: Vec2,
     drag: Option<(Set, f32, f32)>,
     pub scroll: [f32; 4],
-    /// Weapon screen MODIFY: selected attachment slot (index into attach slots of the gun).
+    /// MODIFY / SELECT: selected attachment slot (index into attach::slots of the gun) and category tab in it.
     pub att_slot: usize,
+    pub att_cat: usize,
+    /// SWAP screen kind (0 primary .. 4 gadget) and its class tab.
+    pub swap: usize,
+    pub swap_cat: usize,
     dirty: bool,
     pub toast: (String, f32),
 }
@@ -219,6 +237,9 @@ impl Default for Ui {
             drag: None,
             scroll: [0.0; 4],
             att_slot: 0,
+            att_cat: 0,
+            swap: 0,
+            swap_cat: 0,
             dirty: true,
             toast: (String::new(), 0.0),
         }
@@ -240,6 +261,7 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         let s = settings::load();
         app.insert_resource(s)
+            .add_plugins(showcase::ShowcasePlugin)
             .init_resource::<Tablet>()
             .init_resource::<Ui>()
             .init_resource::<MenuInput>()
@@ -452,6 +474,8 @@ fn handle(act: Act, cx: &mut Cx, rect: Option<(f32, f32)>) {
             let (cur, n) = match cx.ui.screen {
                 Screen::Settings => (&mut cx.ui.tab, settings_tabs()),
                 Screen::Play => (&mut cx.ui.play_tab, 3),
+                Screen::Select => (&mut cx.ui.att_cat, screens::select_cats(cx.s, &cx.ui.weapon, cx.ui.att_slot).len().max(1)),
+                Screen::Swap => (&mut cx.ui.swap_cat, screens::swap_cats(cx.roster, cx.ui.swap).len().max(1)),
                 Screen::Home => return go(cx, Screen::Loadout, false),
                 Screen::Loadout => return go(cx, Screen::Home, false),
                 _ => return,
@@ -465,6 +489,11 @@ fn handle(act: Act, cx: &mut Cx, rect: Option<(f32, f32)>) {
                 cx.ui.tab = i;
                 cx.ui.help = None;
                 cx.ui.scroll[2] = 0.0;
+            } else if cx.ui.screen == Screen::Select {
+                cx.ui.att_cat = i;
+                cx.ui.scroll[3] = 0.0;
+            } else if cx.ui.screen == Screen::Swap {
+                cx.ui.swap_cat = i;
             } else {
                 cx.ui.play_tab = i;
             }
@@ -542,6 +571,34 @@ fn handle(act: Act, cx: &mut Cx, rect: Option<(f32, f32)>) {
         Act::AttSlot(i) => {
             cx.ui.att_slot = i;
             cx.ui.scroll[3] = 0.0;
+            // open on the category of the part in that slot
+            let cats = screens::select_cats(cx.s, &cx.ui.weapon, i);
+            let cur = screens::slot_part(cx.s, &cx.ui.weapon, i);
+            cx.ui.att_cat = cur.and_then(|id| cats.iter().position(|c| *c == screens::cat_of(&id))).unwrap_or(0);
+            go(cx, Screen::Select, true);
+        }
+        Act::Unequip => {
+            let row = cx.ui.weapon.clone();
+            if let Some(id) = screens::slot_part(cx.s, &row, cx.ui.att_slot).filter(|id| cx.s.has_att(&row, id)) {
+                cx.s.toggle_att(&row, &id);
+                settings::save(cx.s);
+                cx.ui.toast = (format!("{} removed.", crate::attach::label(&id)), 2.0);
+            }
+        }
+        Act::SwapKind(k) => {
+            cx.ui.swap = k;
+            cx.ui.swap_cat = 0;
+            if k < 2 {
+                let cur = if k == 0 { cx.s.primary.clone() } else { cx.s.secondary.clone() };
+                let cats = screens::swap_cats(cx.roster, k);
+                cx.ui.swap_cat = cats.iter().position(|c| crate::attach::data().classes.get(&cur) == Some(c)).unwrap_or(0);
+            }
+            go(cx, Screen::Swap, true);
+        }
+        Act::SwapGun(row) => {
+            cx.ui.weapon = row;
+            handle(Act::Equip, cx, rect);
+            return;
         }
         Act::Gear(slot, row) => {
             match slot {
@@ -753,6 +810,7 @@ fn rebuild(
     assets: Res<AssetServer>,
     a: Res<UiAssets>,
     tablet: Res<Tablet>,
+    show: Res<showcase::Showcase>,
     root: Single<Entity, With<UiRoot>>,
     old: Query<Entity, With<Content>>,
     dot: Query<(), With<CursorDot>>,
@@ -766,7 +824,7 @@ fn rebuild(
     }
     let page = cmd.spawn((Node { width: px(W), height: px(H), position_type: PositionType::Absolute, ..default() }, Content, BackgroundColor(screens::DARK))).id();
     cmd.entity(*root).add_child(page);
-    let cx = BuildCx { f: &a.fonts, a: &assets, ui: &ui, s: &s, roster: &roster };
+    let cx = BuildCx { f: &a.fonts, a: &assets, ui: &ui, s: &s, roster: &roster, show: show.image.clone() };
     screens::build(&mut cmd, page, &cx);
     if dot.is_empty() {
         let d = cmd.spawn((Node { position_type: PositionType::Absolute, width: px(16), height: px(16), border_radius: BorderRadius::all(px(8)), border: UiRect::all(px(2)), ..default() }, BackgroundColor(Color::WHITE), BorderColor::all(Color::BLACK), GlobalZIndex(100), CursorDot)).id();
