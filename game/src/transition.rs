@@ -83,7 +83,7 @@ fn text(cmd: &mut ChildSpawnerCommands, font: &Handle<Font>, s: &str, size: f32,
 
 fn spawn(mut cmd: Commands, assets: Res<AssetServer>, mut mats: ResMut<Assets<VhsMat>>) {
     let ki: Handle<Font> = assets.load("fonts/Ki-Bold.otf"); // Ki_Font "Default" typeface
-    // Vhs_01.bk2 frames 0..300 as luma cells (vhs.wesl); data texture, linear
+    // Vhs_01.bk2, all 5711 frames as luma cells (vhs.wesl); data texture, linear
     let frames: Handle<Image> = assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load("textures/fx/vhs_01_atlas.png");
     let grey24 = Color::linear_rgb(0.701102, 0.701102, 0.701102); // TS_Body24Grey
     let dark32 = Color::linear_rgb(0.286458, 0.286458, 0.286458); // TS_Headline32DarkGrey

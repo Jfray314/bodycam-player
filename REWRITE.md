@@ -19,8 +19,10 @@ python -I tools/probe_curves.py <rec1.csv> <rec2.csv> assets/camera_motion.json 
 cargo run --release -p binka -- extracted/Bodycam/Content/Audio assets-local/audio
 # fonts: copy extracted/Bodycam/Content/UI/Fonts/ki/Ki-Bold.ufont -> assets-local/fonts/Ki-Bold.otf
 # VHS movie (death / loading screen background, Movies/Vhs/Vhs_01.bk2, Bink 2): tools/bk2dump (NihAV, see its Cargo.toml)
-#   bk2dump Vhs_01.bk2 a.rgb 0 300 320 180 -> 300 RGB frames; pack as luma into a 15x20 grid of 320x180 cells:
-#   assets-local/textures/fx/vhs_01_atlas.png (4800x3600 L8). Later segments (from frame ~1500) mis-decode (KB2n inter frames).
+#   bk2dump Vhs_01.bk2 a.rgb 0 100000 128 72 -> all 5711 RGB frames; pack as luma into a 64x90 grid of 128x72 cells:
+#   assets-local/textures/fx/vhs_01_atlas.png (8192x6480 L8). The vertical streak bands from frame ~550 on are the tape's real
+#   content (the in-game death / loading screens show them), not a decode error. NihAV: https://nihav.org/nihav.gitbundle cloned to
+#   tools/nihav (git-ignored), nihav-rad demuxers/bink.rs magic range widened to KB2n.
 cargo run -p game
 ```
 Live values (C++ defaults, real camera motion) come from `tools/ue4ss_probe` (UE4SS Lua mod: F7 property dump,
