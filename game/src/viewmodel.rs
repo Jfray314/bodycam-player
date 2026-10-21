@@ -777,7 +777,10 @@ fn place_arms(
         // view's bottom into the lens blur); metres in camera space, BODYCAM_TABOFF=fwd,up to tune.
         *tab_a = crate::status::finterp_to(*tab_a, if tablet.shown { 1.0 } else { 0.0 }, time.delta_secs(), 6.0);
         let (fwd, up) = std::env::var("BODYCAM_TABOFF").ok().and_then(|v| v.split_once(',').and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?)))).unwrap_or(TABLET_OFF);
-        post = Transform::from_translation(Vec3::new(0.0, up, -fwd) * *tab_a) * post;
+        // Gentle hand drift while holding it (user request; not from the game): a few mm / a fraction of a degree, slow.
+        let drift = Vec3::new(0.0015 * (now * 0.7).sin(), 0.002 * (now * 1.1).sin(), 0.0);
+        let roll = Quat::from_rotation_z(0.004 * (now * 0.5).sin());
+        post = Transform::from_translation((Vec3::new(0.0, up, -fwd) + drift) * *tab_a).with_rotation(Quat::IDENTITY.slerp(roll, *tab_a)) * post;
         // Rotation too: rec_1791925656 has the same gun-in-camera rotation (within 0.1 deg) on 5 different guns, so the node
         // squares the gun to the view. Gun joint axes (UE x, -y, z) -> camera: UE +Y (muzzle) = view forward, UE +Z = up.
         if let (Some(ap), Some(gt), Ok(rg)) = (gun_aim, gun_bone.as_ref().and_then(|(_, b)| globals.get(*b).ok()), globals.get(root)) {
