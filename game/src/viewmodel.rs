@@ -487,10 +487,13 @@ fn stress_layers(
     p: Single<&Player>,
     inv: Option<Single<&Inventory>>,
     mut alpha: ResMut<StressAnim>,
+    tablet: Res<crate::ui::Tablet>,
     roots: Query<&Anim, With<ArmsRoot>>,
     mut players: Query<(&mut AnimationPlayer, &AnimLink)>,
 ) {
     let Some(inv) = inv else { return };
+    // The tablet is its own item (Inventory.Slots.Tablet): the gun's stress clips don't play on it.
+    let on = if tablet.shown { 0.0 } else { 1.0 };
     (alpha.subtle, alpha.strong) = stress_tick(alpha.subtle, p.vel.length() * 100.0, p.aiming, st.stress, time.delta_secs());
     let a = &inv.slots[inv.current].anims;
     let clip = |k: &str| a[k]["path"].as_str().map(clip_of);
@@ -502,7 +505,7 @@ fn stress_layers(
                 player.start(*node).repeat();
             }
             if let Some(act) = player.animation_mut(*node) {
-                act.set_weight(w.clamp(0.0, 1.0)); // UE blend nodes clamp alpha; StressedStrongIdleAlpha runs 0..4 and weight 4 on an additive pulls the hands through the gun
+                act.set_weight(w.clamp(0.0, 1.0) * on); // UE blend nodes clamp alpha; StressedStrongIdleAlpha runs 0..4 and weight 4 on an additive pulls the hands through the gun
             }
         }
     }
@@ -523,10 +526,18 @@ fn regrips(
     mut req: MessageReader<Regrip>,
     mut shake: MessageReader<HandShake>,
     inv: Option<Single<&Inventory>>,
+    tablet: Res<crate::ui::Tablet>,
     mut roots: Query<&mut Anim, With<ArmsRoot>>,
     mut players: Query<(&mut AnimationPlayer, &mut AnimationTransitions, &AnimLink)>,
 ) {
     let Some(inv) = inv else { return };
+    if tablet.shown {
+        // no gun regrips / hand shake on the tablet
+        rg.pending = None;
+        req.clear();
+        shake.clear();
+        return;
+    }
     let dt = time.delta_secs();
     for r in req.read() {
         rg.pending = Some(r.delay);
@@ -570,6 +581,8 @@ fn regrips(
 }
 
 /// Base loop when no montage is playing: aim idle, walk loop or idle loop of the current weapon.
+const TABLET_OFF: (f32, f32) = (0.03, 0.01);
+
 fn base_loop(
     time: Res<Time>,
     p: Single<&Player>,
@@ -730,6 +743,7 @@ fn place_arms(
     globals: Query<&GlobalTransform>,
     mut gun_joint: Local<Option<Entity>>,
     mut action: Local<[f32; 2]>,
+    mut tab_a: Local<f32>,
     guns: Query<(Entity, &GunRoot)>,
     mut gun_bone: Local<Option<(String, Entity)>>,
 ) {
@@ -759,6 +773,11 @@ fn place_arms(
         }
         // AnimNode_Ads: shift the arms so the gun's AimPoint (last frame's pose, arms-root space) lands on the camera point.
         let mut post = post;
+        // ponytail: tablet held further out than the A_FP_Tablet_Pose socket math gives at FOV 120 (the screen overflowed the
+        // view's bottom into the lens blur); metres in camera space, BODYCAM_TABOFF=fwd,up to tune.
+        *tab_a = crate::status::finterp_to(*tab_a, if tablet.shown { 1.0 } else { 0.0 }, time.delta_secs(), 6.0);
+        let (fwd, up) = std::env::var("BODYCAM_TABOFF").ok().and_then(|v| v.split_once(',').and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?)))).unwrap_or(TABLET_OFF);
+        post = Transform::from_translation(Vec3::new(0.0, up, -fwd) * *tab_a) * post;
         // Rotation too: rec_1791925656 has the same gun-in-camera rotation (within 0.1 deg) on 5 different guns, so the node
         // squares the gun to the view. Gun joint axes (UE x, -y, z) -> camera: UE +Y (muzzle) = view forward, UE +Z = up.
         if let (Some(ap), Some(gt), Ok(rg)) = (gun_aim, gun_bone.as_ref().and_then(|(_, b)| globals.get(*b).ok()), globals.get(root)) {
