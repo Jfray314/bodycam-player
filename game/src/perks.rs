@@ -39,8 +39,6 @@ const BATTERY_IDLE: f32 = 0.1;
 const BATTERY_SPEED: f32 = 0.001;
 const RADIUS: f32 = 0.12;
 const G: f32 = 9.8;
-const TOSS_SPEED: f32 = 5.0; // ponytail: UE just drops the physics body; we toss it ahead so the flight starts in front of the player, eye height
-const TOSS_DRAG: f32 = 2.5;
 /// CurveFloat_DroneAcceleration keys.
 const ACC_CURVE: [crate::curve::Key; 2] = [[0.0, 0.0, 2.0, 13.502_299, 13.502_299], [1.0, 1.0, 2.0, 0.079_052_28, 0.079_052_28]];
 
@@ -298,7 +296,7 @@ fn deploy_flow(
                     let (_, hand_rot, hand_pos) = gt.to_scale_rotation_translation();
                     let (yaw, _, _) = cam.to_scale_rotation_translation().1.to_euler(EulerRot::YXZ);
                     cmd.spawn((
-                        Drone { vel: *cam.forward() * TOSS_SPEED + Vec3::Y * 0.5, yaw, pitch: 0.0, flying: false, hold: 0.0, tilt: Vec2::ZERO, spawn: 0.0, origin: hand_pos },
+                        Drone { vel: Vec3::ZERO, yaw, pitch: 0.0, flying: false, hold: 0.0, tilt: Vec2::ZERO, spawn: 0.0, origin: hand_pos },
                         Transform::from_translation(hand_pos).with_rotation(hand_rot * drone_basis().inverse()),
                         Visibility::default(),
                         Name::new("KamikazeDrone"),
@@ -422,11 +420,7 @@ fn drone_fly(
     if !d.flying {
         // the dropped drone: gravity, rests on the first surface below (physics body in UE)
         d.spawn += dt;
-        if perk.phase == Phase::Deploy {
-            d.vel *= (1.0 - TOSS_DRAG * dt).max(0.0); // tossed out ahead, hovering (rotors spin up) until the pilot takes over
-        } else {
-            d.vel.y -= G * dt;
-        }
+        d.vel.y -= G * dt;
         let step = d.vel * dt;
         if let Some((dist, n)) = cast(tf.translation, step, step.length() + 0.05) {
             tf.translation += step.normalize_or_zero() * (dist - 0.05).max(0.0);
