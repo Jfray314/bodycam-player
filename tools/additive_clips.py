@@ -16,13 +16,15 @@ def save(path, head, j, rest):
     body = struct.pack('<II', len(js), 0x4E4F534A) + js + rest
     open(path, 'wb').write(head[:8] + struct.pack('<I', 12 + len(body)) + body)
 
-def strip_scale(path, additive):
+def strip_scale(path, additive, rest_pose=()):
     head, j, rest = load(path)
     names = [nd.get('name') for nd in j['nodes']]
     hit = 0
     for an in j.get('animations', []):
         if an['name'] in additive:
             keep = [c for c in an['channels'] if c['target']['path'] != 'scale' and names[c['target']['node']] != 'root']
+            if an['name'] in rest_pose:  # constant (2-key) channels are the bind pose, i.e. a zero delta: drop them
+                keep = [c for c in keep if j['accessors'][an['samplers'][c['sampler']]['input']]['count'] > 2]
             hit += len(an['channels']) - len(keep)
             an['channels'] = keep
     if hit:
@@ -30,20 +32,29 @@ def strip_scale(path, additive):
     return hit
 
 def clips(path):
+    """(name, additive). Additive = pelvis at the origin, or (pelvis left at a stray constant, e.g. Mossberg590 Fire_Pump01 /
+    Revolver Fire) hand_l's local translation at 0: in a full pose hand_l is ~0.27 m down the forearm."""
     _, j, rest = load(path)
     binary = rest[8:]
     names = [nd.get('name') for nd in j['nodes']]
     for an in j.get('animations', []):
+        first = {}
         for ch in an['channels']:
-            if names[ch['target']['node']] == 'pelvis' and ch['target']['path'] == 'translation':
+            n = names[ch['target']['node']]
+            if n in ('pelvis', 'hand_l') and ch['target']['path'] == 'translation':
                 a = j['accessors'][an['samplers'][ch['sampler']]['output']]
                 bv = j['bufferViews'][a['bufferView']]
                 x, y, z = struct.unpack_from('<3f', binary, bv.get('byteOffset', 0) + a.get('byteOffset', 0))
-                yield an['name'], abs(x) + abs(y) + abs(z) < 1e-3
+                first[n] = abs(x) + abs(y) + abs(z) < 1e-3
+        if 'pelvis' in first:
+            yield an['name'], first['pelvis'] or first.get('hand_l', False), not first['pelvis']
 
 root = sys.argv[1] if len(sys.argv) > 1 else 'assets-local/models'
 files = [os.path.join(root, 'arms.glb')] + sorted(glob.glob(os.path.join(root, 'arms_anims', '*.glb')))
-out = sorted({n for f in files for n, add in clips(f) if add})
+found = [c for f in files for c in clips(f) if c[1]]
+# stray-pelvis clips lose their pelvis channel below (so they are no longer detectable): keep earlier runs' list
+out = sorted({n for n, _, _ in found} | set(json.load(open('assets/additive_clips.json'))))
+rest_pose = {n for n, _, q in found if q}  # stray-pelvis additives (bind pose in the unanimated channels)
 json.dump(out, open('assets/additive_clips.json', 'w'), indent=0)
 print(len(out), 'additive:', out)
-print('scale channels stripped:', sum(strip_scale(f, set(out)) for f in files))
+print('scale channels stripped:', sum(strip_scale(f, set(out), rest_pose) for f in files))
