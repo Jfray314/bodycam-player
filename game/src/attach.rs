@@ -271,6 +271,9 @@ struct FlashLight;
 struct LaserBeam;
 #[derive(Component)]
 struct LaserDot;
+/// Red dot / holo reticle quad: aimed shots go eye -> this point (weapon.rs muzzle_basis).
+#[derive(Component)]
+pub struct ReticleQuad;
 
 pub struct AttachPlugin;
 impl Plugin for AttachPlugin {
@@ -388,7 +391,11 @@ fn body_atts(
 ) {
     for (gun, g, co, key) in &guns {
         let Some(st) = g.joint.and(roots.get(co.parent()).ok()).and_then(|r| chars.get(r.parent()).ok()) else { continue };
-        let k = format!("{}:{}", st.item, st.atts.join(","));
+        // item just changed: sync_guns is despawning this gun this frame, its replacement gets the parts
+        if crate::character::model_of(&st.item) != Some(g.model) {
+            continue;
+        }
+        let k =format!("{}:{}", st.item, st.atts.join(","));
         if key.is_some_and(|x| x.0 == k) {
             continue;
         }
@@ -423,6 +430,10 @@ fn mount_sys(
         return;
     }
     let row = inv.slots[inv.current].name.clone();
+    // weapon just changed: attach_gun is replacing this gun scene, mount on the new one
+    if crate::viewmodel::gun_model(&row, &inv.slots[inv.current].anims) != Some(g.0) {
+        return;
+    }
     let picks = picks(&cfg, &row);
     let key = format!("{row}:{}", picks.join(","));
     if *done == (Some(gun), key.clone()) {
@@ -449,6 +460,7 @@ fn mount_sys(
             && let Some(r) = item.sockets.get("reticle").or_else(|| item.sockets.get("reticle_canted"))
         {
             cmd.spawn((
+                ReticleQuad,
                 Mesh3d(meshes.add(Rectangle::new(0.07 * rt.scale[0], 0.07 * rt.scale[1]))),
                 MeshMaterial3d(reticle_mat(&assets, &mut mats, rt)),
                 r.tf() * Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),

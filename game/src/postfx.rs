@@ -115,7 +115,7 @@ impl Plugin for PostFxPlugin {
         embedded_asset!(app, "postfx.wesl");
         app.add_plugins((FullscreenMaterialPlugin::<BodycamPostFx>::default(), AutoExposurePlugin))
             .add_systems(Startup, setup)
-            .add_systems(Update, (attach, toggles, motion_state, apply_fov).chain());
+            .add_systems(Update, (attach, toggles, tablet_plain, motion_state, apply_fov).chain());
     }
 }
 
@@ -179,6 +179,29 @@ fn toggles(mut cmd: Commands, keys: Res<ButtonInput<KeyCode>>, mut st: ResMut<Po
     if keys.just_pressed(KeyCode::F2) {
         st.enabled = !st.enabled;
         apply_enabled(&mut cmd, &st, cam.iter());
+    }
+}
+
+/// Tablet up: no barrel warp, chromatic aberration, edge disk blur or rolling shutter, so the menu text stays sharp
+/// (the grade and vignette stay). Exposure is held where it was: the centre-weighted meter otherwise reads the black screen
+/// filling the middle and pushes the exposure up until the tablet body and gloves wash out. All comes back when put away.
+// ponytail: not UE's behaviour (its lens post stays on over the tablet); readability over 1:1 here, per user.
+fn tablet_plain(tablet: Res<crate::ui::Tablet>, mut q: Query<&mut BodycamPostFx>, mut ae: Query<&mut AutoExposure>, mut was: Local<bool>) {
+    if tablet.shown == *was {
+        return;
+    }
+    *was = tablet.shown;
+    let d = BodycamPostFx::default();
+    for mut fx in &mut q {
+        let on = !tablet.shown;
+        fx.distortion = if on { d.distortion } else { 0.0 };
+        fx.ca = if on { d.ca } else { 0.0 };
+        fx.edge_blur = if on { d.edge_blur } else { 0.0 };
+        fx.rolling_shutter = if on { d.rolling_shutter } else { 0.0 };
+    }
+    for mut a in &mut ae {
+        let speed = if tablet.shown { 0.0 } else { 13.0 }; // stack(): AutoExposureSpeedUp / Down 13
+        (a.speed_brighten, a.speed_darken) = (speed, speed);
     }
 }
 

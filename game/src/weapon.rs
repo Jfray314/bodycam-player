@@ -893,6 +893,7 @@ fn muzzle_basis(
     aiming: bool,
     sights: &mut HashMap<String, Vec3>,
     att_fire: Option<(String, Vec3)>,
+    reticle: Option<Vec3>,
 ) -> (Vec3, Vec3) {
     let cam_fwd = cam.forward().as_vec3();
     let Ok((root, rgt, model)) = gun.single() else { return (cam.translation(), cam_fwd) };
@@ -926,10 +927,11 @@ fn muzzle_basis(
     // aimed) sits ~1-3 deg above the bore-parallel line through the front sight, so shots landed above the post. Fire
     // with the sight line's pitch instead: eye -> front sight tip (highest vertex on the gun's front half, cached per gun in
     // root space). It moves with the gun, so recoil/sway still steer the shot.
-    // ponytail: no zeroing; the bullet starts at the muzzle, so holes sit ~sight-height (5-7 cm) under the post.
+    // Zeroing (muzzle -> sight-line hit) happens in fire().
     // Pitch only: yaw stays the bore's (UE rule), and the highest vertex can be a front-sight wing beside the post.
-    let mut sight_pitch = None;
-    if aiming && n > 0.0 {
+    // A red dot / holo: the eye looks through the reticle quad (eye -> dot, not the iron front sight under it).
+    let mut sight_pitch = reticle.filter(|_| aiming).map(|r| (r - cam.translation()).normalize().y.clamp(-1.0, 1.0).asin());
+    if aiming && n > 0.0 && sight_pitch.is_none() {
         let tip = match sights.get(model.0) {
             Some(t) => Some(*t),
             None => {
@@ -974,7 +976,7 @@ fn fire(
     mut dry: MessageWriter<DryFire>,
     mut regrip: MessageWriter<Regrip>,
     (gun, kids, gun_meshes, mesh_assets): (Query<(Entity, &GlobalTransform, &GunRoot)>, Query<&Children>, Query<(&GlobalTransform, &Mesh3d)>, Res<Assets<Mesh>>),
-    (joints, parents, mut sights, cfg): (Query<(Entity, &Name, &GlobalTransform)>, Query<&ChildOf>, Local<HashMap<String, Vec3>>, Option<Res<crate::ui::settings::Settings>>),
+    (joints, parents, mut sights, cfg, reticles): (Query<(Entity, &Name, &GlobalTransform)>, Query<&ChildOf>, Local<HashMap<String, Vec3>>, Option<Res<crate::ui::settings::Settings>>, Query<&GlobalTransform, With<crate::attach::ReticleQuad>>),
 ) {
     let (inv, p) = &mut *q;
     let suppressed = cfg.as_ref().is_some_and(|c| crate::attach::suppressed(c, &inv.slots[inv.current].name));
@@ -1022,7 +1024,18 @@ fn fire(
     inv.cooldown = s.fire_rate.unwrap_or(0.1);
 
     let gt = *cam;
-    let (origin, aim_dir) = muzzle_basis(&gun, &joints, &parents, &kids, &gun_meshes, &mesh_assets, gt, p.aiming, &mut sights, cfg.as_ref().and_then(|c| crate::attach::fire_location(c, &inv.slots[inv.current].name)));
+    // canted + main optic both carry a quad: the one nearest the view axis is the one looked through
+    let reticle = reticles.iter().map(|r| r.translation()).max_by(|a, b| (*a - gt.translation()).normalize().dot(*gt.forward()).total_cmp(&(*b - gt.translation()).normalize().dot(*gt.forward())));
+    let (origin, mut aim_dir) = muzzle_basis(&gun, &joints, &parents, &kids, &gun_meshes, &mesh_assets, gt, p.aiming, &mut sights, cfg.as_ref().and_then(|c| crate::attach::fire_location(c, &inv.slots[inv.current].name)), reticle);
+    // Aimed: the muzzle sits under the sight line, so converge on what the sight line hits (zeroed at the target's range)
+    // and the hole lands on the dot / post instead of sight-height below it.
+    if p.aiming && let Ok(sight) = Dir3::new(aim_dir) {
+        let filter = |e: Entity| targets.get(e).is_ok_and(|t| !t.3);
+        let settings = MeshRayCastSettings::default().with_filter(&filter);
+        if let Some((_, h)) = ray.cast_ray(Ray3d::new(gt.translation(), sight), &settings).first().filter(|(_, h)| h.distance <= FIRE_RANGE) {
+            aim_dir = (h.point - origin).normalize_or(aim_dir);
+        }
+    }
     debug!("shot dir vs camera: yaw {:.2} pitch {:.2} deg", (aim_dir.cross(*gt.forward()).y).asin().to_degrees(), (aim_dir.y.asin() - gt.forward().y.asin()).to_degrees());
     // SpreadX = max yaw, SpreadY = max pitch (GA_Fire_Base), full angles.
     let (sx, sy) = if p.aiming { (s.spread_aim_x, s.spread_aim_y) } else { (s.spread_hip_x, s.spread_hip_y) };

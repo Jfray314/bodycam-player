@@ -157,7 +157,7 @@ fn xf(v: [f32; 7]) -> (Vec3, Quat) {
 }
 
 /// Item row -> gun glb (guns, grenades, knife, drone; None = nothing to draw).
-fn model_of(row: &str) -> Option<&'static str> {
+pub(crate) fn model_of(row: &str) -> Option<&'static str> {
     static M: OnceLock<HashMap<String, &'static str>> = OnceLock::new();
     let m = M.get_or_init(|| crate::weapon::load_weapons().iter().filter_map(|w| Some((w.name.clone(), gun_model(&w.name, &w.anims)?))).collect());
     m.get(row).copied().or_else(|| gun_model(row, &serde_json::Value::Null))
