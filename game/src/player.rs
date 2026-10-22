@@ -168,6 +168,8 @@ pub struct Player {
     smooth_pitch: f32,
     /// UE Yaw(DeltaTime) = Look.X / dt / 50 (Look.X taken as degrees of yaw input this frame).
     pub yaw_rate: f32,
+    /// UE Pitch(DeltaTime), same scale as `yaw_rate` (mouse pitch input only, no recoil).
+    pub pitch_rate: f32,
     /// IA_Move X (strafe, right +), Q/E held, and the Spring Camera roll (UE deg, cw +), see ROLL_SPEED.
     move_x: f32,
     lean_pressed: bool,
@@ -257,6 +259,7 @@ fn look(time: Res<Time>, motion: Res<AccumulatedMouseMotion>, mouse: Res<ButtonI
     let step = p.ctl_recoil.tick(time.delta_secs(), input, mouse.pressed(MouseButton::Left));
     p.yaw -= d.x * sens + step.x.to_radians();
     p.yaw_rate = yaw_delta_time((d.x * sens).to_degrees() / time.delta_secs().max(1e-4));
+    p.pitch_rate = yaw_delta_time((d.y * sens).to_degrees() / time.delta_secs().max(1e-4));
     p.pitch = (p.pitch - d.y * sens + step.y.to_radians()).clamp(-89.9f32.to_radians(), 89.9f32.to_radians()); // ViewPitchMin/Max
 }
 

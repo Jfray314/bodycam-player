@@ -5,7 +5,7 @@
 //!
 //! Source effect chains: SourceEffectChain_Bodycam_Filter_Test (EQ / HP / LP / convolution with the phone IR) has every
 //! entry bypassed in the cooked asset, so it is an identity and nothing is applied. The gun chain SE_Compressor_Guns
-//! (distortion + dynamics) is not implemented (see `GUN_CHAIN_GAP`).
+//! (WaveShaper Amount 10 / -10 dB + a compressor that never engages after it) is applied to the wave samples at load (`shape`).
 use crate::player::{Footstep, Player, StepKind};
 use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings, RayCastVisibility};
 use crate::status::NearMiss;
@@ -17,13 +17,10 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-/// ponytail: SE_Compressor_Guns (soft-knee 4:1 dynamics + distortion preset) skipped; add as a baked per-wave pass if gun loudness feels off.
-#[allow(dead_code)]
-const GUN_CHAIN_GAP: () = ();
 /// Listener to muzzle, cm (camera to gun muzzle ~0.5 m).
 const MUZZLE_DIST_CM: f32 = 50.0;
 /// Listener to feet, cm.
-const FOOT_DIST_CM: f32 = 100.0;
+const FOOT_DIST_CM: f32 = 160.0;
 
 #[derive(Deserialize)]
 struct Node {
@@ -37,6 +34,7 @@ struct Cue {
     volume: f32,
     pitch: f32,
     att: Option<String>,
+    chain: Option<String>,
     max_count: Option<usize>,
     stop_oldest: bool,
     nodes: HashMap<String, Node>,
@@ -46,6 +44,8 @@ struct Cue {
 struct Baked {
     cues: HashMap<String, Option<Cue>>,
     att: HashMap<String, Value>,
+    #[serde(default)]
+    chains: HashMap<String, Option<Vec<Value>>>,
     weapons: HashMap<String, HashMap<String, String>>,
     footsteps: HashMap<String, Option<String>>,
 }
@@ -57,6 +57,8 @@ pub struct VoiceSpec {
     pub volume: f32,
     pub pitch: f32,
     pub delay: f32,
+    /// Source effect chain WaveShaper (amount, output gain dB), applied to the wave samples (see `shape`).
+    pub fx: Option<(f32, f32)>,
 }
 
 /// Cue parameters set by the game (SetBoolParameter etc.). Defaults describe the indoor test range.
@@ -131,13 +133,24 @@ impl Bank {
     pub fn evaluate(&mut self, cue: &str, params: &Params, dist_cm: f32, rng: &mut impl Rng) -> Vec<VoiceSpec> {
         let Some(Some(c)) = self.baked.cues.get(cue) else { return vec![] };
         let mut vol = c.volume;
-        if let Some(a) = c.att.as_ref().and_then(|a| self.baked.att.get(a)) {
+        if let Some(a) = c.att.as_ref().and_then(|a| self.baked.att.get(a.split('.').next().unwrap())) {
             vol *= att_gain(a, dist_cm);
         }
         let mut out = vec![];
-        let mut cx = Ctx { cue, c, att: &self.baked.att, params, env: &self.env, dist: dist_cm, unused: &mut self.unused, rng, out: &mut out };
+        let fx = self.fx_of(c);
+        let mut cx = Ctx { cue, c, att: &self.baked.att, params, env: &self.env, dist: dist_cm, fx, unused: &mut self.unused, rng, out: &mut out };
         cx.walk(c.first.as_deref(), vol, c.pitch, 0.0);
         out
+    }
+
+    fn fx_of(&self, c: &Cue) -> Option<(f32, f32)> {
+        let l = self.baked.chains.get(c.chain.as_ref()?.split('.').next()?)?.as_ref()?;
+        let e = l.iter().find(|e| e["bypass"] == false && e["class"].as_str().is_some_and(|c| c.ends_with("SourceEffectWaveShaperPreset")))?;
+        Some((num(&e["settings"]["Settings"], "Amount", 1.0), num(&e["settings"]["Settings"], "OutputGainDb", 0.0)))
+    }
+
+    pub fn cue_fx(&self, cue: &str) -> Option<(f32, f32)> {
+        self.fx_of(self.baked.cues.get(cue)?.as_ref()?)
     }
 
     /// Every wave a cue can play (for preloading).
@@ -171,6 +184,7 @@ struct Ctx<'a, R: Rng> {
     params: &'a Params,
     env: &'a Params,
     dist: f32,
+    fx: Option<(f32, f32)>,
     unused: &'a mut HashMap<(String, String), Vec<usize>>,
     rng: &'a mut R,
     out: &'a mut Vec<VoiceSpec>,
@@ -197,7 +211,7 @@ impl<R: Rng> Ctx<'_, R> {
         match n.class.as_str() {
             "SoundNodeWavePlayer" => {
                 if let Some(w) = p["SoundWaveAssetPtr"].as_str() {
-                    self.out.push(VoiceSpec { wave: w.into(), volume: vol, pitch, delay });
+                    self.out.push(VoiceSpec { wave: w.into(), volume: vol, pitch, delay, fx: self.fx });
                 }
             }
             "SoundNodeModulator" => {
@@ -244,7 +258,7 @@ impl<R: Rng> Ctx<'_, R> {
                 self.walk(kids.get(pick).copied().flatten(), vol, pitch, delay);
             }
             "SoundNodeAttenuation" => {
-                let g = p["AttenuationSettings"].as_str().and_then(|a| self.att.get(a)).map_or(1.0, |a| att_gain(a, self.dist));
+                let g = p["AttenuationSettings"].as_str().and_then(|a| self.att.get(a.split('.').next().unwrap())).map_or(1.0, |a| att_gain(a, self.dist));
                 self.walk(kids.first().copied().flatten(), vol * g, pitch, delay);
             }
             "SoundNodeDistanceCrossFade" => self.crossfade(p, &kids, self.dist, vol, pitch, delay),
@@ -351,8 +365,8 @@ struct Live {
     handles: HashMap<String, Handle<AudioSource>>,
     preloaded: HashSet<String>,
     aiming: bool,
-    /// Notify sounds waiting for their time: (seconds to go, package path).
-    queue: Vec<(f32, String)>,
+    /// Notify sounds waiting for their time: (seconds to go, package path, distance to the listener in cm).
+    queue: Vec<(f32, String, f32)>,
 }
 
 pub struct AudioPlugin;
@@ -372,8 +386,9 @@ impl Plugin for AudioPlugin {
         app.init_resource::<Live>()
             .insert_resource(Tremor(0.0))
             .init_resource::<Loops>()
+            .insert_resource(load_ambients(std::path::Path::new(&root)))
             .add_systems(PostStartup, preload_player)
-            .add_systems(Update, (footsteps, weapon_sfx, remote_sfx, near_miss_sfx, shell_sfx, montage_sfx, stop_cues, play_cues, run_queue, aim_sfx, start_pending, preload_weapons, loops, selftest).chain());
+            .add_systems(Update, (footsteps, weapon_sfx, remote_sfx, near_miss_sfx, shell_sfx, montage_sfx, stop_cues, play_cues, run_queue, aim_sfx, start_pending, preload_weapons, loops, ambients, selftest).chain());
     }
 }
 
@@ -396,6 +411,31 @@ fn selftest(time: Res<Time>, mut steps: MessageWriter<Footstep>, mut dry: Messag
 
 fn load_wave(live: &mut Live, assets: &AssetServer, wave: &str) -> Handle<AudioSource> {
     live.handles.entry(wave.into()).or_insert_with(|| assets.load(wav_path(wave))).clone()
+}
+
+/// SoundCue SourceEffectChain WaveShaper: out = tanh(Amount * x) * 10^(OutputGainDb / 20) on the 16-bit PCM of the decoded wav
+/// (Audio::FWaveShaper). Amount 10 / -10 dB (gun chain) lifts everything quiet by up to +10 dB and caps peaks at -10 dBFS.
+// ponytail: assumes the plain tanh shaper (no pre-normalisation); the 4:1 compressor behind it needs > -6 dBFS, which the shaper's -10 dBFS ceiling never reaches.
+fn shape(mut wav: Vec<u8>, amount: f32, gain_db: f32) -> Vec<u8> {
+    let g = 10f32.powf(gain_db / 20.0);
+    let Some(i) = wav.windows(4).position(|w| w == b"data") else { return wav };
+    for c in wav[i + 8..].chunks_exact_mut(2) {
+        let x = i16::from_le_bytes([c[0], c[1]]) as f32 / 32768.0;
+        c.copy_from_slice(&(((amount * x).tanh() * g * 32767.0) as i16).to_le_bytes());
+    }
+    wav
+}
+
+fn load_wave_fx(live: &mut Live, assets: &AssetServer, wave: &str, fx: Option<(f32, f32)>) -> Handle<AudioSource> {
+    let Some((a, g)) = fx else { return load_wave(live, assets, wave) };
+    let root = std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into());
+    live.handles
+        .entry(format!("{wave}#ws{a}:{g}"))
+        .or_insert_with(|| match std::fs::read(format!("{root}/{}", wav_path(wave))) {
+            Ok(b) => assets.add(AudioSource { bytes: shape(b, a, g).into() }),
+            Err(_) => assets.load(wav_path(wave)),
+        })
+        .clone()
 }
 
 /// Trigger a cue: evaluate, enforce its concurrency (StopOldest), queue the voices.
@@ -423,11 +463,12 @@ fn trigger(cmd: &mut Commands, bank: &mut Bank, live: &mut Live, assets: &AssetS
     }
     let mut ids = vec![];
     for v in &voices {
-        let handle = load_wave(live, assets, &v.wave);
+        let handle = load_wave_fx(live, assets, &v.wave, v.fx);
         ids.push(cmd.spawn(Pending { wait: v.delay, handle, volume: v.volume * params.floats.get("PlayGain").copied().unwrap_or(1.0), pitch: v.pitch }).id());
     }
     live.groups.entry(cue.into()).or_default().push_back(ids);
-    info!("audio: {cue} -> {} voice(s) [{}]", voices.len(), voices.iter().take(3).map(|v| format!("{} v{:.2} p{:.2} d{:.2}", v.wave.rsplit('/').next().unwrap(), v.volume, v.pitch, v.delay)).collect::<Vec<_>>().join(", "));
+    let n = if std::env::var_os("BODYCAM_AUDIO_DEBUG").is_some() { 99 } else { 3 };
+    info!("audio: {cue} -> {} voice(s) [{}]", voices.len(), voices.iter().take(n).map(|v| format!("{} v{:.2} p{:.2} d{:.2}", v.wave.rsplit('/').next().unwrap(), v.volume, v.pitch, v.delay)).collect::<Vec<_>>().join(", "));
 }
 
 fn start_pending(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Pending)>, loading: Res<crate::transition::Loading>) {
@@ -443,21 +484,31 @@ fn start_pending(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &mut 
     }
 }
 
-const FOLEY: [(&str, &str); 4] = [
-    ("/Game/Audio/Player/Foley/Armor/Foley_Cloth_Move_Gear_", "step"),
-    ("/Game/Audio/Player/Foley/Legs/Foley_Cloth_Move_Leg_", "step"),
-    ("/Game/Audio/Player/Foley/Arms/Foley_Cloth_Move_Arms_", "stride"),
-    ("/Game/Audio/Player/Foley/Bodycam/Foley_Bodycam_", "stride"),
+/// Footstep_Notify PlaySound siblings (ALS_N_Walk_F / Run_F / CLF_Walk_F notifies): every step plays all four foley cues
+/// <prefix><Gait>: (prefix, delay after the footstep notify in s, distance cm from the camera to the attach bone).
+/// Delays are the notify time differences (arms 0, bodycam +0.003, gear +0.009, leg +0.098); bones calf / lowerarm / spine_02 / head.
+// ponytail: bone distances from the mannequin proportions (eye ~160 cm, calf 40, forearm 90, spine_02 125, head 5), not read from the skeleton.
+const FOLEY: [(&str, f32, f32); 4] = [
+    ("/Game/Audio/Player/Foley/Arms/Foley_Cloth_Move_Arms_", 0.0, 70.0),
+    ("/Game/Audio/Player/Foley/Bodycam/Foley_Bodycam_", 0.003, 5.0),
+    ("/Game/Audio/Player/Foley/Armor/Foley_Cloth_Move_Gear_", 0.009, 40.0),
+    ("/Game/Audio/Player/Foley/Legs/Foley_Cloth_Move_Leg_", 0.098, 120.0),
 ];
 
 /// Original steps come from animation notifies; here from the gait phase (player.rs `Footstep`).
-fn footsteps(mut cmd: Commands, mut ev: MessageReader<Footstep>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>, mut ray: MeshRayCast, player: Query<&GlobalTransform, With<Player>>, surf: Query<&crate::weapon::SurfaceMat>) {
+/// Footstep_AnimNotify.Received_Notify: SpawnSoundAtLocation(row cue, foot socket, volume 1), then for the local player
+/// `Elevation` = 0.5 (ComputeElevation, MyFtps), `FootstepType` and `Turning?` = |Look.X| > 1.
+#[allow(clippy::too_many_arguments)]
+fn footsteps(mut cmd: Commands, mut ev: MessageReader<Footstep>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>, mut ray: MeshRayCast, player: Query<(&GlobalTransform, &Player)>, surf: Query<&crate::weapon::SurfaceMat>, time: Res<Time>) {
     for f in ev.read() {
         let mut params = Params::default();
         params.ints.insert("FootstepType", f.kind as i32);
-        params.bools.insert("Turning?", false);
+        // Look.X (input value) = Yaw(DeltaTime) * dt * 50 (Bodycam_Player.Look handler); the sound is set after the spawn, same frame.
+        let turning = player.iter().next().is_some_and(|(_, p)| (p.yaw_rate * time.delta_secs() * 50.0).abs() > 1.0);
+        params.bools.insert("Turning?", turning);
+        params.floats.insert("Elevation", 0.5);
         // Surface under the feet (ALS: line trace down, PhysMat SurfaceType -> DT_Footstep_Player row); unmarked = Default.
-        let under = player.iter().next().and_then(|p| {
+        let under = player.iter().next().and_then(|(p, _)| {
             ray.cast_ray(Ray3d::new(p.translation() + Vec3::Y * 0.2, Dir3::NEG_Y), &MeshRayCastSettings::default().with_filter(&|e| surf.contains(e)).with_visibility(RayCastVisibility::Any))
                 .first()
                 .and_then(|(e, h)| (h.distance < 1.0).then(|| surf.get(*e).ok().map(|s| s.0)).flatten())
@@ -474,10 +525,8 @@ fn footsteps(mut cmd: Commands, mut ev: MessageReader<Footstep>, mut bank: ResMu
             StepKind::Walk => "Walk",
             _ => "Run",
         };
-        for (prefix, when) in FOLEY {
-            if when == "step" || f.stride_start {
-                trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &format!("{prefix}{gait}"), &Params::default(), 50.0);
-            }
+        for (prefix, delay, dist) in FOLEY {
+            live.queue.push((delay, format!("{prefix}{gait}"), dist));
         }
     }
 }
@@ -523,7 +572,7 @@ fn near_miss_sfx(mut cmd: Commands, mut ev: MessageReader<NearMiss>, mut bank: R
 /// SurfaceType switch: the shell floor carries no PhysMat, so index 0 (Default -> cement).
 fn shell_sfx(mut ev: MessageReader<ShellLanded>, mut live: ResMut<Live>) {
     for _ in ev.read() {
-        live.queue.push((0.0, "/Game/BodycamWeapons/Core/Blueprint/Emitters/Particles/Emitters/Shell/Sounds_Shell/Shell_Pistol_Cue".into()));
+        live.queue.push((0.0, "/Game/BodycamWeapons/Core/Blueprint/Emitters/Particles/Emitters/Shell/Sounds_Shell/Shell_Pistol_Cue".into(), MUZZLE_DIST_CM));
     }
 }
 
@@ -532,7 +581,7 @@ fn montage_sfx(mut ev: MessageReader<MontageStarted>, mut live: ResMut<Live>) {
     for m in ev.read() {
         for (t, name, props) in &m.montage.notifies {
             if name == "PlayWepSounds_C" && let Some(s) = props["Sound"].as_str() {
-                live.queue.push((*t, s.split('.').next().unwrap().to_string()));
+                live.queue.push((*t, s.split('.').next().unwrap().to_string(), MUZZLE_DIST_CM));
             }
         }
     }
@@ -542,11 +591,11 @@ fn montage_sfx(mut ev: MessageReader<MontageStarted>, mut live: ResMut<Live>) {
 fn run_queue(mut cmd: Commands, time: Res<Time>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>) {
     let dt = time.delta_secs();
     let q = std::mem::take(&mut live.queue);
-    for (t, s) in q {
+    for (t, s, d) in q {
         if t > dt {
-            live.queue.push((t - dt, s));
+            live.queue.push((t - dt, s, d));
         } else if bank.has(&s) {
-            trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &s, &Params::default(), MUZZLE_DIST_CM);
+            trigger(&mut cmd, &mut bank, &mut live, &assets, &alive, &s, &Params::default(), d);
         } else {
             let handle = load_wave(&mut live, &assets, &s);
             cmd.spawn(Pending { wait: 0.0, handle, volume: 1.0, pitch: 1.0 });
@@ -577,25 +626,40 @@ use crate::status::{finterp_to as finterp, SurvivorStatus};
 
 /// A cue played as an AudioComponent: re-evaluated every frame with its live parameters and a fixed random seed (so Random
 /// nodes keep their pick), every wave looping; waves whose crossfade weight is 0 stay running at zero volume.
-#[derive(Default)]
+/// `dist` = listener distance (cm) fed to the cue's attenuation, `pitch_mul` = component PitchMultiplier,
+/// `lazy` = never start a wave that is silent right now (far ambient sources).
 struct Cont {
     ents: HashMap<String, Entity>,
+    dist: f32,
+    pitch_mul: f32,
+    lazy: bool,
+}
+
+impl Default for Cont {
+    fn default() -> Self {
+        Cont { ents: HashMap::new(), dist: 0.0, pitch_mul: 1.0, lazy: false }
+    }
 }
 
 impl Cont {
     fn update(&mut self, cmd: &mut Commands, bank: &mut Bank, assets: &AssetServer, sinks: &mut Query<&mut AudioSink>, cue: &str, params: &Params, mult: f32) {
         let mut want: HashMap<String, (f32, f32)> = HashMap::new();
-        for v in bank.evaluate(cue, params, 0.0, &mut rand::rngs::StdRng::seed_from_u64(7)) {
+        for v in bank.evaluate(cue, params, self.dist, &mut rand::rngs::StdRng::seed_from_u64(7)) {
             let e = want.entry(v.wave).or_insert((0.0, v.pitch));
             e.0 += v.volume * mult;
         }
+        self.apply(cmd, assets, sinks, want);
+    }
+
+    fn apply(&mut self, cmd: &mut Commands, assets: &AssetServer, sinks: &mut Query<&mut AudioSink>, want: HashMap<String, (f32, f32)>) {
         for (wave, (vol, pitch)) in &want {
             match self.ents.get(wave).and_then(|e| sinks.get_mut(*e).ok()) {
                 Some(mut sink) => sink.set_volume(Volume::Linear(*vol)),
                 None if self.ents.contains_key(wave) => {} // sink not created yet
+                None if self.lazy && *vol <= 0.001 => {}
                 None => {
                     // Mute-start waves that are not audible yet but may become so.
-                    let id = cmd.spawn((AudioPlayer::<AudioSource>(assets.load(wav_path(wave))), PlaybackSettings::LOOP.with_volume(Volume::Linear(*vol)).with_speed(*pitch))).id();
+                    let id = cmd.spawn((AudioPlayer::<AudioSource>(assets.load(wav_path(wave))), PlaybackSettings::LOOP.with_volume(Volume::Linear(*vol)).with_speed(*pitch * self.pitch_mul))).id();
                     self.ents.insert(wave.clone(), id);
                 }
             }
@@ -618,11 +682,11 @@ struct Loops {
     wind_vol: f32,
     tremor_vol: f32,
     high_rotation: f32,
-    last_look: Option<Vec2>,
+    dbg: f32,
 }
 impl Default for Loops {
     fn default() -> Self {
-        Loops { wind: Cont::default(), foley: Cont::default(), breath: Cont::default(), tremor: Cont::default(), foley_vol: 0.0, wind_vol: 0.0, tremor_vol: 1.0, high_rotation: 0.0, last_look: None }
+        Loops { wind: Cont::default(), foley: Cont::default(), breath: Cont::default(), tremor: Cont::default(), foley_vol: 0.0, wind_vol: 0.0, tremor_vol: 1.0, high_rotation: 0.0, dbg: 0.0 }
     }
 }
 
@@ -644,11 +708,8 @@ fn loops(
     let dt = time.delta_secs();
     // loading screen: every loop silent (GlobalVolume does not reach sinks already playing)
     let on = if loading.0 { 0.0 } else { 1.0 };
-    // Yaw/Pitch(DeltaTime): per-frame control-rotation change in degrees.
-    let look = Vec2::new(p.yaw, p.pitch);
-    let d = st.last_look.map_or(Vec2::ZERO, |l| (look - l).abs() * (180.0 / std::f32::consts::PI));
-    st.last_look = Some(look);
-    let (dy, dp) = (d.x, d.y);
+    // Abs(Yaw(DeltaTime)) / Abs(Pitch(DeltaTime)): Look input per second / 50 (player.rs `yaw_rate`, measured scale; no recoil).
+    let (dy, dp) = (p.yaw_rate.abs(), p.pitch_rate.abs());
     let speed_cm = Vec2::new(p.vel.x, p.vel.z).length() * 100.0;
 
     // UpdateHighRotation
@@ -674,11 +735,24 @@ fn loops(
 
     // Breathing (UpdateBreathingSounds)
     let speed = (vit.stress + map_clamped(vit.health, 25.0, 100.0, 0.8, 0.0) + map_clamped(vit.stamina, 0.0, 1.0, 0.0, 1.0)).clamp(0.0, 1.0);
+    // Calibration (user-tuned against the real game; the cue itself plays calm breathing at 1.0): quiet bed at rest,
+    // full level once Speed (stress / fatigue) climbs past ~0.6, i.e. sprinting / out of breath.
+    // ponytail: no data source for this curve (class / mix volumes are all 1.0); tune BREATH_REST.
+    const BREATH_REST: f32 = 0.04;
+    let breath_gain = BREATH_REST + (1.0 - BREATH_REST) * map_clamped(speed, 0.15, 0.6, 0.0, 1.0);
     let mut bp = Params::default();
     bp.floats.insert("Speed", speed);
     bp.bools.insert("Running?", speed_cm > 150.0);
     // dead: the body stops breathing (the scream cue carries its own death breaths)
-    st.breath.update(&mut cmd, &mut bank, &assets, &mut sinks, "/Game/Ultimate_SFX/Repiration/Breathing_cue", &bp, if p.dead { 0.0 } else { on });
+    st.breath.update(&mut cmd, &mut bank, &assets, &mut sinks, "/Game/Ultimate_SFX/Repiration/Breathing_cue", &bp, if p.dead { 0.0 } else { on * breath_gain });
+
+    // BODYCAM_AUDIO_DEBUG=1: once a second the loop drivers and the summed volume per loop cue.
+    st.dbg += dt;
+    if st.dbg > 1.0 && std::env::var_os("BODYCAM_AUDIO_DEBUG").is_some() {
+        st.dbg = 0.0;
+        let tot = |c: &Cont, sinks: &Query<&mut AudioSink>| c.ents.values().filter_map(|e| sinks.get(*e).ok()).map(|s| s.volume().to_linear()).sum::<f32>();
+        info!("audio loops: speed {speed_cm:.0}cm/s yaw {dy:.2} pitch {dp:.2} hiRot {:.2} | wind {:.2} (sum {:.3}) foley {:.2} (sum {:.3}) breath speed {speed:.2} (sum {:.3})", st.high_rotation, st.wind_vol, tot(&st.wind, &sinks), st.foley_vol, tot(&st.foley, &sinks), tot(&st.breath, &sinks));
+    }
 
     // Mic tremor
     st.tremor_vol = finterp(st.tremor_vol, tremor.0, dt, 10.0);
@@ -687,11 +761,64 @@ fn loops(
     st.tremor.update(&mut cmd, &mut bank, &assets, &mut sinks, "/Game/Audio/Player/Foley/Bodycam/MicTremor_Bodycam", &Params::default(), tv);
 }
 
+// ---------- level ambience ----------
+
+/// A placed AmbientSound / BP AudioComponent of the lobby (assets-local/maps/ambients.json, tools/ambients.py): an auto-activated
+/// looping sound at a fixed world position. SoundCues attenuate through their own graph / attenuation; bare SoundWaves with
+/// `bOverrideAttenuation` through the component's AttenuationOverrides, without one they play unattenuated.
+#[derive(Deserialize)]
+struct Amb {
+    sound: String,
+    vol: f32,
+    pitch: f32,
+    loc_cm: [f32; 3],
+    #[serde(default)]
+    override_att: bool,
+    att: Option<Value>,
+}
+
+#[derive(Resource, Default)]
+struct Ambients(Vec<(Amb, Cont)>);
+
+fn load_ambients(root: &std::path::Path) -> Ambients {
+    let list: Vec<Amb> = std::fs::read_to_string(root.join("maps/ambients.json")).ok().and_then(|s| serde_json::from_str(&s).map_err(|e| error!("ambients.json: {e}")).ok()).unwrap_or_default();
+    Ambients(list.into_iter().map(|a| { let c = Cont { lazy: true, pitch_mul: a.pitch, ..default() }; (a, c) }).collect())
+}
+
+/// Lobby ambience: every source is a looping AudioComponent whose volume follows the listener distance each frame.
+// ponytail: no spatial panning, no occlusion low-pass (OcclusionLowPassFilterFrequency 1500) / wall trace; volume by distance only.
+fn ambients(mut cmd: Commands, mut t: Local<f32>, time: Res<Time>, mut amb: ResMut<Ambients>, cam: Single<&GlobalTransform, With<crate::player::BodycamCamera>>, mut bank: ResMut<Bank>, assets: Res<AssetServer>, mut sinks: Query<&mut AudioSink>, loading: Res<crate::transition::Loading>) {
+    let lobby = crate::level::level()[0].is_empty();
+    // SoundMix BodycamMic scales Ambiance_BC by 0.25; the extra 0.2 is a calibration so the beds sit far under footsteps.
+    // ponytail: AMBIENT_GAIN has no data source beyond the 0.25.
+    const AMBIENT_GAIN: f32 = 0.25 * 0.2;
+    let on = if loading.0 || !lobby { 0.0 } else { AMBIENT_GAIN };
+    let me = cam.translation();
+    let params = Params::default();
+    for (a, c) in &mut amb.0 {
+        let pos = Vec3::new(a.loc_cm[1], a.loc_cm[2], -a.loc_cm[0]) * 0.01;
+        c.dist = pos.distance(me) * 100.0;
+        if bank.has(&a.sound) {
+            c.update(&mut cmd, &mut bank, &assets, &mut sinks, &a.sound, &params, a.vol * on);
+        } else {
+            let g = a.att.as_ref().filter(|_| a.override_att).map_or(1.0, |t| att_gain(t, c.dist));
+            let want = HashMap::from([(a.sound.clone(), (a.vol * g * on, 1.0))]);
+            c.apply(&mut cmd, &assets, &mut sinks, want);
+        }
+    }
+    *t += time.delta_secs();
+    if *t > 1.0 && std::env::var_os("BODYCAM_AUDIO_DEBUG").is_some() {
+        *t = 0.0;
+        let live: Vec<String> = amb.0.iter().filter(|(_, c)| !c.ents.is_empty()).map(|(a, c)| format!("{}@{:.0}m={:.2}", a.sound.rsplit('/').next().unwrap(), c.dist / 100.0, c.ents.values().filter_map(|e| sinks.get(*e).ok()).map(|s| s.volume().to_linear()).sum::<f32>())).collect();
+        info!("audio ambients: {} of {} started [{}]", live.len(), amb.0.len(), live.join(", "));
+    }
+}
+
 /// Preload what the first seconds need: default-surface footsteps, foley, aim, breathing.
 fn preload_player(bank: Res<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>) {
     let mut cues: Vec<String> = bank.footstep_cue("SurfaceType_Default").map(str::to_string).into_iter().collect();
     for gait in ["Walk", "Run", "Crouch"] {
-        cues.extend(FOLEY.iter().map(|(p, _)| format!("{p}{gait}")));
+        cues.extend(FOLEY.iter().map(|(p, _, _)| format!("{p}{gait}")));
     }
     cues.push("/Game/Ultimate_SFX/ClothesSounds/Aim_Sounds".into());
     cues.push("/Game/Ultimate_SFX/ClothesSounds/UnAim_Sounds".into());
@@ -711,8 +838,9 @@ fn preload_weapons(inv: Option<Single<&crate::weapon::Inventory>>, bank: Res<Ban
     }
     for kind in ["Fire", "FireDry"] {
         if let Some(c) = bank.weapon_cue(w, kind) {
+            let fx = bank.cue_fx(c);
             for wave in bank.waves_of(c) {
-                load_wave(&mut live, &assets, &wave);
+                load_wave_fx(&mut live, &assets, &wave, fx);
             }
         }
     }
@@ -757,5 +885,33 @@ mod tests {
         assert_eq!(fade(50.0, &i), 1.0);
         assert!(fade(2750.0, &i) > 0.4 && fade(2750.0, &i) < 0.6);
         assert_eq!(fade(4000.0, &i), 0.0);
+    }
+
+    /// `DUMP_W=M4A1,Glock17 [DUMP_D=50] cargo test -p game dump_voices -- --ignored --nocapture`: every voice a Fire cue starts.
+    #[test]
+    #[ignore]
+    fn dump_voices() {
+        let root = std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into());
+        let mut bank = Bank::load(std::path::Path::new(&root)).unwrap();
+        for w in std::env::var("DUMP_W").unwrap_or_else(|_| "M4A1".into()).split(',') {
+            let cue = bank.weapon_cue(w, "Fire").unwrap().to_string();
+            let d: f32 = std::env::var("DUMP_D").ok().and_then(|v| v.parse().ok()).unwrap_or(50.0);
+            let v = bank.evaluate(&cue, &Params::default(), d, &mut rand::rng());
+            println!("== {w} {cue} dist {d}: {} voices, sum vol {:.2}", v.len(), v.iter().map(|x| x.volume).sum::<f32>());
+            for s in &v {
+                println!("  {:60} v{:.3} p{:.2} d{:.2} fx{:?}", s.wave.rsplit('/').next().unwrap(), s.volume, s.pitch, s.delay, s.fx);
+            }
+        }
+    }
+
+    #[test]
+    fn waveshaper_caps_peaks() {
+        let mut wav = b"RIFF\0\0\0\0WAVEfmt \x10\0\0\0\x01\0\x02\0\x80\xbb\0\0\0\0\0\0\x04\0\x10\0data\x04\0\0\0".to_vec();
+        wav.extend_from_slice(&i16::MAX.to_le_bytes());
+        wav.extend_from_slice(&328i16.to_le_bytes()); // 0.01
+        let out = shape(wav, 10.0, -10.0);
+        let s = |i: usize| i16::from_le_bytes([out[44 + i * 2], out[45 + i * 2]]) as f32 / 32767.0;
+        assert!((s(0) - 0.316).abs() < 0.01, "{}", s(0)); // full scale -> -10 dBFS
+        assert!((s(1) - 0.0316 * (0.1f32).tanh() / 0.1).abs() < 0.002, "{}", s(1)); // quiet tail: x10 * 0.316 (~ +10 dB)
     }
 }
