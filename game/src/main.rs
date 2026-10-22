@@ -20,6 +20,7 @@ mod hud;
 mod items;
 mod lens;
 mod transition;
+mod level;
 mod perks;
 mod rccar;
 mod map;
@@ -59,15 +60,14 @@ fn main() {
         .add_plugins((body::BodyPlugin, character::CharacterPlugin))
         .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, sway::SwayPlugin, recoil::RecoilPlugin, map::MapPlugin, gunfight::GunfightPlugin, grid::GridPlugin, bots::BotsPlugin, camadjust::CamAdjustPlugin, dev::DevPlugin))
         .add_plugins((effects::EffectsPlugin, lens::LensPlugin, blood::BloodPlugin, soft::SoftPlugin, attach::AttachPlugin, items::ItemsPlugin, explosion::ExplosionPlugin, bomb::BombPlugin, perks::PerksPlugin, rccar::RcCarPlugin, net::NetPlugin))
-        .add_plugins((ui::UiPlugin, ragdoll::RagdollPlugin, transition::TransitionPlugin))
+        .add_plugins((ui::UiPlugin, ragdoll::RagdollPlugin, transition::TransitionPlugin, level::LevelPlugin))
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
-        .add_systems(Startup, test_range.run_if(|| !map::available()))
         .run();
 }
 
 /// Indoor firing-range test room (walls, slatted skylight, crates, target stands) for judging the
 /// camera look against in-game screenshots. Not a port of any map.
-fn test_range(mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>, mut images: ResMut<Assets<Image>>) {
+pub(crate) fn test_range(mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>, mut images: ResMut<Assets<Image>>) {
     if grid::wanted() {
         return grid::spawn(&mut cmd, &mut meshes, &mut mats, &mut images);
     }

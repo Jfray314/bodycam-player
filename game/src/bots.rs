@@ -91,12 +91,16 @@ pub fn setup(cmd: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut Assets<St
     cmd.insert_resource(Hostile(true));
 }
 
+/// level.rs switch: the bots are MapRoot entities; drop the roster.
+pub fn unload(world: &mut World) {
+    world.remove_resource::<Bots>();
+    world.remove_resource::<Hostile>();
+}
+
 pub struct BotsPlugin;
 impl Plugin for BotsPlugin {
     fn build(&self, app: &mut App) {
-        if crate::grid::wanted() {
-            app.add_systems(Update, (keys, lifecycle, think).chain().run_if(resource_exists::<Bots>));
-        }
+        app.add_systems(Update, (keys, lifecycle, think).chain().run_if(resource_exists::<Bots>));
     }
 }
 
@@ -140,7 +144,7 @@ fn lifecycle(time: Res<Time>, mut bots: ResMut<Bots>, mut cmd: Commands, alive: 
         if s.timer > 0.0 {
             continue;
         }
-        let e = cmd.spawn((Transform::from_translation(s.spec.route[0]), Visibility::default())).id();
+        let e = cmd.spawn((crate::level::MapRoot, Transform::from_translation(s.spec.route[0]), Visibility::default())).id();
         let mut ids = [Entity::PLACEHOLDER; 3];
         cmd.entity(e).with_children(|c| {
             ids[0] = c.spawn((Mesh3d(art[0].0.clone()), MeshMaterial3d(art[0].1.clone()), Health(100.0), Name::new("body"), Transform::from_xyz(0.0, 0.72, 0.0))).id();

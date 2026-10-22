@@ -20,6 +20,10 @@ pub struct CamTransition {
     pub instant: bool,
 }
 
+/// A new level is loading (level.rs): the loading screen comes back up until it is ready.
+#[derive(Message)]
+pub struct Reload;
+
 #[derive(Resource)]
 enum Mode {
     Loading(f32),
@@ -75,6 +79,7 @@ impl Plugin for TransitionPlugin {
         let skip = std::env::var_os("BODYCAM_SCREENSHOT").is_some() && std::env::var_os("BODYCAM_LOADING").is_none();
         app.add_plugins(UiMaterialPlugin::<VhsMat>::default())
             .add_message::<CamTransition>()
+            .add_message::<Reload>()
             .insert_resource(if skip { Mode::Live } else { Mode::Loading(0.0) })
             .add_systems(Startup, spawn)
             .add_systems(Update, (drive, font_scale));
@@ -212,6 +217,7 @@ fn drive(
     time: Res<Time>,
     mut mode: ResMut<Mode>,
     mut ev: MessageReader<CamTransition>,
+    mut reload: MessageReader<Reload>,
     map: Option<Res<crate::map::MapState>>,
     mut mats: ResMut<Assets<VhsMat>>,
     mut vis: ParamSet<(
@@ -226,6 +232,9 @@ fn drive(
 ) {
     let dt = time.delta_secs();
     let m = &mut *mode;
+    if reload.read().count() > 0 {
+        *m = Mode::Loading(0.0);
+    }
     match m {
         // the game drops the loading screen once the level is up; + 0.8 s for auto exposure to settle (first frames blow out)
         Mode::Loading(t) => {

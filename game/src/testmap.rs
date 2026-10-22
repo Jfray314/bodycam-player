@@ -5,7 +5,7 @@ use crate::weapon::Health;
 use bevy::prelude::*;
 
 pub fn wanted() -> bool {
-    std::env::var("BODYCAM_MAP").is_ok_and(|v| v == "test")
+    crate::level::level()[0] == "test"
 }
 
 pub fn spawn(cmd: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut Assets<StandardMaterial>) {

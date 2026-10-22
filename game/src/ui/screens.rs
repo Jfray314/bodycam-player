@@ -246,9 +246,9 @@ fn play(cmd: &mut Commands, root: Entity, cx: &BuildCx) {
     // Online matchmaking is offline in this build: CASUAL lists the local worlds; clicking one loads it (ui::launch).
     txt(cmd, body, cx, "Pick a world to load into.", 22.0, GREY, Wt::Medium);
     let grid = add(cmd, body, Node { margin: UiRect::top(px(14)), flex_wrap: FlexWrap::Wrap, column_gap: px(24), row_gap: px(24), ..row() });
-    let current = if crate::testmap::wanted() { "test" } else if crate::grid::wanted() { "grid" } else { "" };
+    let cur = crate::level::level();
     for (i, (name, map, zone, mode, desc)) in OFFLINE.iter().enumerate() {
-        let here = *map == current && (zone.is_empty() || *map == "grid") && *mode == std::env::var("BODYCAM_MODE").unwrap_or_default();
+        let here = *map == cur[0] && (zone.is_empty() || *map == "grid") && *mode == cur[2];
         let card = button(cmd, grid, Node { width: px(390), height: px(200), padding: UiRect::all(px(12)), row_gap: px(10), ..col() }, Act::Offline(i), None, PANEL, PANEL_HOVER, Some(if here { GREEN } else { Color::srgb(0.2, 0.2, 0.22) }));
         txt(cmd, card, cx, name, 30.0, Color::WHITE, Wt::Extra);
         txt(cmd, card, cx, desc, 18.0, GREY, Wt::Medium);

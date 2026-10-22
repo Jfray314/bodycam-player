@@ -32,7 +32,7 @@ const BOMB_BLAST: BlastSpec = BlastSpec { base: 1000.0, inner: 250.0, outer: 200
 const ZONE_HALF: f32 = 3.0;
 
 pub fn wanted() -> bool {
-    std::env::var("BODYCAM_MODE").is_ok_and(|v| v == "bomb")
+    crate::level::level()[2] == "bomb"
 }
 
 #[derive(Component)]
@@ -93,14 +93,23 @@ pub struct BombPlugin;
 impl Plugin for BombPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<BombOut>().add_message::<BombIn>();
-        if !wanted() {
-            return;
-        }
-        app.init_resource::<Round>().add_systems(Startup, spawn).add_systems(Update, (give_bomb, bomb_in, plant, defuse, fuse, finish, hud).chain());
+        app.init_resource::<Round>().add_systems(Update, (give_bomb, bomb_in, plant, defuse, fuse, finish, hud).chain().run_if(wanted));
     }
 }
 
-fn spawn(mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>, assets: Res<AssetServer>) {
+/// level.rs switch: fresh round, and the Bombe_C item leaves the inventory (the bomb actor and zones are MapRoot entities).
+pub fn unload(world: &mut World) {
+    world.insert_resource(Round::default());
+    let mut q = world.query::<&mut Inventory>();
+    for mut inv in q.iter_mut(world) {
+        if inv.slots.iter().any(|w| w.kind == ItemKind::Bomb) {
+            inv.slots.retain(|w| w.kind != ItemKind::Bomb);
+            inv.current = inv.current.min(inv.slots.len() - 1);
+        }
+    }
+}
+
+pub(crate) fn spawn(mut cmd: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>, assets: Res<AssetServer>) {
     if crate::testmap::wanted() {
         // BombZone: Box overlap + the MI_BombZone floor decal -> a flat translucent orange pad.
         let m = mats.add(StandardMaterial { base_color: Color::srgba(1.0, 0.45, 0.05, 0.35), alpha_mode: AlphaMode::Blend, unlit: true, ..default() });
@@ -148,7 +157,7 @@ fn give_bomb(mut r: ResMut<Round>, inv: Option<Single<&mut Inventory>>, net: Opt
 
 /// Bombe_C Start Fuse (planted at `pos` by `by`): the bomb actor with its blinking light.
 fn arm(cmd: &mut Commands, assets: &AssetServer, r: &mut Round, pos: Vec3, by: u8) {
-    cmd.spawn((PlantedBomb, WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset("models/guns/Bomb.glb"))), Transform::from_translation(pos + Vec3::Y * 0.03))).with_children(|c| {
+    cmd.spawn((crate::level::MapRoot, PlantedBomb, WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset("models/guns/Bomb.glb"))), Transform::from_translation(pos + Vec3::Y * 0.03))).with_children(|c| {
         c.spawn((BombLight, PointLight { color: Color::srgb(1.0, 0.26, 0.0), intensity: 60_000.0, range: 5.0, ..default() }, Transform::from_xyz(0.0, 0.1, 0.0), Visibility::Hidden));
     });
     let left = std::env::var("BODYCAM_BOMBFUSE").ok().and_then(|v| v.parse().ok()).unwrap_or(FUSE); // dev: shorter fuse

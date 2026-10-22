@@ -16,9 +16,7 @@ use crate::player::Player;
 pub struct MapPlugin;
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
-        if available() {
-            app.add_systems(Startup, setup).add_systems(Update, (settle, shadow_nearest, apply_exposure));
-        }
+        app.add_systems(Update, (settle.run_if(resource_exists::<MapState>), shadow_nearest, apply_exposure));
     }
 }
 
@@ -149,7 +147,7 @@ fn ue_to_bevy(p: [f32; 3]) -> Vec3 {
     Vec3::new(p[1], p[2], -p[0]) * 0.01
 }
 
-fn setup(mut cmd: Commands, assets: Res<AssetServer>, mut ambient: ResMut<GlobalAmbientLight>, mut curves: ResMut<Assets<AutoExposureCompensationCurve>>, mut images: ResMut<Assets<Image>>) {
+pub(crate) fn setup(mut cmd: Commands, assets: Res<AssetServer>, mut ambient: ResMut<GlobalAmbientLight>, mut curves: ResMut<Assets<AutoExposureCompensationCurve>>, mut images: ResMut<Assets<Image>>) {
     let sn = scene_name();
     let info: SceneInfo = serde_json::from_str(&std::fs::read_to_string(format!("{}/maps/{sn}.json", root())).expect("scene json")).expect("scene json parse");
     let surfaces = info.surfaces.clone();
@@ -287,9 +285,10 @@ fn shadow_nearest(
     }
 }
 
-fn apply_exposure(mut cmd: Commands, ex: Option<Res<MapExposure>>, mut q: Query<(Entity, &mut AutoExposure), Added<AutoExposure>>) {
+fn apply_exposure(mut cmd: Commands, ex: Option<Res<MapExposure>>, mut q: Query<(Entity, Mut<AutoExposure>)>) {
     let Some(ex) = ex else { return };
-    for (e, mut ae) in &mut q {
+    // a fresh lens stack on the camera, or the lobby just (re)loaded (level.rs switch)
+    for (e, mut ae) in q.iter_mut().filter(|(_, a)| a.is_added() || ex.is_added()) {
         ae.range = UE_HIST.0 - UE_TO_BEVY..=UE_HIST.1 - UE_TO_BEVY;
         ae.filter = 0.4..=0.9;
         // Bevy's shader swaps the two speeds (brightening uses speed_darken); equal here anyway.
@@ -298,6 +297,12 @@ fn apply_exposure(mut cmd: Commands, ex: Option<Res<MapExposure>>, mut q: Query<
         ae.compensation_curve = ex.0.clone();
         cmd.entity(e).insert((Exposure { ev100: CAM_EV100 }, Skybox { image: Some(ex.1.clone()), brightness: SKY_NITS, rotation: Quat::IDENTITY }));
     }
+}
+
+/// level.rs switch: the lobby's resources go with its entities.
+pub fn unload(world: &mut World) {
+    world.remove_resource::<MapState>();
+    world.remove_resource::<MapExposure>();
 }
 
 fn settle(mut st: ResMut<MapState>) {

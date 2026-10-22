@@ -201,6 +201,8 @@ pub struct Ui {
     pub ip_focus: bool,
     /// Some(true) = host, Some(false) = join: sent as net::Connect after the frame's input.
     net_req: Option<bool>,
+    /// PLAY picked a world: level.rs loads it.
+    level_req: Option<[String; 3]>,
     pub news: bool,
     pub help: Option<Set>,
     pub rebinding: Option<usize>,
@@ -229,6 +231,7 @@ impl Default for Ui {
             search_t: None,
             ip_focus: false,
             net_req: None,
+            level_req: None,
             news: false,
             help: None,
             rebinding: None,
@@ -403,34 +406,16 @@ fn close(t: &mut Tablet) {
     (t.open, t.ready, t.t, t.cmd) = (false, false, 0.0, Some(false));
 }
 
+/// PLAY > CASUAL: load the picked world in place (level.rs) behind the loading screen; the current one just closes the tablet.
 fn launch(ui: &mut Ui, tablet: &mut Tablet) {
     let (_, map, zone, mode, _) = OFFLINE[ui.offline];
-    let current = if crate::testmap::wanted() { "test" } else if crate::grid::wanted() { "grid" } else { "" };
-    if map == current && zone.is_empty() && map != "grid" && mode == std::env::var("BODYCAM_MODE").unwrap_or_default() {
-        ui.search_t = None;
-        ui.dirty = true;
-        close(tablet);
-        return;
+    let cur = crate::level::level();
+    ui.search_t = None;
+    ui.dirty = true;
+    close(tablet);
+    if !(map == cur[0] && zone.is_empty() && map != "grid" && mode == cur[2]) {
+        ui.level_req = Some([map, zone, mode].map(String::from));
     }
-    let mut c = std::process::Command::new(std::env::current_exe().unwrap_or_default());
-    if map.is_empty() {
-        c.env_remove("BODYCAM_MAP");
-    } else {
-        c.env("BODYCAM_MAP", map);
-    }
-    if zone.is_empty() {
-        c.env_remove("BODYCAM_START");
-    } else {
-        c.env("BODYCAM_START", zone);
-    }
-    if mode.is_empty() {
-        c.env_remove("BODYCAM_MODE");
-    } else {
-        c.env("BODYCAM_MODE", mode);
-    }
-    c.env_remove("BODYCAM_AUTO");
-    let _ = c.spawn();
-    std::process::exit(0);
 }
 
 struct Cx<'a> {
@@ -651,6 +636,7 @@ fn ui_input(
     mut connect: MessageWriter<crate::net::Connect>,
     ready: Res<crate::dev::Ready>,
     mut script: Local<Option<(Vec<(f32, Vec2)>, usize)>>,
+    mut cmd: Commands,
 ) {
     let dt = time.delta_secs();
     // BODYCAM_CLICKS="t:x,y;t:x,y": warp the cursor and click at sim time t after "viewmodel ready" (scripted tests).
@@ -789,6 +775,9 @@ fn ui_input(
         handle(a, &mut cx, r);
     }
     let quit = cx.quit;
+    if let Some(l) = ui.level_req.take() {
+        cmd.insert_resource(crate::level::LoadLevel(Some(l)));
+    }
     if let Some(host) = ui.net_req.take() {
         connect.write(crate::net::Connect { host, addr: ps.join_ip.clone() });
         ui.toast = (if host { "Hosting a match.".into() } else { format!("Joining {}...", ps.join_ip) }, 3.0);

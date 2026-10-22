@@ -22,7 +22,7 @@ const ZONES: [(&str, Vec3, f32); 4] = [("lobby", Vec3::new(0.0, 0.0, 3.0), 0.0),
 const ZONE_KEYS: [KeyCode; 4] = [KeyCode::F1, KeyCode::F3, KeyCode::F4, KeyCode::F5];
 
 pub fn wanted() -> bool {
-    std::env::var("BODYCAM_MAP").is_ok_and(|v| v == "grid")
+    crate::level::level()[0] == "grid"
 }
 
 /// Solid footprint standing on the ground; the top height is h0 at the min edge and h1 at the max edge along x or z (equal = flat box).
@@ -435,6 +435,7 @@ struct Targets {
 
 fn spawn_target(cmd: &mut Commands, art: &[(Handle<Mesh>, Handle<StandardMaterial>); 2], pos: Vec3, kind: Kind) -> Entity {
     cmd.spawn((
+        crate::level::MapRoot,
         RangeTarget { origin: pos, kind },
         Health(100.0),
         Mesh3d(art[0].0.clone()),
@@ -479,15 +480,19 @@ fn move_targets(time: Res<Time>, mut q: Query<(&mut Transform, &RangeTarget)>) {
 pub struct GridPlugin;
 impl Plugin for GridPlugin {
     fn build(&self, app: &mut App) {
-        if wanted() {
-            app.add_systems(Update, (teleport, range_targets, move_targets).run_if(resource_exists::<Targets>));
-        }
+        app.add_systems(Update, (teleport, range_targets, move_targets).run_if(resource_exists::<Targets>));
     }
 }
 
-fn teleport(keys: Res<ButtonInput<KeyCode>>, mut q: Single<(&mut Player, &mut Transform)>, mut started: Local<bool>) {
-    let start = (!*started).then(|| std::env::var("BODYCAM_START").ok()).flatten();
-    *started = true;
+/// level.rs switch: drop the grid's resources (its targets are MapRoot entities).
+pub fn unload(world: &mut World) {
+    world.remove_resource::<Targets>();
+    world.remove_resource::<Colliders>();
+}
+
+fn teleport(keys: Res<ButtonInput<KeyCode>>, mut q: Single<(&mut Player, &mut Transform)>, targets: Res<Targets>) {
+    // the level's start zone, once per load (Targets is inserted by each grid load)
+    let start = targets.is_added().then(|| crate::level::level()[1].clone());
     let dest = start.and_then(|s| ZONES.iter().find(|z| z.0 == s)).or_else(|| ZONE_KEYS.iter().position(|&k| keys.just_pressed(k)).map(|i| &ZONES[i]));
     if let Some(&(name, pos, yaw)) = dest {
         let (p, tf) = &mut *q;
