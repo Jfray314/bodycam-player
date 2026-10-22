@@ -407,17 +407,15 @@ fn body_atts(
     }
 }
 
-/// Every part of every gun's loadout stays loaded (strong handles), so mounting after a tablet change or a swap is instant
-/// instead of waiting on the glb load.
+/// The picked parts of the equipped primary and secondary stay loaded (strong handles), so mounting after closing the tablet
+/// is instant instead of waiting on the glb load. (Every gun's parts at once ran an 8 GB GPU out of memory on the lobby.)
 fn preload(cfg: Option<Res<Settings>>, assets: Res<AssetServer>, mut held: Local<HashMap<String, Handle<bevy::world_serialization::WorldAsset>>>) {
     let Some(cfg) = cfg.filter(|c| c.is_changed()) else { return };
     let d = data();
-    for row in cfg.attachments.keys() {
-        for id in parts(row, &picks(&cfg, row)) {
-            if let Some(item) = d.items.get(id.as_str()) {
-                held.entry(item.glb.clone()).or_insert_with(|| assets.load(GltfAssetLabel::Scene(0).from_asset(format!("models/attachments/{}.glb", item.glb))));
-            }
-        }
+    let want: Vec<String> = [&cfg.primary, &cfg.secondary].into_iter().flat_map(|row| picks(&cfg, row)).filter_map(|id| d.items.get(id.as_str()).map(|i| i.glb.clone())).collect();
+    held.retain(|glb, _| want.contains(glb));
+    for glb in want {
+        held.entry(glb.clone()).or_insert_with(|| assets.load(GltfAssetLabel::Scene(0).from_asset(format!("models/attachments/{glb}.glb"))));
     }
 }
 
