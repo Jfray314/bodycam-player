@@ -26,6 +26,9 @@ const SPINE: [&str; 3] = ["spine_01", "spine_02", "spine_03"];
 const SPINE_SHARE: f32 = 0.45;
 const NECK_SHARE: f32 = 0.15;
 const HEAD_SHARE: f32 = 0.25;
+/// Owner torso offset (m) at full look-down.
+const SPINE_BACK: f32 = 0.0;
+const SPINE_DOWN: f32 = 0.4;
 const LEAN_ROLL_DEG: f32 = 18.0;
 /// Forward speed (m/s) at which each ALS clip plays at rate 1 (ALS defaults: walk 165, run 375, crouch 150 cm/s).
 const WALK_REF: f32 = 1.65;
@@ -579,11 +582,14 @@ pub(crate) fn hide_bones(
             let fp = !det.0 && (if r.world { &SHADOW_HIDDEN_BONES[..] } else { &HIDDEN_BONES[..] }).contains(&name);
             t.scale = if r.local && (fp || (dead.0 && r.world && name == "head")) { Vec3::ZERO } else { Vec3::ONE };
         }
-        // ponytail: not UE (its owner mesh is camera-attached at the head); the camera here sits in front of the chest, so the
-        // owner copy's torso (spine_01 and up) is scaled away as the view tips down: full at -65 deg, untouched above -40 deg.
-        if name == "spine_01" {
-            let k = if !r.world && r.local && !det.0 { ((p.pitch.to_degrees() + 40.0) / -25.0).clamp(0.0, 1.0) } else { 0.0 };
-            t.scale = Vec3::splat((1.0 - k * k * (3.0 - 2.0 * k)).max(0.001)); // 0 panics the skinned bounds
+        // ponytail: not UE (its owner mesh is camera-attached at the head, so its chest bends away under the FP arms). The camera
+        // here sits in front of the chest, so as the view tips down (from -40 deg, full at -65) the owner torso (spine_01 and up) is
+        // moved back and down out of the arms' and gun's way; the rig stays visible below them. Arms/gun share one depth buffer.
+        if name == "spine_01" && !r.world && r.local && !det.0 {
+            let k = ((p.pitch.to_degrees() + 40.0) / -25.0).clamp(0.0, 1.0);
+            let k = k * k * (3.0 - 2.0 * k);
+            let parent_rot = g.rotation() * t.rotation.inverse();
+            t.translation += parent_rot.inverse() * (-pg.forward().as_vec3() * SPINE_BACK * k + Vec3::NEG_Y * SPINE_DOWN * k);
         }
         // Owner copy stays upright (the chest would swing into the camera, which is not parented to the head).
         let alive = 1.0 - an.dead_w;
