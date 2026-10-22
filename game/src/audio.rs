@@ -309,6 +309,20 @@ pub struct PlayCue {
     pub bools: Vec<(&'static str, bool)>,
 }
 
+/// Stop every playing / pending instance of a cue (WW_SurvivorStatus StopScream on respawn).
+#[derive(Message, Clone)]
+pub struct StopCue(pub String);
+
+fn stop_cues(mut cmd: Commands, mut ev: MessageReader<StopCue>, mut live: ResMut<Live>) {
+    for s in ev.read() {
+        for e in live.groups.remove(&s.0).into_iter().flatten().flatten() {
+            if let Ok(mut ec) = cmd.get_entity(e) {
+                ec.despawn();
+            }
+        }
+    }
+}
+
 fn play_cues(mut cmd: Commands, mut ev: MessageReader<PlayCue>, mut bank: ResMut<Bank>, mut live: ResMut<Live>, assets: Res<AssetServer>, alive: Query<Entity>) {
     for e in ev.read() {
         if bank.has(&e.cue) {
@@ -344,6 +358,7 @@ struct Live {
 pub struct AudioPlugin;
 impl Plugin for AudioPlugin {
     fn build(&self, app: &mut App) {
+        app.add_message::<StopCue>(); // effects.rs writes it even with audio disabled
         let root = std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into());
         match Bank::load(std::path::Path::new(&root)) {
             Some(b) => {
@@ -358,7 +373,7 @@ impl Plugin for AudioPlugin {
             .insert_resource(Tremor(0.0))
             .init_resource::<Loops>()
             .add_systems(PostStartup, preload_player)
-            .add_systems(Update, (footsteps, weapon_sfx, remote_sfx, near_miss_sfx, shell_sfx, montage_sfx, play_cues, run_queue, aim_sfx, start_pending, preload_weapons, loops, selftest).chain());
+            .add_systems(Update, (footsteps, weapon_sfx, remote_sfx, near_miss_sfx, shell_sfx, montage_sfx, stop_cues, play_cues, run_queue, aim_sfx, start_pending, preload_weapons, loops, selftest).chain());
     }
 }
 
@@ -415,8 +430,12 @@ fn trigger(cmd: &mut Commands, bank: &mut Bank, live: &mut Live, assets: &AssetS
     info!("audio: {cue} -> {} voice(s) [{}]", voices.len(), voices.iter().take(3).map(|v| format!("{} v{:.2} p{:.2} d{:.2}", v.wave.rsplit('/').next().unwrap(), v.volume, v.pitch, v.delay)).collect::<Vec<_>>().join(", "));
 }
 
-fn start_pending(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Pending)>) {
+fn start_pending(mut cmd: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Pending)>, loading: Res<crate::transition::Loading>) {
     for (e, mut p) in &mut q {
+        if loading.0 {
+            cmd.entity(e).despawn(); // loading screen: nothing is heard
+            continue;
+        }
         p.wait -= time.delta_secs();
         if p.wait <= 0.0 {
             cmd.entity(e).remove::<Pending>().insert((AudioPlayer::<AudioSource>(p.handle.clone()), PlaybackSettings::DESPAWN.with_volume(Volume::Linear(p.volume)).with_speed(p.pitch)));
@@ -620,8 +639,11 @@ fn loops(
     mut tremor: ResMut<Tremor>,
     assets: Res<AssetServer>,
     mut sinks: Query<&mut AudioSink>,
+    loading: Res<crate::transition::Loading>,
 ) {
     let dt = time.delta_secs();
+    // loading screen: every loop silent (GlobalVolume does not reach sinks already playing)
+    let on = if loading.0 { 0.0 } else { 1.0 };
     // Yaw/Pitch(DeltaTime): per-frame control-rotation change in degrees.
     let look = Vec2::new(p.yaw, p.pitch);
     let d = st.last_look.map_or(Vec2::ZERO, |l| (look - l).abs() * (180.0 / std::f32::consts::PI));
@@ -640,14 +662,14 @@ fn loops(
     let mut wp = Params::default();
     wp.bools.insert("highSpeed", speed_cm > 150.0);
     wp.floats.insert("highRotation", st.high_rotation);
-    let wind_vol = st.wind_vol;
+    let wind_vol = st.wind_vol * on;
     st.wind.update(&mut cmd, &mut bank, &assets, &mut sinks, "/Game/Audio/Player/Foley/Bodycam/Wind_Bodycam", &wp, wind_vol);
 
     // Foley (Bodycam cloth loop)
     st.foley_vol = finterp(st.foley_vol, map_clamped(dy + dp, 0.0, 3.0, 0.0, 1.0), dt, 10.0);
     let mut fp = Params::default();
     fp.floats.insert("highRotation", st.high_rotation);
-    let foley_vol = st.foley_vol;
+    let foley_vol = st.foley_vol * on;
     st.foley.update(&mut cmd, &mut bank, &assets, &mut sinks, "/Game/Audio/Player/Foley/Bodycam/Bodycam_Foley_Player_Bodycam_Cloth_loop_test_Cue", &fp, foley_vol);
 
     // Breathing (UpdateBreathingSounds)
@@ -655,12 +677,13 @@ fn loops(
     let mut bp = Params::default();
     bp.floats.insert("Speed", speed);
     bp.bools.insert("Running?", speed_cm > 150.0);
-    st.breath.update(&mut cmd, &mut bank, &assets, &mut sinks, "/Game/Ultimate_SFX/Repiration/Breathing_cue", &bp, 1.0);
+    // dead: the body stops breathing (the scream cue carries its own death breaths)
+    st.breath.update(&mut cmd, &mut bank, &assets, &mut sinks, "/Game/Ultimate_SFX/Repiration/Breathing_cue", &bp, if p.dead { 0.0 } else { on });
 
     // Mic tremor
     st.tremor_vol = finterp(st.tremor_vol, tremor.0, dt, 10.0);
     tremor.0 = finterp(tremor.0, 0.0, dt, 3.0);
-    let tv = st.tremor_vol;
+    let tv = st.tremor_vol * on;
     st.tremor.update(&mut cmd, &mut bank, &assets, &mut sinks, "/Game/Audio/Player/Foley/Bodycam/MicTremor_Bodycam", &Params::default(), tv);
 }
 

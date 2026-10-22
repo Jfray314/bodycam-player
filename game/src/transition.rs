@@ -20,6 +20,11 @@ pub struct CamTransition {
     pub instant: bool,
 }
 
+/// True from the loading screen until the CAM CONNECTED fade after it has finished: the game is silent (effects.rs)
+/// and takes no input (`lock_input`) until the player is fully in.
+#[derive(Resource, Default)]
+pub struct Loading(pub bool);
+
 /// A new level is loading (level.rs): the loading screen comes back up until it is ready.
 #[derive(Message)]
 pub struct Reload;
@@ -81,8 +86,26 @@ impl Plugin for TransitionPlugin {
             .add_message::<CamTransition>()
             .add_message::<Reload>()
             .insert_resource(if skip { Mode::Live } else { Mode::Loading(0.0) })
+            .insert_resource(Loading(!skip))
+            .add_systems(PreUpdate, lock_input.after(bevy::input::InputSystems).after(crate::dev::autotest))
             .add_systems(Startup, spawn)
             .add_systems(Update, (drive, font_scale));
+    }
+}
+
+/// While loading: every key / button / mouse motion is dropped before gameplay and the tablet see it.
+pub(crate) fn lock_input(
+    loading: Res<Loading>,
+    mut keys: ResMut<ButtonInput<KeyCode>>,
+    mut mouse: ResMut<ButtonInput<MouseButton>>,
+    mut motion: ResMut<bevy::input::mouse::AccumulatedMouseMotion>,
+    mut scroll: ResMut<bevy::input::mouse::AccumulatedMouseScroll>,
+) {
+    if loading.0 {
+        keys.reset_all();
+        mouse.reset_all();
+        motion.delta = Vec2::ZERO;
+        scroll.delta = Vec2::ZERO;
     }
 }
 
@@ -218,6 +241,7 @@ fn drive(
     mut mode: ResMut<Mode>,
     mut ev: MessageReader<CamTransition>,
     mut reload: MessageReader<Reload>,
+    mut loading: ResMut<Loading>,
     map: Option<Res<crate::map::MapState>>,
     mut mats: ResMut<Assets<VhsMat>>,
     mut vis: ParamSet<(
@@ -234,6 +258,15 @@ fn drive(
     let m = &mut *mode;
     if reload.read().count() > 0 {
         *m = Mode::Loading(0.0);
+    }
+    let was = loading.0;
+    match m {
+        Mode::Loading(_) => loading.0 = true,
+        Mode::Live | Mode::Disconnected { .. } => loading.0 = false,
+        Mode::Connected(_) => {} // stays locked through the fade that ends a load, not a respawn's
+    }
+    if loading.0 != was {
+        info!("loading lock {}", if loading.0 { "on" } else { "off" });
     }
     match m {
         // the game drops the loading screen once the level is up; + 0.8 s for auto exposure to settle (first frames blow out)

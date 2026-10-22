@@ -124,6 +124,8 @@ fn tick(
     mut vol: ResMut<GlobalVolume>,
     mut sinks: Query<&mut AudioSink>,
     mut cam_tr: MessageWriter<crate::transition::CamTransition>,
+    mut stop: MessageWriter<crate::audio::StopCue>,
+    loading: Res<crate::transition::Loading>,
 ) {
     let dt = time.delta_secs();
     let (pl, tf) = &mut *p;
@@ -177,8 +179,9 @@ fn tick(
     }
     // SM_Muffle stand-in: duck everything while the ears ring.
     let duck = 1.0 - 0.65 * ear.min(1.0);
+    // loading screen: silent at once, fades back in after
     let cur = vol.volume.to_linear();
-    vol.volume = Volume::Linear(cur + (duck - cur) * (dt * 4.0).min(1.0));
+    vol.volume = Volume::Linear(if loading.0 { 0.0 } else { cur + (duck - cur) * (dt * 4.0).min(1.0) });
     // death + respawn
     match fx.dead {
         None if st.health <= 0.0 => {
@@ -211,6 +214,7 @@ fn tick(
                 pl.pitch = 0.0;
                 pl.dead = false;
                 fx.dead = None;
+                stop.write(crate::audio::StopCue(crate::character::SCREAM.into())); // WW_SurvivorStatus StopScream
                 cam_tr.write(crate::transition::CamTransition { connected: true, instant: false });
                 post.tint_r = 1.0;
                 post.tint_g = 1.0;

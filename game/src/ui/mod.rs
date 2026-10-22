@@ -271,10 +271,10 @@ impl Plugin for UiPlugin {
             .init_resource::<FakeCursor>()
             .init_resource::<Roster>()
             .add_systems(Startup, setup)
-            .add_systems(PreUpdate, gate.after(bevy::input::InputSystems).after(crate::dev::autotest))
+            .add_systems(PreUpdate, gate.after(bevy::input::InputSystems).after(crate::dev::autotest).after(crate::transition::lock_input))
             .add_systems(
                 Update,
-                (settings::apply, settings::res_scale, roster, tablet_state, ui_input, rebuild, refresh, screen_material).chain(),
+                (settings::apply, settings::res_scale, roster, tablet_state, ui_input, rebuild, refresh, screen_material, screen_gain).chain(),
             )
             .add_systems(Last, settings::limit_fps);
     }
@@ -292,6 +292,23 @@ fn setup(mut cmd: Commands, assets: Res<AssetServer>, mut images: ResMut<Assets<
         ))
         .id();
     cmd.spawn((Node { width: px(W), height: px(H), ..default() }, UiTargetCamera(cam), UiRoot));
+    // A very faint LCD look on the screen: every third pixel row a touch darker (scanline tile, nearest-sampled, on top of the menu).
+    // ponytail: not from the game's M_Tablet_03 (its graph is compiled away); per user request.
+    let mut rows = Image::new(
+        bevy::render::render_resource::Extent3d { width: 1, height: 3, depth_or_array_layers: 1 },
+        bevy::render::render_resource::TextureDimension::D2,
+        vec![0, 0, 0, 34, 0, 0, 0, 0, 0, 0, 0, 0],
+        TextureFormat::Rgba8UnormSrgb,
+        bevy::asset::RenderAssetUsages::RENDER_WORLD,
+    );
+    rows.sampler = bevy::image::ImageSampler::nearest();
+    cmd.spawn((
+        Node { position_type: PositionType::Absolute, width: px(W), height: px(H), ..default() },
+        ImageNode { image: images.add(rows), image_mode: NodeImageMode::Tiled { tile_x: true, tile_y: true, stretch_value: 1.0 }, ..default() },
+        GlobalZIndex(1000),
+        Pickable::IGNORE,
+        UiTargetCamera(cam),
+    ));
     let screen_mat = mats.add(StandardMaterial { base_color: Color::BLACK, emissive: LinearRgba::gray(0.3), emissive_texture: Some(image.clone()), perceptual_roughness: 0.6, reflectance: 0.0,
         // The screen quad only spans u 0.004..0.656, v 0.043..0.392 of the UE composite render target: stretch that rect over our whole UI texture.
         uv_transform: bevy::math::Affine2::from_scale_angle_translation(Vec2::new(1.0 / 0.652, 1.0 / 0.349), 0.0, Vec2::new(-0.0039 / 0.652, -0.043 / 0.349)),
@@ -869,6 +886,16 @@ fn refresh(
 }
 
 /// Puts the rendered UI on the tablet's screen material once the model has spawned.
+/// postfx::tablet_plain: the screen glow follows the per-map tablet exposure so it reads the same in every room.
+fn screen_gain(g: Res<crate::postfx::TabletScreenGain>, a: Res<UiAssets>, mut mats: ResMut<Assets<StandardMaterial>>) {
+    if g.is_changed()
+        && let Some(mut m) = mats.get_mut(&a.screen_mat)
+    {
+        m.emissive = LinearRgba::gray(0.3 * g.0);
+        debug!("tablet screen gain {}", g.0);
+    }
+}
+
 fn screen_material(mut cmd: Commands, a: Res<UiAssets>, new: Query<(Entity, &GltfMaterialName), Added<GltfMaterialName>>) {
     for (e, n) in &new {
         // The exported body textures carry a camo pattern map instead of the base colour: a plain rugged black body instead.

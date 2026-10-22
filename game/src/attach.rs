@@ -280,7 +280,7 @@ impl Plugin for AttachPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<AttState>()
             .add_systems(Startup, scope_setup)
-            .add_systems(Update, (apply_mods, mount_sys, body_atts, glass, switch_input, state, laser).chain())
+            .add_systems(Update, (preload, apply_mods, mount_sys, body_atts, glass, switch_input, state, laser).chain())
             .add_systems(PostUpdate, scope.after(bevy::transform::TransformSystems::Propagate));
     }
 }
@@ -404,6 +404,20 @@ fn body_atts(
         }
         mount_parts(&mut cmd, &assets, gun, &st.item, &st.atts, &joints, &parents, &mut vis, BodyAtt);
         cmd.entity(gun).insert(BodyAttKey(k));
+    }
+}
+
+/// Every part of every gun's loadout stays loaded (strong handles), so mounting after a tablet change or a swap is instant
+/// instead of waiting on the glb load.
+fn preload(cfg: Option<Res<Settings>>, assets: Res<AssetServer>, mut held: Local<HashMap<String, Handle<bevy::world_serialization::WorldAsset>>>) {
+    let Some(cfg) = cfg.filter(|c| c.is_changed()) else { return };
+    let d = data();
+    for row in cfg.attachments.keys() {
+        for id in parts(row, &picks(&cfg, row)) {
+            if let Some(item) = d.items.get(id.as_str()) {
+                held.entry(item.glb.clone()).or_insert_with(|| assets.load(GltfAssetLabel::Scene(0).from_asset(format!("models/attachments/{}.glb", item.glb))));
+            }
+        }
     }
 }
 

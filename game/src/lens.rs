@@ -43,10 +43,13 @@ fn spawn(mut cmd: Commands, assets: Res<AssetServer>, mut mats: ResMut<Assets<Le
     ));
 }
 
-fn drive(fx: Option<Single<&BodycamPostFx>>, mut mats: ResMut<Assets<LensMat>>) {
+/// Dirt left while the tablet is up: the scratches stand out over its dark body and screen (readability, per user).
+const TABLET_DIRT: f32 = 0.15;
+
+fn drive(fx: Option<Single<&BodycamPostFx>>, tablet: Res<crate::ui::Tablet>, mut mats: ResMut<Assets<LensMat>>) {
     let Some(fx) = fx else { return };
     // The death cut tints the frame to black (effects.rs): the lens layers fade with it.
-    let y = DIRT * fx.tint_g.clamp(0.0, 1.0);
+    let y = DIRT * fx.tint_g.clamp(0.0, 1.0) * if tablet.shown { TABLET_DIRT } else { 1.0 };
     if mats.iter().any(|(_, m)| m.p.y != y) {
         for (_, m) in mats.iter_mut() {
             m.p.y = y;

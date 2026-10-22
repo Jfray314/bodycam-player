@@ -258,8 +258,8 @@ fn flash(mut f: Query<(&MuzzleFlash, &mut Visibility)>, anims: Query<&crate::bod
 
 /// WW_SurvivorStatus on death: after RandomFloatInRange(0.1, 1.0) s, ScreamSound (multicast) plays ScreamBlood_Cue at the head with
 /// `suffer` = RandomBoolWithWeight(Default Suffer Proba 0.2) (long agony scream + death breaths instead of a short cry).
-// ponytail: the Health < -350 instant-death branch (no scream) and StopScream on respawn are not ported (remotes carry no health).
-const SCREAM: &str = "/Game/Ultimate_SFX/DeathScream/ScreamBlood_Cue";
+// ponytail: the Health < -350 instant-death branch (no scream) is not ported (remotes carry no health). StopScream: effects.rs respawn.
+pub(crate) const SCREAM: &str = "/Game/Ultimate_SFX/DeathScream/ScreamBlood_Cue";
 const SUFFER_PROBA: f32 = 0.2;
 fn death_scream(
     time: Res<Time>,

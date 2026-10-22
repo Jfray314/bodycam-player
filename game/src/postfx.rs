@@ -114,6 +114,7 @@ impl Plugin for PostFxPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "postfx.wesl");
         app.add_plugins((FullscreenMaterialPlugin::<BodycamPostFx>::default(), AutoExposurePlugin))
+            .insert_resource(TabletScreenGain(1.0))
             .add_systems(Startup, setup)
             .add_systems(Update, (attach, toggles, tablet_plain, motion_state, apply_fov).chain());
     }
@@ -182,11 +183,28 @@ fn toggles(mut cmd: Commands, keys: Res<ButtonInput<KeyCode>>, mut st: ResMut<Po
     }
 }
 
-/// Tablet up: no barrel warp, chromatic aberration, edge disk blur or rolling shutter, so the menu text stays sharp
-/// (the grade and vignette stay). Exposure is held where it was: the centre-weighted meter otherwise reads the black screen
-/// filling the middle and pushes the exposure up until the tablet body and gloves wash out. All comes back when put away.
+/// The lobby's dark rooms run far more auto exposure than the bright test maps: with the room's exposure held, the tablet
+/// screen's glow is dimmed on the lobby and raised on the day maps so it reads the same (ui.rs reads `TabletScreenGain`).
+// ponytail: one per-map constant; reading the GPU auto-exposure value back would track every room exactly.
+const LOBBY_SCREEN_EV: f32 = 3.5;
+/// The bright daylight test maps run low exposure: the screen needs this much more glow there.
+const DAY_SCREEN_EV: f32 = 1.5;
+/// Multiplier on the tablet screen's emissive (ui.rs).
+#[derive(Resource)]
+pub struct TabletScreenGain(pub f32);
+
+/// Tablet up: no barrel warp, chromatic aberration, edge disk blur or rolling shutter, so the menu text stays sharp; the
+/// room's exposure is held where it was (the centre meter would otherwise read the screen and shift the whole room),
+/// so nothing else changes. All comes back when it is put away.
 // ponytail: not UE's behaviour (its lens post stays on over the tablet); readability over 1:1 here, per user.
-fn tablet_plain(tablet: Res<crate::ui::Tablet>, mut q: Query<&mut BodycamPostFx>, mut ae: Query<&mut AutoExposure>, mut was: Local<bool>) {
+fn tablet_plain(
+    tablet: Res<crate::ui::Tablet>,
+    mut q: Query<&mut BodycamPostFx>,
+    mut ae: Query<&mut AutoExposure>,
+    lobby: Option<Res<crate::map::MapState>>,
+    mut gain: ResMut<TabletScreenGain>,
+    mut was: Local<bool>,
+) {
     if tablet.shown == *was {
         return;
     }
@@ -200,8 +218,9 @@ fn tablet_plain(tablet: Res<crate::ui::Tablet>, mut q: Query<&mut BodycamPostFx>
         fx.rolling_shutter = if on { d.rolling_shutter } else { 0.0 };
     }
     for mut a in &mut ae {
-        let speed = if tablet.shown { 0.0 } else { 13.0 }; // stack(): AutoExposureSpeedUp / Down 13
+        let speed = if tablet.shown { 0.0 } else { 13.0 }; // stack() / map.rs: AutoExposureSpeedUp / Down 13
         (a.speed_brighten, a.speed_darken) = (speed, speed);
+        gain.0 = if lobby.is_some() { (-LOBBY_SCREEN_EV).exp2() } else { DAY_SCREEN_EV.exp2() }; // MapState: the lobby map is loaded
     }
 }
 
