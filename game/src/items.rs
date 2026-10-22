@@ -251,7 +251,7 @@ pub struct BlastDamage {
 enum GState {
     #[default]
     Idle,
-    /// PullPin montage running (RMB pressed).
+    /// PullPin montage running (RMB held).
     Pulling,
     /// GameplayEvent.Grenade.HoldReach -> GE_ReadyToThrowGrenade: LMB throws.
     Ready,
@@ -265,6 +265,8 @@ struct Items {
     t: f32,
     spawned: bool,
     hold: f32,
+    /// LMB tapped while the pin was still being pulled (RMB held): throw as soon as it is ready.
+    throw_queued: bool,
     /// Knife combo index (Fire list).
     combo: usize,
     /// Knife_C.bIsAiming (RMB, GA_Character_Aim_Knife): LMB throws instead of stabbing.
@@ -366,6 +368,7 @@ fn grenade_input(
         return;
     }
     let busy = inv.busy();
+    let rmb = mouse.pressed(MouseButton::Right);
     match st.grenade {
         GState::Idle => {
             // GA_Character_Aim_Grenade: RMB -> PullPin montage (BAS MagCheckFull); the notify at its end is HoldReach.
@@ -373,17 +376,30 @@ fn grenade_input(
                 let m = montage_of(&inv.slots[cur], "MagCheckFull");
                 inv.use_item(m, &mut out);
                 st.grenade = GState::Pulling;
+                st.throw_queued = false;
             }
         }
         GState::Pulling => {
+            st.throw_queued |= rmb && mouse.just_pressed(MouseButton::Left);
             if !busy {
-                // pin pulled: the live grenade stays held without RMB
-                st.grenade = GState::Ready;
-                st.hold = 0.0;
+                if rmb {
+                    st.grenade = GState::Ready;
+                    st.hold = 0.0;
+                } else {
+                    // RMB let go: CancelOverhand puts the pin back
+                    let m = extra(&inv.slots[cur], "CancelOverhand");
+                    inv.use_item(m, &mut out);
+                    st.grenade = GState::Idle;
+                }
             }
         }
         GState::Ready => {
-            if mouse.just_pressed(MouseButton::Left) {
+            if !rmb {
+                // GA_Character_Aim_Grenade ends (RMB released) without a throw: CancelOverhand, back to idle
+                let m = extra(&inv.slots[cur], "CancelOverhand");
+                inv.use_item(m, &mut out);
+                st.grenade = GState::Idle;
+            } else if mouse.just_pressed(MouseButton::Left) || std::mem::take(&mut st.throw_queued) {
                 // GA_ThrowGrenade (needs Character.State.Grenade.ReadyToThrow): Throw montage = BAS Fire[0].
                 let m = inv.slots[cur].montage_list(0, "Fire");
                 inv.use_item(m, &mut out);
