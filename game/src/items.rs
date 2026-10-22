@@ -251,7 +251,7 @@ pub struct BlastDamage {
 enum GState {
     #[default]
     Idle,
-    /// PullPin montage running (RMB held).
+    /// PullPin montage running (RMB pressed).
     Pulling,
     /// GameplayEvent.Grenade.HoldReach -> GE_ReadyToThrowGrenade: LMB throws.
     Ready,
@@ -366,7 +366,6 @@ fn grenade_input(
         return;
     }
     let busy = inv.busy();
-    let rmb = mouse.pressed(MouseButton::Right);
     match st.grenade {
         GState::Idle => {
             // GA_Character_Aim_Grenade: RMB -> PullPin montage (BAS MagCheckFull); the notify at its end is HoldReach.
@@ -378,22 +377,13 @@ fn grenade_input(
         }
         GState::Pulling => {
             if !busy {
-                if rmb {
-                    st.grenade = GState::Ready;
-                    st.hold = 0.0;
-                } else {
-                    let m = extra(&inv.slots[cur], "CancelOverhand");
-                    inv.use_item(m, &mut out);
-                    st.grenade = GState::Idle;
-                }
+                // pin pulled: the live grenade stays held without RMB
+                st.grenade = GState::Ready;
+                st.hold = 0.0;
             }
         }
         GState::Ready => {
-            if !rmb {
-                let m = extra(&inv.slots[cur], "CancelOverhand");
-                inv.use_item(m, &mut out);
-                st.grenade = GState::Idle;
-            } else if mouse.just_pressed(MouseButton::Left) {
+            if mouse.just_pressed(MouseButton::Left) {
                 // GA_ThrowGrenade (needs Character.State.Grenade.ReadyToThrow): Throw montage = BAS Fire[0].
                 let m = inv.slots[cur].montage_list(0, "Fire");
                 inv.use_item(m, &mut out);
