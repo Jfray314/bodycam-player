@@ -44,7 +44,7 @@ impl Plugin for ViewmodelPlugin {
         app.add_systems(Startup, load)
             .init_resource::<StressAnim>()
             .init_resource::<RegripState>()
-            .add_systems(Update, (spawn_arms, hook_players, no_cull, attach_gun, play_events, tablet_anim, base_loop, additive_weights, stress_layers, regrips).chain())
+            .add_systems(Update, (spawn_arms, hook_players, no_cull, attach_gun, play_events, tablet_anim, base_loop, additive_weights, stress_layers, regrips, decoy_mag, ammo_shell).chain())
             .add_systems(Last, debug_bones)
             .add_systems(
                 PostUpdate,
@@ -1026,5 +1026,100 @@ mod tests {
         let n = (sub.len() - 1) as f32;
         eprintln!("stress alpha rms: subtle {:.4}, strong {:.4} (subtle signal {:.3})", (es / n).sqrt(), (eg / n).sqrt(), (ss / n).sqrt());
         assert!((es / n).sqrt() < 0.05 && (eg / n).sqrt() < 0.1);
+    }
+}
+
+/// WEP.SpawnDecoyMagazine (GA_Reload_Base): the gun's magazine mesh is cloned onto the `magazine_spare` bone for the reload
+/// (the clip moves that bone). ClearDecoyMagazine hides it at 0.75 x montage length; the DropMag notify (stressed reloads)
+/// detaches it and lets it fall (DecoyMagazine.DropMagazine: physics; ponytail: plain gravity, no collision).
+#[derive(Component)]
+struct Decoy {
+    hide_at: f32,
+    drop_at: Option<f32>,
+    vel: Option<Vec3>,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn decoy_mag(
+    mut cmd: Commands,
+    time: Res<Time>,
+    mut montages: MessageReader<MontageStarted>,
+    guns: Query<Entity, With<GunRoot>>,
+    names: Query<&Name>,
+    children: Query<&Children>,
+    src: Query<(Option<&Mesh3d>, Option<&MeshMaterial3d<StandardMaterial>>, &Transform, Option<&bevy::camera::visibility::RenderLayers>), Without<Decoy>>,
+    mut decoys: Query<(Entity, &mut Decoy, &mut Transform, &GlobalTransform), Without<Mesh3d>>,
+    ) {
+    let now = time.elapsed_secs();
+    let dt = time.delta_secs();
+    for (e, mut d, mut tf, gt) in &mut decoys {
+        if now >= d.hide_at {
+            cmd.entity(e).despawn();
+        } else if d.drop_at.is_some_and(|t| now >= t) && d.vel.is_none() {
+            *tf = gt.compute_transform();
+            d.vel = Some(Vec3::ZERO);
+            cmd.entity(e).remove::<ChildOf>();
+        } else if let Some(v) = &mut d.vel {
+            v.y -= 9.81 * dt;
+            tf.translation += *v * dt;
+        }
+    }
+    for m in montages.read() {
+        if m.kind != ActionKind::Reload {
+            continue;
+        }
+        let Some(gun) = guns.iter().next() else { continue };
+        let find = |n: &str| children.iter_descendants(gun).find(|e| names.get(*e).is_ok_and(|x| x.as_str() == n));
+        let (Some(mag), Some(spare)) = (find("magazine"), find("magazine_spare")) else { continue };
+        let Some(part) = children.get(mag).ok().and_then(|c| c.first().copied()) else { continue };
+        for e in decoys.iter().map(|d| d.0).collect::<Vec<_>>() {
+            cmd.entity(e).despawn();
+        }
+        let Ok((_, _, ptf, _)) = src.get(part) else { continue };
+        let drop_at = m.montage.notifies.iter().find(|n| n.1 == "DropMag_C").map(|n| now + n.0);
+        let root = cmd.spawn((Decoy { hide_at: now + m.montage.length * 0.75, drop_at, vel: None }, *ptf, Visibility::Inherited, ChildOf(spare))).id();
+        for e in std::iter::once(part).chain(children.iter_descendants(part)) {
+            if let Ok((Some(mesh), Some(mat), tf, rl)) = src.get(e) {
+                let mut c = cmd.spawn((mesh.clone(), mat.clone(), if e == part { Transform::IDENTITY } else { *tf }, Visibility::Inherited, bevy::camera::visibility::NoFrustumCulling, crate::player::IgnoreTraces, ChildOf(root)));
+                if let Some(rl) = rl {
+                    c.insert(rl.clone());
+                }
+            }
+        }
+    }
+}
+
+/// Shotgun shell: the gun's Item.Attachment.Ammo mesh (Ammo Gauge = SM_8_Gauge) on its `Ammo` socket (bone `shell`, identity).
+/// WEP.RefreshAmmosVisibility: shown while a round is loaded (CurrentAmmo >= 1), everything shown during reloads (99).
+#[derive(Component)]
+struct AmmoShell;
+
+#[allow(clippy::too_many_arguments)]
+fn ammo_shell(
+    mut cmd: Commands,
+    assets: Res<AssetServer>,
+    inv: Option<Single<&Inventory>>,
+    guns: Query<Entity, With<GunRoot>>,
+    names: Query<&Name>,
+    children: Query<&Children>,
+    shells: Query<(), With<AmmoShell>>,
+    mut vis: Query<&mut Visibility>,
+) {
+    let Some(inv) = inv else { return };
+    let Some(gun) = guns.iter().next() else { return };
+    let Some(bone) = children.iter_descendants(gun).find(|e| names.get(*e).is_ok_and(|n| n.as_str() == "shell")) else { return };
+    let w = &inv.slots[inv.current];
+    let show = w.ammo >= 1 || inv.action.as_ref().is_some_and(|a| a.kind == ActionKind::Reload);
+    let mine = children.get(bone).ok().and_then(|c| c.iter().find(|e| shells.contains(*e)));
+    match mine {
+        Some(e) => {
+            if let Ok(mut v) = vis.get_mut(e) {
+                *v = if show { Visibility::Inherited } else { Visibility::Hidden };
+            }
+        }
+        None => {
+            let scene: Handle<bevy::world_serialization::WorldAsset> = assets.load(GltfAssetLabel::Scene(0).from_asset("models/attachments/ammo_8_gauge.glb"));
+            cmd.spawn((AmmoShell, Name::new("ammo_shell"), WorldAssetRoot(scene), Transform::default(), ChildOf(bone)));
+        }
     }
 }
