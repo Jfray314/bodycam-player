@@ -82,7 +82,10 @@ def reticle(glb, cls):
     r = {"tex": tex.split("/")[-1].split(".")[0], "tex_path": tex, "color": [c["r"], c["g"], c["b"]],
          "intensity": d.get("ReticleIlluminationIntensity", d.get("ReticleIlluminationContrast", optic.get("ReticleIlluminationIntensity", 1.0))),
          "scale": [so["r"], so["g"], so["b"], so["a"]]}
-    if "Magnification" in optic: r["mag"], r["screen_fraction"] = optic["Magnification"], optic.get("ScreenHeightFraction", 0.5)
+    if "Magnification" in optic:
+        # BP_StaticMagnifiedOpticAttachment: SetMagnification(Magnification, ScreenHeightFraction); M_ScopeOpticReticle front-lens vignette
+        r["mag"], r["screen_fraction"] = optic["Magnification"], optic.get("ScreenHeightFraction", 0.5)
+        r["vig"] = [optic.get("FrontLensVignetteIntensity", 0.0), optic.get("FrontLensVignetteMaskRadius", 0.4), optic.get("FrontLensVignetteMaskDensity", 2.0)]
     return r
 
 items, missing = {}, []
@@ -137,7 +140,8 @@ for tex in {e["reticle"]["tex"] for e in items.values() if "reticle" in e}:
     f = os.path.join(out, tex + ".png")
     if not os.path.exists(f):
         print("reticle texture missing:", tex)
-    elif Image.open(f).mode != "RGBA":
-        im = Image.open(f).convert("RGB").resize((512, 512), Image.LANCZOS)
+    elif (px := Image.open(f)).mode != "RGBA" or min(px.getchannel("A").getextrema()) > 0 and px.convert("RGB").getextrema() != ((255, 255),) * 3:
+        # raw export (RGB, or RGBA with an opaque alpha like T_Reticle_DotMK1): black-background mask -> white + alpha = luminance
+        im = px.convert("RGB").resize((512, 512), Image.LANCZOS)
         a = im.convert("L").point(lambda v: min(255, v * 2))
         Image.merge("RGBA", (Image.new("L", im.size, 255),) * 3 + (a,)).save(f)
