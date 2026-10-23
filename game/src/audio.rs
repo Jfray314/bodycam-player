@@ -704,6 +704,7 @@ fn loops(
     assets: Res<AssetServer>,
     mut sinks: Query<&mut AudioSink>,
     loading: Res<crate::transition::Loading>,
+    mut interior_trace: Local<(f32, Option<f32>)>,
 ) {
     let dt = time.delta_secs();
     // loading screen: every loop silent (GlobalVolume does not reach sinks already playing)
@@ -716,7 +717,13 @@ fn loops(
     st.high_rotation = finterp(st.high_rotation, dy + dp, dt, 5.0);
 
     // Wind: 5 m trace up decides the interior factor (WindInteriorMultiply 0.5).
-    let up = ray.cast_ray(Ray3d::new(cam.translation(), Dir3::Y), &default()).first().map(|(_, h)| h.distance * 100.0).filter(|d| *d <= 500.0);
+    // The trace hits the whole map (~1.5 ms): refresh it 5x a second; the wind volume is interpolated anyway.
+    interior_trace.0 -= dt;
+    if interior_trace.0 <= 0.0 {
+        interior_trace.0 = 0.2;
+        interior_trace.1 = ray.cast_ray(Ray3d::new(cam.translation(), Dir3::Y), &default()).first().map(|(_, h)| h.distance * 100.0).filter(|d| *d <= 500.0);
+    }
+    let up = interior_trace.1;
     let interior = map_clamped(up.unwrap_or(500.0), 200.0, 500.0, 0.5, 1.0);
     let wind_target = map_clamped(dy + dp + map_clamped(speed_cm, 150.0, 300.0, 0.1, 3.0), 0.0, 3.0, 0.0, interior);
     st.wind_vol = finterp(st.wind_vol, wind_target, dt, 10.0);
