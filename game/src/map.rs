@@ -215,7 +215,7 @@ fn candela(l: &UeLight) -> f32 {
 }
 
 /// Kelvin -> RGB tint (Tanner Helland approximation).
-fn kelvin(t: f32) -> [f32; 3] {
+pub(crate) fn kelvin(t: f32) -> [f32; 3] {
     let t = t.clamp(1000.0, 15000.0) / 100.0;
     let r = if t <= 66.0 { 255.0 } else { 329.7 * (t - 60.0).powf(-0.1332) };
     let g = if t <= 66.0 { 99.47 * t.ln() - 161.12 } else { 288.1 * (t - 60.0).powf(-0.0755) };
