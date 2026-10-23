@@ -224,7 +224,12 @@ pub fn place(row: &str, ids: &[String]) -> (Vec<Placed>, HashMap<String, (String
         let id = pending.remove(k);
         strict = true;
         let it = &d.items[id];
-        let (bone, base) = avail[&it.slot].clone();
+        let (bone, mut base) = avail[&it.slot].clone();
+        // ponytail: the SCAR/AK/FAL/MP9/Vector receivers' Siderail socket bakes as the M4A1 barrel's one rolled 180 deg (lens toward
+        // the shooter, upside down); devices there are undone with that roll. Root cause (UE socket rotation vs the baked convention) not found.
+        if it.slot == "siderail" && (base.rotation * Vec3::NEG_Y).y > 0.5 {
+            base.rotation *= Quat::from_rotation_x(std::f32::consts::PI);
+        }
         for (n, x) in &it.sockets {
             avail.insert(n.clone(), (bone.clone(), base * x.tf()));
         }
@@ -549,7 +554,7 @@ fn mount_sys(
                     radius: m.radius * 0.01,
                     inner_angle: m.inner.to_radians().clamp(0.0, outer * 0.95),
                     outer_angle: outer,
-                    shadow_maps_enabled: true,
+                    shadow_maps_enabled: false,
                     ..default()
                 },
                 Visibility::Hidden,
@@ -664,7 +669,9 @@ fn state(
 ) {
     let (Some(inv), Some(cfg)) = (inv, cfg) else { return };
     let row = &inv.slots[inv.current].name;
-    if st.row != *row {
+    if st.row.is_empty() {
+        st.row = row.clone();
+    } else if st.row != *row {
         let old = (st.flashlight, st.laser);
         let prev = std::mem::replace(&mut st.row, row.clone());
         st.saved.insert(prev, old);
