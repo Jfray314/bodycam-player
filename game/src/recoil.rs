@@ -201,7 +201,13 @@ impl Recoil {
         self.fire_sway.y = finterp_to(self.fire_sway.y, target.y, dt, speed);
 
         // UE (X fwd, Y right, Z up) cm -> Bevy (-Z fwd, X right, Y up) m. Negative pitch = muzzle up, kick < 0 = back.
-        let kick = self.loc.x + self.push + self.fire_sway.y; // depth sway drifts forward (measured)
+        let mut kick = self.loc.x + self.push + self.fire_sway.y; // depth sway drifts forward (measured)
+        // RecoilData.MaxKickHip caps how far back the gun may travel, hip and aim alike: every probe burst (M4A1 hip/aim, BC5, AK aim)
+        // bottoms out at OutLoc.X = -2.8..-3.0 = -MaxKickHip, though the AK's KickAim (-6..-7) + Pushback (-4) would reach -11.
+        // Without the cap the optic is thrown into the camera on sustained ADS fire.
+        if let Some(max) = d["MaxKickHip"].as_f64() {
+            kick = kick.max(-max as f32);
+        }
         let right = self.loc.y + self.noise.x; // PRAS OutLoc.Y; the camera-space gun moves -0.96x of it (probe sockets, rec_1791602920), so Bevy x = -right below
         let up = self.loc.z + self.noise.y + self.z + self.fire_sway.x;
         self.out_rot = Vec3::new(self.rot.y, self.rot.z, self.rot.x);
@@ -347,5 +353,25 @@ mod tests {
             // pitch deg, X/Z cm (yaw/roll/Y are random walks: only their amplitude is comparable)
             assert!(err[0] < 2.2 && err[3] < 1.3 && err[5] < 4.0, "recoil fit regressed: {err:?}");
         }
+    }
+
+    /// AK ADS full-auto: the camera-space gun offset must stay well clear of the camera (optic ~10 cm in front).
+    #[test]
+    fn ak_ads_burst_stays_off_camera() {
+        let w: Value = serde_json::from_str(include_str!("../../assets/weapons/AK47.json")).unwrap();
+        let d = &w["anim_set"]["RecoilData"];
+        let mut r = Recoil::default();
+        let mut rng = rand::rng();
+        let (mut mn, mut mx, mut ang) = (Vec3::splat(9.0), Vec3::splat(-9.0), 0.0f32);
+        for i in 0..300 {
+            if i % 10 == 0 && i < 250 {
+                r.play(d, true, 0.1, true, &mut rng);
+            }
+            let o = r.tick(0.01);
+            (mn, mx) = (mn.min(o.translation), mx.max(o.translation));
+            ang = ang.max(o.rotation.angle_between(Quat::IDENTITY).to_degrees());
+        }
+        // -MaxKickHip (3 cm) plus a little pivot-rotation lever arm; uncapped it reached ~11 cm.
+        assert!(mx.z < 0.05, "gun pulled > 5 cm back: {mx:?} (min {mn:?}, max angle {ang})");
     }
 }
