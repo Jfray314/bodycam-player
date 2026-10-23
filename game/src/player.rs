@@ -497,8 +497,10 @@ pub(crate) fn bodycam_camera(time: Res<Time>, cm: Res<CameraMotion>, mut player:
     let w = if p.grounded { (speed / ref_speed).min(1.0) } else { 0.0 };
     let before = p.phase;
     p.phase += dt / gait.period_s * w;
-    // One measured loop = one stride = two steps (phase crosses 0.0 and 0.5); stands in for the animation notifies.
-    if w > 0.3 && (p.phase * 2.0).floor() > (before * 2.0).floor() {
+    // Steps stand in for the animation notifies (2 per stride). Measured walk/crouch/ADS loops are one stride; the sprint loop
+    // (1.7 s) is two strides of ALS_N_Run_F (SequenceLength 0.8, Footstep notifies at 0.03 / 0.43), so 4 steps.
+    let steps_per_loop = if p.sprinting && !p.crouched { 4.0 } else { 2.0 };
+    if w > 0.3 && (p.phase * steps_per_loop).floor() > (before * steps_per_loop).floor() {
         let kind = if p.crouched { StepKind::Crouch } else if p.sprinting { StepKind::Run } else { StepKind::Walk };
         steps.write(Footstep { kind, stride_start: p.phase.floor() > before.floor() });
     }
