@@ -980,8 +980,11 @@ pub fn debug_bones(
     cam: Single<&GlobalTransform, With<crate::player::BodycamCamera>>,
     joints: Query<(&Name, &GlobalTransform)>,
     morphs: Query<(Option<&Name>, &bevy::mesh::morph::MorphWeights)>,
-    meshes: Query<(Option<&Name>, &ViewVisibility, &InheritedVisibility, &GlobalTransform), With<Mesh3d>>,
+    meshes: Query<(Entity, Option<&Name>, &ViewVisibility, &InheritedVisibility, &GlobalTransform), With<Mesh3d>>,
     mut last: Local<f32>,
+    parents: Query<&ChildOf>,
+    armsq: Query<(), With<ArmsRoot>>,
+    jl: Query<(Entity, &Name, &GlobalTransform, &Transform)>,
 ) {
     if std::env::var("BODYCAM_DEBUG_BONES").is_err() || time.elapsed_secs() - *last < 0.1 {
         return;
@@ -998,7 +1001,19 @@ pub fn debug_bones(
         // Camera looks down -Z: elevation of the bone relative to view forward (negative = below centre).
         info!("t={:.1} {} cam {:?} elev {:.1} deg rot {:?}", *last, n.as_str(), t, t.y.atan2(-t.z).to_degrees(), r.to_euler(EulerRot::YXZ));
     }
-    for (n, vv, iv, gt) in &meshes {
+    for (e, n, gt, lt) in &jl {
+        if ["hand_l","hand_r","magazine","magazine_spare"].contains(&n.as_str()) && root_of(e, &parents, &armsq).is_some() {
+            info!("t={:.1} HAND {} cam {:?} gscale {:?}", *last, n.as_str(), cam.transform_point3(gt.translation()), gt.to_scale_rotation_translation().0);
+        }
+    }
+    for (n, gt, je) in jl.iter().map(|(e, n, g, _)| (n, g, e)) {
+        if root_of(je, &parents, &armsq).is_none() { continue; }
+        let sc = gt.to_scale_rotation_translation().0;
+        let l = sc.length();
+        if std::env::var("BODYCAM_DEBUG_SCALE").is_ok() && !(0.6..1.9).contains(&l) { info!("t={:.1} SCALE {} {:?}", *last, n.as_str(), sc); }
+    }
+    for (e, n, vv, iv, gt) in &meshes {
+        if root_of(e, &parents, &armsq).is_none() { continue; }
         info!("t={:.1} mesh {} view_visible={} inherited={} world={:?}", *last, n.map(|n| n.as_str()).unwrap_or("?"), vv.get(), iv.get(), gt.translation());
     }
     for (n, w) in &morphs {
@@ -1050,6 +1065,7 @@ fn decoy_mag(
     src: Query<(Option<&Mesh3d>, Option<&MeshMaterial3d<StandardMaterial>>, &Transform, Option<&bevy::camera::visibility::RenderLayers>), Without<Decoy>>,
     mut decoys: Query<(Entity, &mut Decoy, &mut Transform, &GlobalTransform), Without<Mesh3d>>,
     ) {
+    if std::env::var("BODYCAM_NODECOY").is_ok() { montages.clear(); return; }
     let now = time.elapsed_secs();
     let dt = time.delta_secs();
     for (e, mut d, mut tf, gt) in &mut decoys {
