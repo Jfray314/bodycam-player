@@ -86,6 +86,12 @@ pub struct Reticle {
     pub scale: [f32; 4],
     #[serde(default)]
     pub mag: Option<f32>,
+    /// MI_ScopeOpticReticle.ScreenHeightFraction: the scope picture's largest height on screen (fraction of the window height).
+    #[serde(default)]
+    pub screen_fraction: Option<f32>,
+    /// MI_ScopeOpticReticle FrontLensVignette Intensity / MaskRadius / MaskDensity.
+    #[serde(default)]
+    pub vig: Option<[f32; 3]>,
 }
 
 pub fn data() -> &'static Data {
@@ -261,6 +267,12 @@ pub struct AttState {
     pub scope: Option<(Entity, Xf)>,
     /// Eye relief (m) behind the AimPoint of the active optic.
     pub eye_relief: f32,
+    /// Active scope: ScreenHeightFraction, vignette params.
+    pub scope_fx: (f32, [f32; 3]),
+    /// Eyepiece glass of the mounted scope (radius, distance in front of the AimPoint, m), measured from its glass mesh.
+    pub lens: Option<(f32, f32)>,
+    /// Mounted scope waiting for `scope_lens` to measure its glass: (optic root, reticle_magnified socket, aimpoint socket).
+    lens_src: Option<(Entity, Vec3, Vec3)>,
 }
 
 #[derive(Component, Clone)]
@@ -281,7 +293,7 @@ impl Plugin for AttachPlugin {
         app.init_resource::<AttState>()
             .add_systems(Startup, scope_setup)
             .add_systems(Update, (preload, apply_mods, mount_sys, body_atts, glass, switch_input, state, laser).chain())
-            .add_systems(PostUpdate, scope.after(bevy::transform::TransformSystems::Propagate));
+            .add_systems(PostUpdate, (scope_lens, scope).chain().after(bevy::transform::TransformSystems::Propagate));
     }
 }
 
@@ -460,11 +472,16 @@ fn mount_sys(
     }
     *done = (Some(gun), key);
     st.scope = None;
+    st.lens = None;
+    st.lens_src = None;
     let d = data();
     for (root, id) in mount_parts(&mut cmd, &assets, gun, &row, &picks, &joints, &parents, &mut vis, AttMount) {
         let item = &d.items[id.as_str()];
         if is_magnified(&id) && let Some(v) = item.sockets.get("viewpoint") {
             st.scope = Some((root, v.clone()));
+            if let (Some(r), Some(a)) = (item.sockets.get("reticle_magnified"), item.sockets.get("aimpoint")) {
+                st.lens_src = Some((root, Vec3::from(r.loc), Vec3::from(a.loc)));
+            }
         }
         // WEP optics: the reticle quad sits on the optic's Reticle socket (MI_ReticleData_*: ReticleColor, unlit).
         // ponytail: window size 7 cm x ReticleScaleAndOffset (guess).
@@ -521,7 +538,13 @@ fn reticle_mat(assets: &AssetServer, mats: &mut Assets<StandardMaterial>, r: &Re
 fn glass(mut mats: ResMut<Assets<StandardMaterial>>, new: Query<(&GltfMaterialName, &MeshMaterial3d<StandardMaterial>), Added<GltfMaterialName>>) {
     for (n, mh) in &new {
         let l = n.0.to_lowercase();
-        if (l.contains("glass") || l.contains("lens")) && let Some(mut m) = mats.get_mut(&mh.0) {
+        // ponytail: an unset material slot (the engine's WorldGridMaterial, e.g. the PSG-1's reticle plane) is invisible, not a grid.
+        if l.contains("worldgrid") && let Some(mut m) = mats.get_mut(&mh.0) {
+            m.base_color = Color::NONE;
+            m.alpha_mode = AlphaMode::Blend;
+        }
+        // MI_Inside_Scope_Black_Inst / MI_DocterSight_*: the window panes of the older sight meshes
+        if (l.contains("glass") || l.contains("lens") || l.contains("inside_scope") || l.contains("doctersight")) && let Some(mut m) = mats.get_mut(&mh.0) {
             m.base_color = Color::srgba(0.7, 0.85, 0.9, 0.08);
             m.alpha_mode = AlphaMode::Blend;
             m.metallic = 0.0;
@@ -594,6 +617,7 @@ fn state(
     st.eye_relief = relief;
     // MI_ScopeOpticReticle_*.Magnification
     st.zoom = optic.and_then(|o| data().items[o].reticle.as_ref()?.mag).unwrap_or(1.0);
+    st.scope_fx = optic.and_then(|o| data().items[o].reticle.as_ref()).map_or((0.5, [0.0, 0.4, 2.0]), |r| (r.screen_fraction.unwrap_or(0.5), r.vig.unwrap_or([0.0, 0.4, 2.0])));
     let (fl, la) = (st.flashlight, st.laser);
     for mut v in &mut lights {
         *v = if fl { Visibility::Inherited } else { Visibility::Hidden };
@@ -630,8 +654,8 @@ fn laser(
 
 // ---- magnified optic: scope capture (BodycamScopeCaptureComponent at the optic's Viewpoint socket, SetMagnification) ----
 const SCOPE_PX: u32 = 512;
-// ACOG eyepiece glass (acog.glb MI_ScopeOpticGlass_AGO rear slot): radius 1.08 cm, 3.0 cm in front of the AimPoint socket.
-// ponytail: scope-specific lens numbers; other magnified optics reuse them (only the ACOG is in the library). Magnification comes from the data.
+const VIG_PX: u32 = 128;
+// ponytail: eyepiece glass radius / position when the glass mesh can't be measured (ACOG: 1.08 cm, 3.0 cm in front of the AimPoint).
 const LENS_R: f32 = 0.0108;
 const LENS_BEHIND: f32 = 0.030;
 
@@ -639,13 +663,15 @@ const LENS_BEHIND: f32 = 0.030;
 struct ScopeCam;
 #[derive(Component)]
 struct ScopeOverlay;
+#[derive(Component)]
+struct ScopeVignette(Handle<Image>);
 
 fn scope_setup(mut cmd: Commands, mut images: ResMut<Assets<Image>>, assets: Res<AssetServer>) {
     let img = images.add(Image::new_target_texture(SCOPE_PX, SCOPE_PX, TextureFormat::Rgba8UnormSrgb, None));
     cmd.spawn((
         ScopeCam,
         Camera3d::default(),
-        Camera { order: -5, viewport: Some(Viewport { physical_size: UVec2::ONE, ..default() }), clear_color: ClearColorConfig::Custom(Color::BLACK), ..default() },
+        Camera { order: -5, viewport: Some(Viewport { physical_size: UVec2::ONE, ..default() }), ..default() },
         RenderTarget::Image(ImageRenderTarget { handle: img.clone(), scale_factor: 1.0 }),
         Projection::Perspective(PerspectiveProjection { near: 0.05, aspect_ratio: 1.0, ..default() }),
         bevy::core_pipeline::tonemapping::Tonemapping::AcesFitted,
@@ -662,26 +688,80 @@ fn scope_setup(mut cmd: Commands, mut images: ResMut<Assets<Image>>, assets: Res
     // MI_ReticleMagnifiedData_*: reticle texture scaled by ReticleScaleAndOffset over the lens.
     // every scope's default reticle is the gun's "Magnified Dot MK1 Red" item, so one overlay serves them all
     if let Some(r) = data().items.values().filter_map(|i| i.reticle.as_ref()).find(|r| r.mag.is_some()) {
-        let c = Color::srgb(r.color[0], r.color[1], r.color[2]);
+        let c = Color::LinearRgba(LinearRgba::rgb(r.color[0], r.color[1], r.color[2]));
         cmd.spawn((
             Node { position_type: PositionType::Absolute, width: percent(r.scale[0] * 100.0), height: percent(r.scale[1] * 100.0), ..default() },
             ImageNode::new(assets.load(format!("models/attachments/reticles/{}.png", r.tex))).with_color(c),
             ChildOf(o),
         ));
     }
+    // M_ScopeOpticReticle front-lens vignette: radial black ramp over the picture (re-filled per scope in `scope`).
+    let vig = images.add(Image::new(
+        bevy::render::render_resource::Extent3d { width: VIG_PX, height: VIG_PX, depth_or_array_layers: 1 },
+        bevy::render::render_resource::TextureDimension::D2,
+        vec![0; (VIG_PX * VIG_PX * 4) as usize],
+        TextureFormat::Rgba8UnormSrgb,
+        default(),
+    ));
+    cmd.spawn((
+        ScopeVignette(vig.clone()),
+        Node { position_type: PositionType::Absolute, width: percent(100.0), height: percent(100.0), ..default() },
+        ImageNode::new(vig),
+        ChildOf(o),
+    ));
 }
 
+/// Measures the eyepiece glass of a freshly mounted scope: the MI_ScopeOpticGlass_* vertices within 1.2 cm (along the optic axis)
+/// of its reticle_magnified socket give the lens radius; the AimPoint sits that much behind the socket.
+fn scope_lens(
+    mut st: ResMut<AttState>,
+    glass: Query<(Entity, &GltfMaterialName, &Mesh3d, &GlobalTransform)>,
+    globals: Query<&GlobalTransform>,
+    parents: Query<&ChildOf>,
+    meshes: Res<Assets<Mesh>>,
+) {
+    let Some((root, ret, aim)) = st.lens_src else { return };
+    let Ok(rg) = globals.get(root) else { return };
+    let inv = rg.affine().inverse();
+    let mut r2: f32 = 0.0;
+    let mut n = 0;
+    for (e, name, m, g) in &glass {
+        if !name.0.to_lowercase().contains("scopeopticglass") || !root_of_entity(e, root, &parents) {
+            continue;
+        }
+        let Some(pos) = meshes.get(&m.0).and_then(|m| m.attribute(Mesh::ATTRIBUTE_POSITION)).and_then(|a| a.as_float3()) else { continue };
+        for p in pos {
+            let l = inv.transform_point3(g.transform_point(Vec3::from(*p)));
+            if (l.y - ret.y).abs() < 0.012 {
+                r2 = r2.max((l.x - ret.x).powi(2) + (l.z - ret.z).powi(2));
+                n += 1;
+            }
+        }
+    }
+    if n == 0 {
+        return; // glass scene not spawned yet
+    }
+    st.lens = Some((r2.sqrt().max(0.004), aim.y - ret.y));
+    st.lens_src = None;
+}
+
+#[allow(clippy::too_many_arguments)]
 fn scope(
     st: Res<AttState>,
     ads: Res<crate::sway::Ads>,
     globals: Query<&GlobalTransform, Without<ScopeCam>>,
     main: Single<&Projection, (With<crate::player::BodycamCamera>, Without<ScopeCam>)>,
     win: Single<&Window, With<PrimaryWindow>>,
-    mut cam: Single<(&mut Camera, &mut Transform, &mut GlobalTransform, &mut Projection), With<ScopeCam>>,
+    mut cam: Single<(Entity, &mut Camera, &mut Transform, &mut GlobalTransform, &mut Projection), With<ScopeCam>>,
+    sky: Single<(Option<&bevy::light::Skybox>, Option<&bevy::camera::Exposure>), (With<crate::player::BodycamCamera>, Without<ScopeCam>)>,
+    mut cmd: Commands,
     mut overlay: Single<(&mut Node, &mut ImageNode), With<ScopeOverlay>>,
+    vig: Single<&ScopeVignette>,
+    mut images: ResMut<Assets<Image>>,
+    mut last_vig: Local<[f32; 3]>,
 ) {
     let on = st.zoom > 1.0 && ads.alpha > 0.05;
-    let (cam_c, cam_t, cam_g, cam_p) = &mut *cam;
+    let (cam_e, cam_c, cam_t, cam_g, cam_p) = &mut *cam;
     let Some((root, vp)) = st.scope.as_ref().filter(|_| on) else {
         // ponytail: never deactivated (a camera switched on mid-run panics Bevy's directional-light cascades); parked on a 1 px viewport instead.
         cam_c.viewport = Some(Viewport { physical_size: UVec2::ONE, ..default() });
@@ -695,16 +775,27 @@ fn scope(
     **cam_t = world.compute_transform();
     **cam_g = world;
     cam_c.viewport = None;
-    // eye (camera point) to eyepiece distance: eye relief behind the AimPoint, which is LENS_BEHIND behind the glass
-    let dist = LENS_BEHIND + st.eye_relief;
-    let alpha = (LENS_R / dist).atan();
+    // the scope picture sees the same sky / exposure as the player camera (ClearColor otherwise)
+    let mut ce = cmd.entity(*cam_e);
+    match sky.0 {
+        Some(s) => ce.insert(s.clone()),
+        None => ce.remove::<bevy::light::Skybox>(),
+    };
+    if let Some(x) = sky.1 {
+        ce.insert(*x);
+    }
+    // eye (camera point) to eyepiece distance: eye relief behind the AimPoint, which is `behind` behind the glass
+    let (lens_r, behind) = st.lens.unwrap_or((LENS_R, LENS_BEHIND));
+    let dist = behind + st.eye_relief;
+    let alpha = (lens_r / dist).atan();
     if let Projection::Perspective(p) = &mut **cam_p {
         p.fov = 2.0 * (alpha.tan() / st.zoom).atan();
     }
     let vfov = if let Projection::Perspective(p) = *main { p.fov } else { 1.0 };
     let h = win.height();
     let focal = h * 0.5 / (vfov * 0.5).tan();
-    let r = (focal * LENS_R / dist).min(h * 0.45);
+    // the lens as the eye sees it, at most ScreenHeightFraction of the window height
+    let r = (focal * lens_r / dist).min(h * 0.5 * st.scope_fx.0);
     let (n, img) = &mut *overlay;
     n.display = Display::Flex;
     n.left = px(win.width() * 0.5 - r);
@@ -712,6 +803,19 @@ fn scope(
     n.width = px(2.0 * r);
     n.height = px(2.0 * r);
     img.color = Color::WHITE.with_alpha(((ads.alpha - 0.7) / 0.3).clamp(0.0, 1.0));
+    if *last_vig != st.scope_fx.1 {
+        *last_vig = st.scope_fx.1;
+        let [k, rad, dens] = st.scope_fx.1;
+        if let Some(mut i) = images.get_mut(&vig.0) {
+            // ponytail: ramp shape guessed from the params: alpha = Intensity * saturate((r - MaskRadius) / (1 - MaskRadius))^MaskDensity
+            let d = (0..VIG_PX * VIG_PX).flat_map(|i| {
+                let (x, y) = ((i % VIG_PX) as f32 + 0.5, (i / VIG_PX) as f32 + 0.5);
+                let rr = ((x / VIG_PX as f32 * 2.0 - 1.0).powi(2) + (y / VIG_PX as f32 * 2.0 - 1.0).powi(2)).sqrt();
+                [0, 0, 0, if rr > 1.0 { 0 } else { (k * ((rr - rad) / (1.0 - rad)).clamp(0.0, 1.0).powf(dens) * 255.0) as u8 }]
+            });
+            i.data = Some(d.collect());
+        }
+    }
 }
 
 #[cfg(test)]
