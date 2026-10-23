@@ -538,6 +538,11 @@ fn reticle_mat(assets: &AssetServer, mats: &mut Assets<StandardMaterial>, r: &Re
 fn glass(mut mats: ResMut<Assets<StandardMaterial>>, new: Query<(&GltfMaterialName, &MeshMaterial3d<StandardMaterial>), Added<GltfMaterialName>>) {
     for (n, mh) in &new {
         let l = n.0.to_lowercase();
+        // ponytail: an unset material slot (the engine's WorldGridMaterial, e.g. the PSG-1's reticle plane) is invisible, not a grid.
+        if l.contains("worldgrid") && let Some(mut m) = mats.get_mut(&mh.0) {
+            m.base_color = Color::NONE;
+            m.alpha_mode = AlphaMode::Blend;
+        }
         if (l.contains("glass") || l.contains("lens")) && let Some(mut m) = mats.get_mut(&mh.0) {
             m.base_color = Color::srgba(0.7, 0.85, 0.9, 0.08);
             m.alpha_mode = AlphaMode::Blend;
@@ -665,7 +670,7 @@ fn scope_setup(mut cmd: Commands, mut images: ResMut<Assets<Image>>, assets: Res
     cmd.spawn((
         ScopeCam,
         Camera3d::default(),
-        Camera { order: -5, viewport: Some(Viewport { physical_size: UVec2::ONE, ..default() }), clear_color: ClearColorConfig::Custom(Color::BLACK), ..default() },
+        Camera { order: -5, viewport: Some(Viewport { physical_size: UVec2::ONE, ..default() }), ..default() },
         RenderTarget::Image(ImageRenderTarget { handle: img.clone(), scale_factor: 1.0 }),
         Projection::Perspective(PerspectiveProjection { near: 0.05, aspect_ratio: 1.0, ..default() }),
         bevy::core_pipeline::tonemapping::Tonemapping::AcesFitted,
@@ -746,14 +751,16 @@ fn scope(
     globals: Query<&GlobalTransform, Without<ScopeCam>>,
     main: Single<&Projection, (With<crate::player::BodycamCamera>, Without<ScopeCam>)>,
     win: Single<&Window, With<PrimaryWindow>>,
-    mut cam: Single<(&mut Camera, &mut Transform, &mut GlobalTransform, &mut Projection), With<ScopeCam>>,
+    mut cam: Single<(Entity, &mut Camera, &mut Transform, &mut GlobalTransform, &mut Projection), With<ScopeCam>>,
+    sky: Single<(Option<&bevy::light::Skybox>, Option<&bevy::camera::Exposure>), (With<crate::player::BodycamCamera>, Without<ScopeCam>)>,
+    mut cmd: Commands,
     mut overlay: Single<(&mut Node, &mut ImageNode), With<ScopeOverlay>>,
     vig: Single<&ScopeVignette>,
     mut images: ResMut<Assets<Image>>,
     mut last_vig: Local<[f32; 3]>,
 ) {
     let on = st.zoom > 1.0 && ads.alpha > 0.05;
-    let (cam_c, cam_t, cam_g, cam_p) = &mut *cam;
+    let (cam_e, cam_c, cam_t, cam_g, cam_p) = &mut *cam;
     let Some((root, vp)) = st.scope.as_ref().filter(|_| on) else {
         // ponytail: never deactivated (a camera switched on mid-run panics Bevy's directional-light cascades); parked on a 1 px viewport instead.
         cam_c.viewport = Some(Viewport { physical_size: UVec2::ONE, ..default() });
@@ -767,6 +774,15 @@ fn scope(
     **cam_t = world.compute_transform();
     **cam_g = world;
     cam_c.viewport = None;
+    // the scope picture sees the same sky / exposure as the player camera (ClearColor otherwise)
+    let mut ce = cmd.entity(*cam_e);
+    match sky.0 {
+        Some(s) => ce.insert(s.clone()),
+        None => ce.remove::<bevy::light::Skybox>(),
+    };
+    if let Some(x) = sky.1 {
+        ce.insert(*x);
+    }
     // eye (camera point) to eyepiece distance: eye relief behind the AimPoint, which is `behind` behind the glass
     let (lens_r, behind) = st.lens.unwrap_or((LENS_R, LENS_BEHIND));
     let dist = behind + st.eye_relief;
@@ -794,7 +810,7 @@ fn scope(
             let d = (0..VIG_PX * VIG_PX).flat_map(|i| {
                 let (x, y) = ((i % VIG_PX) as f32 + 0.5, (i / VIG_PX) as f32 + 0.5);
                 let rr = ((x / VIG_PX as f32 * 2.0 - 1.0).powi(2) + (y / VIG_PX as f32 * 2.0 - 1.0).powi(2)).sqrt();
-                [0, 0, 0, (k * ((rr - rad) / (1.0 - rad)).clamp(0.0, 1.0).powf(dens) * 255.0) as u8]
+                [0, 0, 0, if rr > 1.0 { 0 } else { (k * ((rr - rad) / (1.0 - rad)).clamp(0.0, 1.0).powf(dens) * 255.0) as u8 }]
             });
             i.data = Some(d.collect());
         }

@@ -67,12 +67,14 @@ def chain(path):
 RET = {"regular": "BodycamScope/Reticles/Regular/MI_ReticleData_Dot_Red", "canted": "BodycamScope/Reticles/Regular/MI_ReticleData_Dot_Red",
        "magnified": "BodycamScope/Reticles/Magnified/MI_ReticleMagnifiedData_DotMK1_Red"}
 lib = {e["id"]: e for e in json.load(open(f"{M}/_work_att/attall.json"))}
-def reticle(glb, cls):
+def reticle(glb, cls, socks):
     mj = X + lib[glb]["mesh"][len("Bodycam/Content/"):] + ".json"
     if not os.path.exists(mj): return None
     s = json.dumps(json.load(open(mj)))
-    if "OpticReticleMaterial" not in s: return None
-    optic = chain(s.split('"OpticReticleMaterial": "')[1].split('"')[0])
+    # no user data (older meshes, e.g. ACRO P239): BP_StaticReticleAttachment keeps the reticle mesh's own M_ReticleData -> defaults
+    if "OpticReticleMaterial" in s: optic = chain(s.split('"OpticReticleMaterial": "')[1].split('"')[0])
+    elif "reticle" in socks or "reticle_canted" in socks: optic = {}
+    else: return None
     kind = "magnified" if "Magnification" in optic else "canted" if cls.startswith("Canted") else "regular"
     d = chain(RET[kind])
     tex = d.get("ReticleTexture") or optic.get("ReticleTexture")
@@ -100,7 +102,7 @@ for i, it in meta["items"].items():
     if grip: e["grip"] = grip.rsplit(".", 1)[-1]
     if it["icon"]: e["icon"] = it["icon"]
     elif os.path.exists(f"{M}/../ui/tex/icons/gen_{it['glb']}.png"): e["icon"] = "gen_" + it["glb"]  # no ItemIcons: tools/blender/icon_render.py
-    if it["cls"].split(".")[0] in ("Optic", "Canted Optic") and (r := reticle(it["glb"], it["cls"])): e["reticle"] = r
+    if it["cls"].split(".")[0] in ("Optic", "Canted Optic") and (r := reticle(it["glb"], it["cls"], socks)): e["reticle"] = r
     items[i] = e
 
 guns = {}
