@@ -418,7 +418,7 @@ fn sound(mut cmd: Commands, cars: Query<&Car>, perk: Res<Perk>, mut layers: Quer
 /// look and CS_RCDriveShake (Perlin rot pitch/roll 0.3, yaw 0.1 deg at 5 Hz, scale MapRangeClamped(|speed| 0..500 cm/s -> 0..2)).
 fn camera(
     perk: Res<Perk>,
-    cars: Query<(Entity, &Transform, &Car), Without<BodycamCamera>>,
+    cars: Query<(Entity, &Transform, &GlobalTransform, &Car), Without<BodycamCamera>>,
     nodes: Query<(&Name, &GlobalTransform)>,
     kids: Query<&Children>,
     player: Single<&GlobalTransform, With<Player>>,
@@ -428,9 +428,10 @@ fn camera(
     if perk.phase != Phase::Piloting {
         return;
     }
-    let Ok((e, tf, c)) = cars.single() else { return };
+    let Ok((e, tf, tg, c)) = cars.single() else { return };
     let up = tf.rotation * Vec3::Y;
-    let at = kids.iter_descendants(e).filter_map(|d| nodes.get(d).ok()).find(|(n, _)| n.as_str() == "FPVCameraHDMona").map(|(_, g)| g.translation()).unwrap_or(tf.translation + up * 0.15);
+    let at = kids.iter_descendants(e).filter_map(|d| nodes.get(d).ok()).find(|(n, _)| n.as_str() == "FPVCameraHDMona").map(|(_, g)| tf.transform_point(tg.affine().inverse().transform_point3(g.translation()))).unwrap_or(tf.translation + up * 0.15);
+    // the node's GlobalTransform is last frame's (drive moved the car since): re-apply its car-local offset to the current Transform
     let k = (c.vel.length() / 5.0).clamp(0.0, 1.0) * 2.0;
     let t = time.elapsed_secs() * 5.0 * std::f32::consts::TAU;
     let shake = Quat::from_euler(EulerRot::YXZ, (0.1 * k * (t * 0.83).sin()).to_radians(), (0.3 * k * t.sin()).to_radians(), (0.3 * k * (t * 1.13).cos()).to_radians());
