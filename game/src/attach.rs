@@ -15,6 +15,7 @@ use bevy::window::PrimaryWindow;
 pub const VM_LAYER: usize = 2;
 use bevy::gltf::GltfMaterialName;
 use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
+use bevy::light::SpotLightTexture;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
 use serde::Deserialize;
@@ -91,6 +92,40 @@ pub struct Reticle {
 pub fn data() -> &'static Data {
     static D: OnceLock<Data> = OnceLock::new();
     D.get_or_init(|| serde_json::from_str(include_str!("../../assets/attachments.json")).expect("assets/attachments.json"))
+}
+
+/// Flashlight / laser actor specs per attachment id (tools/lights.py -> assets/lights.json: Flashlight_C / Laser_C + *_Child BPs).
+#[derive(Deserialize, Debug)]
+pub struct LightSpec {
+    pub k: String,
+    #[serde(default)]
+    pub main: Option<SpotSpec>,
+    #[serde(default)]
+    pub muzzle: Option<SpotSpec>,
+    #[serde(default)]
+    pub color: [f32; 3],
+    #[serde(default)]
+    pub opacity: f32,
+    #[serde(default)]
+    pub dot: f32,
+    #[serde(default)]
+    pub beam_w: f32,
+}
+/// SpotLightComponent template (angles in degrees, atten / radius in cm, colour = FColor bytes).
+#[derive(Deserialize, Debug)]
+pub struct SpotSpec {
+    pub inner: f32,
+    pub outer: f32,
+    pub intensity: f32,
+    pub color: [u8; 3],
+    pub temp: f32,
+    pub atten: f32,
+    pub radius: f32,
+    pub fnc: Option<String>,
+}
+fn light_specs() -> &'static HashMap<String, LightSpec> {
+    static D: OnceLock<HashMap<String, LightSpec>> = OnceLock::new();
+    D.get_or_init(|| serde_json::from_str(include_str!("../../assets/lights.json")).expect("assets/lights.json"))
 }
 
 /// Ids that fit weapon `row` (the tablet MODIFY list).
@@ -251,8 +286,11 @@ fn is_magnified(id: &str) -> bool {
 pub struct AttState {
     /// WEP.CurrentOpticIndex: 0 = Optic socket sight, 1 = canted sight.
     pub optic: usize,
+    /// Toggle state of the current gun's devices (each gun's Flashlight_C / Laser_C actor keeps its own bIsFlashlightOn / bIsLaserOn).
     pub flashlight: bool,
     pub laser: bool,
+    row: String,
+    saved: HashMap<String, (bool, bool)>,
     /// Active optic's AimPoint (gun bone, joint-space point) while an optic is mounted: WEP.GetActiveAimpointComponent.
     pub aim: Option<(String, Vec3)>,
     /// Magnification of the active scope (1 = none).
@@ -265,6 +303,10 @@ pub struct AttState {
 
 #[derive(Component, Clone)]
 struct AttMount;
+/// cd per UE Intensity unit of a flashlight's MainLight (see mount_sys).
+const FLASH_CD_PER_UNIT: f32 = 1500.0;
+/// Laser beam / dot emissive multiplier (MI_Laser_Beam Emissive Intensity 1 under the game's tone mapping).
+const LASER_GLOW: f32 = 6.0;
 #[derive(Component)]
 struct FlashLight;
 #[derive(Component)]
@@ -482,23 +524,71 @@ fn mount_sys(
                 ChildOf(root),
             ));
         }
-        if let Some(l) = item.sockets.get("light") {
-            // Flashlight BP: MainLight SpotLight inner 8 / outer 25 deg, attenuation 3200 cm, LightFalloffExponent 5.
-            cmd.spawn((
+        let spec = light_specs().get(id.as_str());
+        if let (Some(l), Some(m)) = (item.sockets.get("light"), spec.and_then(|sp| sp.main.as_ref())) {
+            // Flashlight_C: MainLight (SpotLight at the Light socket, yaw 90 = along the mesh's UE +Y; world only) + MuzzleLight (lights
+            // the gun itself: bAffectsWorld false). Non-inverse-squared falloff (LightFalloffExponent 5) has no Bevy equivalent.
+            // ponytail: Bevy spots are cd / d^2: FLASH_CD_PER_UNIT cd per UE Intensity unit gives ~100 lux at 3 m under the lobby's EV100
+            // (the BP's units are unitless/non-physical); the light function (IES-like mask) is the SpotLightTexture cookie.
+            let col = |c: [u8; 3], t: f32| {
+                let mut v = c.map(|b| (b as f32 / 255.0).powf(2.2));
+                if t > 0.0 {
+                    let k = crate::map::kelvin(t);
+                    v = [v[0] * k[0].powf(2.2), v[1] * k[1].powf(2.2), v[2] * k[2].powf(2.2)];
+                }
+                Color::linear_rgb(v[0], v[1], v[2])
+            };
+            let fwd = l.tf() * Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2));
+            let outer = m.outer.to_radians().clamp(0.02, 1.5);
+            let mut main = cmd.spawn((
                 FlashLight,
-                SpotLight { intensity: 400_000.0, range: 32.0, inner_angle: 8f32.to_radians(), outer_angle: 25f32.to_radians(), shadow_maps_enabled: false, ..default() },
+                SpotLight {
+                    color: col(m.color, m.temp),
+                    intensity: m.intensity * FLASH_CD_PER_UNIT * 4.0 * std::f32::consts::PI,
+                    range: m.atten * 0.01,
+                    radius: m.radius * 0.01,
+                    inner_angle: m.inner.to_radians().clamp(0.0, outer * 0.95),
+                    outer_angle: outer,
+                    shadow_maps_enabled: true,
+                    ..default()
+                },
                 Visibility::Hidden,
-                l.tf() * Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                fwd,
                 ChildOf(root),
             ));
+            if let Some(f) = &m.fnc {
+                main.insert(SpotLightTexture { image: assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(format!("textures/light/{f}.png")) });
+            }
+            if let Some(mz) = spec.and_then(|sp| sp.muzzle.as_ref()) {
+                let mo = mz.outer.to_radians().clamp(0.02, 1.5);
+                cmd.spawn((
+                    FlashLight,
+                    SpotLight {
+                        color: col(mz.color, mz.temp),
+                        intensity: mz.intensity * 4.0 * std::f32::consts::PI,
+                        range: mz.atten * 0.01,
+                        radius: mz.radius * 0.01,
+                        inner_angle: mz.inner.to_radians().clamp(0.0, mo * 0.95),
+                        outer_angle: mo,
+                        shadow_maps_enabled: false,
+                        ..default()
+                    },
+                    RenderLayers::layer(VM_LAYER),
+                    Visibility::Hidden,
+                    fwd,
+                    ChildOf(root),
+                ));
+            }
         }
-        if let Some(l) = item.sockets.get("socket_laser") {
-            // Laser BP: SM_Laser_Beam stretched to the trace hit (x1000 scale when nothing is hit), sphere dot at the hit.
-            // ponytail: beam colour by mesh (the MAWL is the green one); the BP's colour parameter is not in the data.
-            let col = if item.glb.contains("mawl") { Color::srgb(0.1, 1.0, 0.2) } else { Color::srgb(1.0, 0.05, 0.05) };
-            let m = mats.add(StandardMaterial { base_color: col, emissive: col.to_linear() * 8.0, unlit: true, alpha_mode: AlphaMode::Add, ..default() });
-            cmd.spawn((LaserBeam, Mesh3d(meshes.add(Cuboid::new(0.0015, 1.0, 0.0015).mesh().build().translated_by(Vec3::new(0.0, -0.5, 0.0)))), MeshMaterial3d(m.clone()), Visibility::Hidden, l.tf(), NoFrustumCulling, IgnoreTraces, RenderLayers::layer(VM_LAYER), ChildOf(root)));
-            cmd.spawn((AttMount, LaserDot, Mesh3d(meshes.add(Sphere::new(0.012))), MeshMaterial3d(m), Visibility::Hidden, Transform::default(), NoFrustumCulling, IgnoreTraces, RenderLayers::layer(VM_LAYER)));
+        if let (Some(l), Some(sp)) = (item.sockets.get("socket_laser"), spec.filter(|sp| sp.k == "laser")) {
+            // Laser_C: SM_Laser_Beam (20 cm long, 0.26 cm thick) at Socket_Laser scaled (dist/20, 2, 2) to the LineTrace hit (x1000 when
+            // nothing is hit), Sphere scale 0.01 at the hit; MI_Laser_Beam_<colour> unlit translucent (Beam Color, Opacity Multiplier 0.2).
+            // ponytail: M_Laser_Beam's graph (noise-masked opacity, Field Of View Alpha) isn't in the dump: plain unlit blend at the opacity multiplier.
+            let c = Color::linear_rgb(sp.color[0], sp.color[1], sp.color[2]);
+            let m = mats.add(StandardMaterial { base_color: c.with_alpha(sp.opacity), emissive: c.to_linear() * LASER_GLOW, unlit: true, alpha_mode: AlphaMode::Add, ..default() });
+            let w = 0.0026 * sp.beam_w;
+            cmd.spawn((LaserBeam, Mesh3d(meshes.add(Cuboid::new(w, 1.0, w).mesh().build().translated_by(Vec3::new(0.0, -0.5, 0.0)))), MeshMaterial3d(m.clone()), Visibility::Hidden, l.tf(), NoFrustumCulling, IgnoreTraces, RenderLayers::layer(VM_LAYER), ChildOf(root)));
+            cmd.spawn((AttMount, LaserDot, Mesh3d(meshes.add(Sphere::new(sp.dot * 0.5))), MeshMaterial3d(m), Visibility::Hidden, Transform::default(), NoFrustumCulling, IgnoreTraces, RenderLayers::layer(VM_LAYER)));
         }
     }
 }
@@ -544,17 +634,14 @@ fn switch_input(keys: Res<ButtonInput<KeyCode>>, mouse: Res<ButtonInput<MouseBut
     let click = |snd: &mut MessageWriter<crate::audio::PlayCue>, k: &str| {
         snd.write(crate::audio::PlayCue { bools: vec![], cue: format!("/Game/BodycamWeapons/LowPolyShooterPack/Audio/WAV/Weapons/S_WEP_{k}_Click_Cue"), dist_cm: 0.0 });
     };
-    if keys.just_pressed(KeyCode::KeyC) {
+    // The toggle abilities come with the device: nothing to toggle (and no stale "on" for the next gun) without one mounted.
+    if keys.just_pressed(KeyCode::KeyC) && has(&|id| light_specs().get(id).is_some_and(|l| l.k == "flash") && data().items[id].sockets.contains_key("light")) {
         st.flashlight = !st.flashlight;
-        if has(&|id| data().items[id].sockets.contains_key("light")) {
-            click(&mut snd, "Flashlight");
-        }
+        click(&mut snd, "Flashlight");
     }
-    if keys.just_pressed(KeyCode::KeyZ) {
+    if keys.just_pressed(KeyCode::KeyZ) && has(&|id| light_specs().get(id).is_some_and(|l| l.k == "laser") && data().items[id].sockets.contains_key("socket_laser")) {
         st.laser = !st.laser;
-        if has(&|id| data().items[id].sockets.contains_key("socket_laser")) {
-            click(&mut snd, "Laser");
-        }
+        click(&mut snd, "Laser");
     }
     if mouse.just_pressed(MouseButton::Middle)
         && let (Some(cfg), Some(inv)) = (cfg, inv)
@@ -577,6 +664,12 @@ fn state(
 ) {
     let (Some(inv), Some(cfg)) = (inv, cfg) else { return };
     let row = &inv.slots[inv.current].name;
+    if st.row != *row {
+        let old = (st.flashlight, st.laser);
+        let prev = std::mem::replace(&mut st.row, row.clone());
+        st.saved.insert(prev, old);
+        (st.flashlight, st.laser) = st.saved.get(row).copied().unwrap_or_default();
+    }
     let ids = loadout(&cfg, row);
     let optic = active_optic(row, &ids, st.optic);
     let mut relief = 0.0;
@@ -617,11 +710,11 @@ fn laser(
     let origin = bg.translation();
     let hit = if st.laser {
         let filter = |e: Entity| !ignore.contains(e);
-        ray.cast_ray(Ray3d::new(origin, fwd), &MeshRayCastSettings::default().with_filter(&filter)).first().map(|(_, h)| h.distance)
+        ray.cast_ray(Ray3d::new(origin, fwd), &MeshRayCastSettings::default().with_filter(&filter)).first().map(|(_, h)| h.distance).filter(|d| *d <= 100.0)
     } else {
         None
     };
-    bt.scale = Vec3::new(1.0, hit.unwrap_or(100.0).min(100.0), 1.0);
+    bt.scale = Vec3::new(1.0, hit.unwrap_or(200.0), 1.0);
     if let Some((mut dt, mut dv)) = dots.iter_mut().next() {
         dt.translation = origin + *fwd * hit.unwrap_or(0.0);
         *dv = if hit.is_some() { Visibility::Inherited } else { Visibility::Hidden };
@@ -717,6 +810,20 @@ fn scope(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every flashlight / laser device (a "light" / "socket_laser" socket) has its BP spec, and the other way round.
+    #[test]
+    fn light_devices_have_specs() {
+        for (id, it) in &data().items {
+            let sp = light_specs().get(id.as_str());
+            if it.sockets.contains_key("light") {
+                assert!(sp.is_some_and(|s| s.k == "flash" && s.main.is_some() && s.muzzle.is_some()), "{id}");
+            }
+            if it.sockets.contains_key("socket_laser") {
+                assert!(sp.is_some_and(|s| s.k == "laser" && s.opacity > 0.0), "{id}");
+            }
+        }
+    }
 
     #[test]
     fn defaults_mount_and_muzzle_device_extends_the_barrel() {

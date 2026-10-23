@@ -481,6 +481,14 @@ pub struct GridPlugin;
 impl Plugin for GridPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Update, (teleport, range_targets, move_targets).run_if(resource_exists::<Targets>));
+        // BODYCAM_DARK: the lobby camera's EV100 (map.rs CAM_EV100) so lights are calibrated like in the real map.
+        if std::env::var("BODYCAM_DARK").is_ok() {
+            app.add_systems(Update, |mut cmd: Commands, cams: Query<Entity, (With<crate::player::BodycamCamera>, Without<bevy::camera::Exposure>)>| {
+                for e in &cams {
+                    cmd.entity(e).insert(bevy::camera::Exposure { ev100: 4.0 });
+                }
+            });
+        }
     }
 }
 
@@ -650,8 +658,10 @@ pub fn spawn(cmd: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut Assets<St
 
     // Lighting.
     let col = Colliders(std::mem::take(&mut b.col));
-    b.cmd.spawn((DirectionalLight { illuminance: 8_000.0, shadow_maps_enabled: true, ..default() }, Transform::from_xyz(30.0, 40.0, 20.0).looking_at(Vec3::new(0.0, 0.0, -40.0), Vec3::Y)));
-    b.cmd.insert_resource(GlobalAmbientLight { brightness: 700.0, ..default() });
+    // BODYCAM_DARK=1: night (no sun, faint ambient) to try flashlights / lasers.
+    let dark = std::env::var("BODYCAM_DARK").is_ok();
+    b.cmd.spawn((DirectionalLight { illuminance: if dark { 0.0 } else { 8_000.0 }, shadow_maps_enabled: true, ..default() }, Transform::from_xyz(30.0, 40.0, 20.0).looking_at(Vec3::new(0.0, 0.0, -40.0), Vec3::Y)));
+    b.cmd.insert_resource(GlobalAmbientLight { brightness: if dark { 40.0 } else { 700.0 }, ..default() });
     b.cmd.insert_resource(col);
     b.cmd.insert_resource(Targets { art, slots });
 
