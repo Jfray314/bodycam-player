@@ -1105,10 +1105,25 @@ fn decoy_mag(
     }
 }
 
-/// Shotgun shell: the gun's Item.Attachment.Ammo mesh (Ammo Gauge = SM_8_Gauge) on its `Ammo` socket (bone `shell`, identity).
-/// WEP.RefreshAmmosVisibility: shown while a round is loaded (CurrentAmmo >= 1), everything shown during reloads (99).
+/// Ammo items (Item.Attachment.Ammo default of each gun, DT_WeaponSkins mesh) on the gun's ammo sockets: the 8 gauge shell (`shell`),
+/// the Revolver's .357 cartridges (Cartridge_01..08 bones, slots ammo1..8) and the Remington's .17 HMR (bullet, bullet_extra).
+/// WEP.RefreshAmmosVisibility: ammo N is shown while N <= CurrentAmmo, everything shown during reloads (99).
 #[derive(Component)]
-struct AmmoShell;
+struct AmmoItem(usize);
+
+const AMMO_SOCKETS: &[(&str, &str, usize)] = &[
+    ("shell", "ammo_8_gauge", 0),
+    ("Cartridge_01", "ammo_357_magnum", 0),
+    ("Cartridge_02", "ammo_357_magnum", 1),
+    ("Cartridge_03", "ammo_357_magnum", 2),
+    ("Cartridge_04", "ammo_357_magnum", 3),
+    ("Cartridge_05", "ammo_357_magnum", 4),
+    ("Cartridge_06", "ammo_357_magnum", 5),
+    ("Cartridge_07", "ammo_357_magnum", 6),
+    ("Cartridge_08", "ammo_357_magnum", 7),
+    ("bullet", "ammo_17_hmr", 0),
+    ("bullet_extra", "ammo_17_hmr", 1),
+];
 
 #[allow(clippy::too_many_arguments)]
 fn ammo_shell(
@@ -1118,24 +1133,27 @@ fn ammo_shell(
     guns: Query<Entity, With<GunRoot>>,
     names: Query<&Name>,
     children: Query<&Children>,
-    shells: Query<(), With<AmmoShell>>,
+    items: Query<(), With<AmmoItem>>,
     mut vis: Query<&mut Visibility>,
 ) {
     let Some(inv) = inv else { return };
     let Some(gun) = guns.iter().next() else { return };
-    let Some(bone) = children.iter_descendants(gun).find(|e| names.get(*e).is_ok_and(|n| n.as_str() == "shell")) else { return };
     let w = &inv.slots[inv.current];
-    let show = w.ammo >= 1 || inv.action.as_ref().is_some_and(|a| a.kind == ActionKind::Reload);
-    let mine = children.get(bone).ok().and_then(|c| c.iter().find(|e| shells.contains(*e)));
-    match mine {
-        Some(e) => {
-            if let Ok(mut v) = vis.get_mut(e) {
-                *v = if show { Visibility::Inherited } else { Visibility::Hidden };
+    let reloading = inv.action.as_ref().is_some_and(|a| a.kind == ActionKind::Reload);
+    for bone in children.iter_descendants(gun).filter(|e| names.contains(*e)) {
+        let Ok(n) = names.get(bone) else { continue };
+        let Some(&(_, glb, idx)) = AMMO_SOCKETS.iter().find(|s| s.0 == n.as_str()) else { continue };
+        let show = w.ammo as usize > idx || reloading;
+        match children.get(bone).ok().and_then(|c| c.iter().find(|e| items.contains(*e))) {
+            Some(e) => {
+                if let Ok(mut v) = vis.get_mut(e) {
+                    *v = if show { Visibility::Inherited } else { Visibility::Hidden };
+                }
             }
-        }
-        None => {
-            let scene: Handle<bevy::world_serialization::WorldAsset> = assets.load(GltfAssetLabel::Scene(0).from_asset("models/attachments/ammo_8_gauge.glb"));
-            cmd.spawn((AmmoShell, Name::new("ammo_shell"), WorldAssetRoot(scene), Transform::default(), ChildOf(bone)));
+            None => {
+                let scene: Handle<bevy::world_serialization::WorldAsset> = assets.load(GltfAssetLabel::Scene(0).from_asset(format!("models/attachments/{glb}.glb")));
+                cmd.spawn((AmmoItem(idx), Name::new("ammo_item"), WorldAssetRoot(scene), Transform::default(), ChildOf(bone)));
+            }
         }
     }
 }
