@@ -647,7 +647,10 @@ fn give_loadout(mut cmd: Commands, player: Single<Entity, With<Player>>, mut out
     let start = norm(&std::env::var("BODYCAM_START").unwrap_or_else(|_| cfg.primary.clone()));
     slots.sort_by_key(|w| (norm(&w.name) != start, w.name != cfg.primary, w.name != cfg.secondary, w.name.clone()));
     // Loadout slots (IA_Slot1..5): Primary, Secondary, Grenade, Melee, Perk.First; the other guns wait in `pool` (BODYCAM_START=<gun> makes it the primary).
-    let pool = slots.split_off(2.min(slots.len()));
+    let mut pool = slots.split_off(2.min(slots.len()));
+    if let Some(n) = std::env::var("BODYCAM_AMMO").ok().and_then(|v| v.parse::<u32>().ok()) {
+        slots.iter_mut().chain(pool.iter_mut()).for_each(|w| w.ammo = n); // dev: starting rounds (0 = empty-reload tests)
+    }
     slots.splice(2..2, crate::items::load_items(&cfg));
     let mut inv = Inventory { slots, pool, current: 0, cooldown: 0.0, action: None, r_held: 0.0, fire_start: None, last_fire_start: 0.0, pull_slider: vec![], cancel_in: None };
     let first = inv.slots[0].one("FirstEquip");
@@ -743,7 +746,7 @@ fn actions(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, status: Res<crate::
         let w = &inv.slots[cur];
         if tapped && !inv.busy() && w.is_bolt() && w.can_reload() {
             // GA_Reload_Bolt.StartReload: Enter montage by bIsStressed / bIsMagEmpty.
-            let stressed = rand::rng().random::<f32>() < status.stress;
+            let stressed = std::env::var("BODYCAM_STRESSED").is_ok() || rand::rng().random::<f32>() < status.stress; // dev: BODYCAM_STRESSED forces the stressed montages
             let empty = w.ammo == 0;
             let key = match (empty, stressed) {
                 (false, false) => "ReloadStartCalm",
@@ -760,10 +763,10 @@ fn actions(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, status: Res<crate::
         } else if tapped && !inv.busy() && w.can_reload() {
             // GA_Reload_Base.DetermineStressedStatus: bIsStressed = RandomBoolWithWeight(Stress); GetReloadMontage picks the
             // Stressed or Calm array. ponytail: Tac-reload falls back to the Empty array when a gun has none.
-            let stressed = rand::rng().random::<f32>() < status.stress;
+            let stressed = std::env::var("BODYCAM_STRESSED").is_ok() || rand::rng().random::<f32>() < status.stress; // dev: BODYCAM_STRESSED forces the stressed montages
             let (empty, tac) = if stressed { ("ReloadEmptyStressed", "ReloadTacStressed") } else { ("ReloadEmptyCalm", "ReloadTacCalm") };
             let m = if w.ammo == 0 { w.pick(empty) } else { w.pick(tac) };
-            let m = m.or_else(|| w.pick(empty)).or_else(|| w.pick("ReloadEmptyCalm"));
+            let m = m.or_else(|| w.pick(empty)).or_else(|| w.pick("ReloadEmptyCalm")).or_else(|| w.pick("ReloadTacCalm")); // ponytail: Revolver only has ReloadTacCalm (per-bullet montages), also used when empty
             inv.start(ActionKind::Reload, m, cur, &mut out);
         }
     }
