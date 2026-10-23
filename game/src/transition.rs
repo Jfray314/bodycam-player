@@ -122,8 +122,11 @@ fn spawn(mut cmd: Commands, assets: Res<AssetServer>, mut mats: ResMut<Assets<Vh
     let ki: Handle<Font> = assets.load("fonts/Ki-Bold.otf"); // Ki_Font "Default" typeface
     // TS_Body24Grey / the tip rich text: the lighter Ki weight (the game's loading screen header is thinner than the headlines)
     let kim: Handle<Font> = assets.load("ui/Ki-Medium.otf");
+    // tools/bake_vhs.py: the same atlas as R8 (a luma PNG decodes to RGBA8 = 4x the VRAM and a slow load)
+    let root = std::env::var("BODYCAM_ASSETS").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../assets-local").into());
+    let atlas = if std::path::Path::new(&format!("{root}/textures/fx/vhs_01_atlas.ktx2")).exists() { "textures/fx/vhs_01_atlas.ktx2" } else { "textures/fx/vhs_01_atlas.png" };
     // Vhs_01.bk2, all 5711 frames as luma cells (vhs.wesl); data texture, linear
-    let frames: Handle<Image> = assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load("textures/fx/vhs_01_atlas.png");
+    let frames: Handle<Image> = assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(atlas);
     let grey24 = Color::linear_rgb(0.701102, 0.701102, 0.701102); // TS_Body24Grey
     let dark32 = Color::linear_rgb(0.286458, 0.286458, 0.286458); // TS_Headline32DarkGrey
     let tips: Vec<String> = serde_json::from_str(include_str!("../../assets/ui_tips.json")).unwrap_or_default();

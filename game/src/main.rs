@@ -25,6 +25,7 @@ mod perks;
 mod rccar;
 mod map;
 mod net;
+mod perf;
 mod player;
 mod postfx;
 mod recoil;
@@ -49,7 +50,7 @@ fn main() {
                     ..default()
                 })
                 // Hidden until a few frames have rendered (the black spawn cover): a new window paints white first.
-                .set(bevy::window::WindowPlugin { primary_window: Some(Window { visible: false, ..default() }), ..default() }),
+                .set(bevy::window::WindowPlugin { primary_window: Some(Window { visible: false, present_mode: if std::env::var("BODYCAM_PERF").is_ok_and(|v| v == "2") { bevy::window::PresentMode::AutoNoVsync } else { default() }, ..default() }), ..default() }),
         )
         .add_systems(Update, |mut win: Single<&mut Window>, mut frames: Local<u32>| {
             *frames += 1;
@@ -59,6 +60,7 @@ fn main() {
         })
         .add_plugins((body::BodyPlugin, character::CharacterPlugin))
         .add_plugins((player::PlayerPlugin, weapon::WeaponPlugin, hud::HudPlugin, postfx::PostFxPlugin, status::StatusPlugin, audio::AudioPlugin, viewmodel::ViewmodelPlugin, sway::SwayPlugin, recoil::RecoilPlugin, map::MapPlugin, gunfight::GunfightPlugin, grid::GridPlugin, bots::BotsPlugin, camadjust::CamAdjustPlugin, dev::DevPlugin))
+        .add_plugins(perf::PerfPlugin)
         .add_plugins((effects::EffectsPlugin, lens::LensPlugin, blood::BloodPlugin, soft::SoftPlugin, attach::AttachPlugin, items::ItemsPlugin, explosion::ExplosionPlugin, bomb::BombPlugin, perks::PerksPlugin, rccar::RcCarPlugin, net::NetPlugin))
         .add_plugins((ui::UiPlugin, ragdoll::RagdollPlugin, transition::TransitionPlugin, level::LevelPlugin))
         .insert_resource(ClearColor(Color::srgb(0.55, 0.65, 0.8)))
