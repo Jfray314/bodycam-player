@@ -543,7 +543,8 @@ fn glass(mut mats: ResMut<Assets<StandardMaterial>>, new: Query<(&GltfMaterialNa
             m.base_color = Color::NONE;
             m.alpha_mode = AlphaMode::Blend;
         }
-        if (l.contains("glass") || l.contains("lens")) && let Some(mut m) = mats.get_mut(&mh.0) {
+        // MI_Inside_Scope_Black_Inst / MI_DocterSight_*: the window panes of the older sight meshes
+        if (l.contains("glass") || l.contains("lens") || l.contains("inside_scope") || l.contains("doctersight")) && let Some(mut m) = mats.get_mut(&mh.0) {
             m.base_color = Color::srgba(0.7, 0.85, 0.9, 0.08);
             m.alpha_mode = AlphaMode::Blend;
             m.metallic = 0.0;
