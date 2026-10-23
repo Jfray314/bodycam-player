@@ -89,7 +89,9 @@ pub fn path() -> std::path::PathBuf {
 }
 
 pub fn load() -> Settings {
-    std::fs::read_to_string(path()).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    let mut s: Settings = std::fs::read_to_string(path()).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    if std::env::var("BODYCAM_PERF").is_ok_and(|v| v == "2") { s.vsync = false; s.fps_limit = 0; } // uncapped benchmark
+    s
 }
 
 pub fn save(s: &Settings) {
