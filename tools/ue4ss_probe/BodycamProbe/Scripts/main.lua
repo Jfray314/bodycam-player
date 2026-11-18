@@ -2,9 +2,9 @@
 -- F7 = dump properties of player/camera/movement objects
 -- F8 = start/stop recording camera + every numeric property of the viewmodel/recoil/status objects, every frame (CSV)
 -- F9 = drop a numbered marker into the recording (to split segments)
--- Output: F:/code/bodycam-player/extracted/probe/
+-- Output: <repo>/extracted/probe/ (install.ps1 rewrites OUT below)
 local UEHelpers = require("UEHelpers")
-local OUT = "F:/code/bodycam-player/extracted/probe/"
+local OUT = "extracted/probe/"
 
 local function fmt(v, depth)
     depth = depth or 0

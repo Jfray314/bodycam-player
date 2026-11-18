@@ -6,8 +6,8 @@ item sockets are in the item mesh frame. The game resolves the mount tree (recei
 python -I tools/attdata.py [<models_dir>] [<extracted_json_root>]"""
 import json, os, sys, glob
 import numpy as np
-M = (sys.argv[1] if len(sys.argv) > 1 else "F:/code/bodycam-player/assets-local/models").rstrip("/")
-X = (sys.argv[2] if len(sys.argv) > 2 else "F:/code/bodycam-player/extracted/json") + "/Content/"
+M = (sys.argv[1] if len(sys.argv) > 1 else os.environ.get("BODYCAM_ASSETS", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets-local")) + "/models").rstrip("/")
+X = (sys.argv[2] if len(sys.argv) > 2 else os.environ.get("BODYCAM_EXTRACTED", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "extracted")) + "/json") + "/Content/"
 HERE = os.path.dirname(os.path.abspath(__file__))
 F = np.diag([1, -1, 1.0])
 

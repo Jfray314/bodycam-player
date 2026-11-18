@@ -4,7 +4,7 @@
 1:1 Rust (Bevy 0.20) rewrite of UE 5.5.4 game Bodycam's first-person player (movement, camera/lens, guns, viewmodel, items,
 sounds, effects, UI) on the real lobby map, plus multiplayer and a reusable core lib (`bodycam-core`).
 STRICT RULE (user, memory `port-1to1`): everything ported 1:1 from the real game's files; approximate only where the source
-can't be read (mark `ponytail:`). Game install `F:\SteamLibrary\steamapps\common\Bodycam` is READ-ONLY. User wants autonomy,
+can't be read (mark `ponytail:`). Game install (`BODYCAM_GAME`) is READ-ONLY. User wants autonomy,
 low usage. Never push (no remote).
 Session 14 task ("port locked gear") is DONE: every SWAP row in `GEAR` (`game/src/ui/screens.rs`) is playable.
 

@@ -1,7 +1,7 @@
 use std::path::Path;
 use uasset::{package::Package, props::Reader, usmap::Usmap};
 
-const ROOT: &str = "F:/code/bodycam-player/extracted";
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../extracted");
 
 #[test]
 fn m4a1_modifiers() {

@@ -5,7 +5,7 @@ Skeletal-mesh skins are skipped (only static meshes mount on sockets); Ammo / Re
 python -I tools/attall.py <work_dir> [<extracted_json_root>]"""
 import json, os, re, sys, glob
 work = sys.argv[1]
-root = (sys.argv[2] if len(sys.argv) > 2 else "F:/code/bodycam-player/extracted/json") + "/Content/BodycamCore/ItemsDefinition/"
+root = (sys.argv[2] if len(sys.argv) > 2 else os.environ.get("BODYCAM_EXTRACTED", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "extracted")) + "/json") + "/Content/BodycamCore/ItemsDefinition/"
 here = os.path.dirname(os.path.abspath(__file__))
 rows = lambda f: json.load(open(root + f))["exports"][0]["properties"]["_rows"]
 wi, skins, shop = rows("Gameplay/DT_WeaponItems.json"), rows("Skins/DT_WeaponSkins.json"), rows("DT_NewShopItem.json")

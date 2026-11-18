@@ -7,10 +7,13 @@ usage: python -I tools/ambients.py [ue-export run.sh dir]
 """
 import json, subprocess, sys, os, re
 
-RUN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ue-export", "run.sh")
-if not os.path.exists(os.path.join(os.path.dirname(RUN), "bin")):
-    RUN = "F:/code/bodycam-player/tools/ue-export/run.sh"  # worktrees share the main checkout's build
-OUT = "F:/code/bodycam-player/assets-local/maps/ambients.json"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+GAME = os.environ.get("BODYCAM_GAME", r"C:\Program Files (x86)\Steam\steamapps\common\Bodycam")
+EXTRACTED = os.environ.get("BODYCAM_EXTRACTED", ROOT + "/extracted")
+ASSETS = os.environ.get("BODYCAM_ASSETS", ROOT + "/assets-local")
+DOTNET = os.environ.get("DOTNET", os.path.expanduser(r"~\.dotnet-sdk\dotnet.exe"))
+EXE = os.path.join(ROOT, "tools", "ue-export", "bin", "Release", "net10.0", "ue-export.dll")
+OUT = ASSETS + "/maps/ambients.json"
 LEVELS = ["Map/Lobby/Lobby", "Map/Lobby/Weapon_Room_NoWeapon", "Map/Lobby/Training_RoomB", "Map/Lobby/Loadout", "Map/Lobby/Community_Room",
           "Map/Lobby/Drone_Room", "Doors/Lobby_Drone_Racetrack2", "Map/Lobby/Lobby_Reception", "Map/Lobby/Target_Room1",
           "Map/Lobby/Shooting_Room", "Map/Lobby/LobbyB", "Map/Lobby/Lighting_test_2", "Map/Lobby/Lobby_Corridor"]
@@ -18,7 +21,7 @@ TMP = os.environ.get("TEMP", ".")
 
 
 def dump(asset):
-    r = subprocess.run(["sh", RUN, os.path.join(TMP, "ue_amb"), "dump", asset], capture_output=True, text=True, encoding="utf8")
+    r = subprocess.run([DOTNET, EXE, GAME + "/Bodycam/Content/Paks", EXTRACTED + "/Bodycam.usmap", os.path.join(TMP, "ue_amb"), "dump", asset], capture_output=True, text=True, encoding="utf8", cwd=os.path.dirname(EXE))
     s = r.stdout
     s = s[s.index("{"):]
     d = json.JSONDecoder(); i = 0; objs = []
@@ -104,6 +107,7 @@ for lv in LEVELS:
             loc = pr.get("RelativeLocation", {"X": 0, "Y": 0, "Z": 0})
             out.append({"level": lv, "actor": o["Name"], "label": "ceiling fan", "sound": "/Game/Ultimate_SFX/Celling_Fan/Celling_fan_Cue", "vol": 1.0, "pitch": 1.0,
                         "loc_cm": [loc["X"], loc["Y"], loc["Z"] - 88.07], "auto": True, "override_att": False, "att_asset": None, "att": None, "class": None, "spatial": True})
+os.makedirs(os.path.dirname(OUT), exist_ok=True)
 json.dump(out, open(OUT, "w"), indent=1)
 print(len(out), "ambients")
 for a in out: print(a["level"], a["actor"], a["sound"].split("/")[-1], a["vol"], a["pitch"], [round(x) for x in a["loc_cm"]])

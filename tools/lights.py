@@ -7,7 +7,7 @@ Laser beam colour = MI_Laser_Beam_<Colour>.Beam Color (LightProfilePack, ue-expo
 Light-function textures: ue-export tex Bodycam/Content/LightProfilePack/Lighting/Profiles/<name> -> assets-local/textures/light/<name>.png."""
 import json, os, re, sys
 
-root = (sys.argv[1] if len(sys.argv) > 1 else "F:/code/bodycam-player/extracted/json") + "/Content/"
+root = (sys.argv[1] if len(sys.argv) > 1 else os.environ.get("BODYCAM_EXTRACTED", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "extracted")) + "/json") + "/Content/"
 rows = lambda f: json.load(open(root + "BodycamCore/ItemsDefinition/" + f))["exports"][0]["properties"]["_rows"]
 skins, wi = rows("Skins/DT_WeaponSkins.json"), rows("Gameplay/DT_WeaponItems.json")
 slug = lambda s: re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")

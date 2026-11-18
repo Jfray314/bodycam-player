@@ -1,5 +1,5 @@
 //! Read-only extractor: copies player-related files out of Bodycam's paks into ./extracted.
-//! Usage: extract <Paks dir> <out dir> <regex-ish substring>...
+//! Usage: extract <Paks dir> <out dir> <substring>...   (a filter `a&b` needs both substrings in the path; case-insensitive)
 use std::{fs, io::BufReader, path::Path};
 
 fn main() {
@@ -17,7 +17,7 @@ fn main() {
         for f in pak.files() {
             let full = format!("{mount}{f}");
             let low = full.to_lowercase();
-            if !filters.iter().any(|k| low.contains(&k.to_lowercase())) { continue; }
+            if !filters.iter().any(|k| k.split('&').all(|p| low.contains(&p.to_lowercase()))) { continue; }
             let dst = out.join(&full);
             if dst.exists() { continue; }
             fs::create_dir_all(dst.parent().unwrap()).unwrap();

@@ -5,7 +5,7 @@ python -I tools/grip_poses.py"""
 import json, os, struct, glob
 import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
-X = "F:/code/bodycam-player/extracted/json/Content/BodycamCore/ItemsDefinition/Gameplay/DT_WeaponItems.json"
+X = os.environ.get("BODYCAM_EXTRACTED", os.path.join(os.path.dirname(HERE), "extracted")) + "/json/Content/BodycamCore/ItemsDefinition/Gameplay/DT_WeaponItems.json"
 rows = json.load(open(X))["exports"][0]["properties"]["_rows"]
 clips = {e.rsplit(".", 1)[-1] for v in rows.values() for k, e in (v.get("GameplayDataDefinition", {}).get("CosmeticEffects") or {}).items() if k == "Cosmetic.Weapon.Anim.Idle"}
 FINGERS = [f"{f}_0{i}_l" for f in ("thumb", "index", "middle", "ring", "pinky") for i in (1, 2, 3)]

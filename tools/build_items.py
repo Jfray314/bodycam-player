@@ -2,11 +2,15 @@
   python -I tools/build_items.py [G67,Knife,Flashbang]   (reuses build_models.py's pipeline pieces; export dir = models_items/_work)"""
 import os, subprocess, sys, glob
 HERE = os.path.dirname(os.path.abspath(__file__))
-PAKS = r"F:/SteamLibrary/steamapps/common/Bodycam/Bodycam/Content/Paks"
-USMAP = r"F:/code/bodycam-player/extracted/Bodycam.usmap"
-BLENDER = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
-DOTNET = os.path.expanduser(r"~\.dotnet-sdk\dotnet.exe")
-OUT = r"F:/code/bodycam-player/assets-local/models"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root
+GAME = os.environ.get("BODYCAM_GAME", r"C:\Program Files (x86)\Steam\steamapps\common\Bodycam")  # setup.py also searches Steam libraries
+EXTRACTED = os.environ.get("BODYCAM_EXTRACTED", ROOT + "/extracted")
+ASSETS = os.environ.get("BODYCAM_ASSETS", ROOT + "/assets-local")
+PAKS = GAME + "/Bodycam/Content/Paks"
+USMAP = EXTRACTED + "/Bodycam.usmap"
+BLENDER = os.environ.get("BLENDER", r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe")
+DOTNET = os.environ.get("DOTNET", os.path.expanduser(r"~\.dotnet-sdk\dotnet.exe"))
+OUT = ASSETS + "/models"
 WORK = os.path.join(os.path.dirname(OUT), "models_items", "_work")
 items = (sys.argv[1] if len(sys.argv) > 1 else "G67,Knife,Flashbang").split(",")
 exe = os.path.join(HERE, "ue-export", "bin", "Release", "net10.0", "ue-export.dll")

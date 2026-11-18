@@ -4,11 +4,15 @@ Their clips live in /Game/RCCar/Animations (outside the plugin AnimRoot ue-expor
 exported one by one: chassis = DT_PerkSkins '<Car> Chassis', parts = <work>/attachments.json, FP clips = A_FP_<Car>_*."""
 import os, subprocess, sys, glob, json
 HERE = os.path.dirname(os.path.abspath(__file__))
-PAKS = r"F:/SteamLibrary/steamapps/common/Bodycam/Bodycam/Content/Paks"
-USMAP = r"F:/code/bodycam-player/extracted/Bodycam.usmap"
-BLENDER = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
-DOTNET = os.path.expanduser(r"~\.dotnet-sdk\dotnet.exe")
-OUT = r"F:/code/bodycam-player/assets-local/models"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root
+GAME = os.environ.get("BODYCAM_GAME", r"C:\Program Files (x86)\Steam\steamapps\common\Bodycam")  # setup.py also searches Steam libraries
+EXTRACTED = os.environ.get("BODYCAM_EXTRACTED", ROOT + "/extracted")
+ASSETS = os.environ.get("BODYCAM_ASSETS", ROOT + "/assets-local")
+PAKS = GAME + "/Bodycam/Content/Paks"
+USMAP = EXTRACTED + "/Bodycam.usmap"
+BLENDER = os.environ.get("BLENDER", r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe")
+DOTNET = os.environ.get("DOTNET", os.path.expanduser(r"~\.dotnet-sdk\dotnet.exe"))
+OUT = ASSETS + "/models"
 WORK = os.path.join(os.path.dirname(OUT), "models_items", "_work")
 exe = os.path.join(HERE, "ue-export", "bin", "Release", "net10.0", "ue-export.dll")
 def run(cmd, env=None, cwd=None):
@@ -19,7 +23,7 @@ def run(cmd, env=None, cwd=None):
 cars = (sys.argv[1] if len(sys.argv) > 1 else "Trataxes,Kyoshin").split(",")
 ue = lambda *a: run([DOTNET, exe, PAKS, USMAP, WORK, *a], cwd=os.path.dirname(exe))
 att = json.load(open(os.path.join(WORK, "attachments.json")))
-CLIPS = "F:/code/bodycam-player/extracted/Bodycam/Content/RCCar/Animations"
+CLIPS = EXTRACTED + "/Bodycam/Content/RCCar/Animations"
 for car in cars:
     a = att[car]
     ue("mesh", a["receiver"], car)

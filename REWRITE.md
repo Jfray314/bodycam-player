@@ -1,14 +1,16 @@
 # Bodycam player rewrite: tracking
 
-Source: `F:\SteamLibrary\steamapps\common\Bodycam` (UE 5.5.4, pak v11, Oodle, unversioned cooked properties).
-Read-only: `.claude/settings.json` denies Edit/Write there; every tool only opens game files for reading.
+Source: the Bodycam Steam install (`BODYCAM_GAME`) (UE 5.5.4, pak v11, Oodle, unversioned cooked properties).
+Read-only: every tool only opens game files for reading.
 Game data never goes into git: `extracted/` (raw + JSON dumps) and `assets-local/` (decoded audio, fonts, models)
 are ignored. Small derived numeric data that the code needs (`assets/*.json`) is committed.
+
+**One command:** `python tools/setup.py` (or `setup.bat`) runs every step below for you (resumable, see README.md); the sections below document what each step does.
 
 ## Pipeline
 ```
 # 1. pull assets out of the paks (read-only)
-cargo run --release -p extract -- "F:/SteamLibrary/steamapps/common/Bodycam/Bodycam/Content/Paks" extracted <path substrings...>
+cargo run --release -p extract -- "<Bodycam install>/Bodycam/Content/Paks" extracted <path substrings...>
 # 2. dump every cooked asset to JSON using the UE4SS mappings (extracted/Bodycam.usmap)
 cargo run --release -p uasset --bin dump -- extracted/Bodycam.usmap extracted/Bodycam extracted/json
 # 3. bake data the game uses
