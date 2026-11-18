@@ -5,7 +5,7 @@
 sounds, effects, UI) on the real lobby map, plus multiplayer and a reusable core lib (`bodycam-core`).
 STRICT RULE (user, memory `port-1to1`): everything ported 1:1 from the real game's files; approximate only where the source
 can't be read (mark `ponytail:`). Game install (`BODYCAM_GAME`) is READ-ONLY. User wants autonomy,
-low usage. Never push (no remote).
+low usage. Public repo: origin = github.com/Jfray314/bodycam-player (local master -> main); push only when the user asks. No game content may ever be committed.
 Session 14 task ("port locked gear") is DONE: every SWAP row in `GEAR` (`game/src/ui/screens.rs`) is playable.
 
 ## 2. Current state
